@@ -472,6 +472,17 @@ void Game::update(float dt) {
             cfg.save();
         }
     }
+
+    // Save screenshot
+    if(IsKeyPressed(KEY_F2)) {
+    	time_t now = time(nullptr);
+    	tm* t = localtime(&now);
+
+    	char nombre[64];
+	strftime(nombre, sizeof(nombre), "Escape-Screenshot-%Y-%m-%d_%H-%M-%S.png", t);
+
+	TakeScreenshot(nombre);
+    }
 }
 
 float Game::nearestEnemyDist(Vector3 p) const {
