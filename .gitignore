@@ -2,3 +2,5 @@ build/
 dist/
 saves/
 vendor/
+*.png
+*.cfg
