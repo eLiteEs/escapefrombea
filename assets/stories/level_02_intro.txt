@@ -1,0 +1,8 @@
+@music level
+@wait 0.8
+@speed 45
+
+Bea|Ahora conozco tu ruta. No la vas a repetir.
+Tu|Entonces improvisare.
+*El laberinto parece mas grande esta vez.
+

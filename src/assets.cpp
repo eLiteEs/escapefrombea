@@ -1,0 +1,93 @@
+#include "assets.h"
+#include "paths.h"
+#include <cstdio>
+
+static bool fileExists(const std::string& p) {
+    FILE* f = fopen(p.c_str(), "rb");
+    if (!f) return false;
+    fclose(f);
+    return true;
+}
+
+static Texture2D loadTextureOrProcedural(const char* path, Color bodyColor) {
+    Texture2D t = LoadTexture(path);
+    if (t.id != 0) { SetTextureFilter(t, TEXTURE_FILTER_BILINEAR); return t; }
+
+    Image img = GenImageColor(128, 128, BLANK);
+    ImageDrawCircle(&img, 64, 66, 56, bodyColor);
+    Color glow = bodyColor; glow.a = 120;
+    ImageDrawCircle(&img, 40, 34, 10, glow);
+    ImageDrawCircle(&img, 44, 50, 13, WHITE);
+    ImageDrawCircle(&img, 84, 50, 13, WHITE);
+    ImageDrawCircle(&img, 47, 53, 6, BLACK);
+    ImageDrawCircle(&img, 87, 53, 6, BLACK);
+    ImageDrawRectangle(&img, 46, 86, 36, 10, BLACK);
+    t = LoadTextureFromImage(img);
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    UnloadImage(img);
+    return t;
+}
+
+static Sound loadSoundSmart(const char* name) {
+    std::string np = Paths::sound(name);
+    if (fileExists(np)) return LoadSound(np.c_str());
+    std::string lp = Paths::legacyAudio(name);
+    if (fileExists(lp)) return LoadSound(lp.c_str());
+    return LoadSound(np.c_str());
+}
+
+static Music loadMusicSmart(const char* name) {
+    std::string np = Paths::music(name);
+    if (fileExists(np)) return LoadMusicStream(np.c_str());
+    std::string lp = Paths::legacyAudio(name);
+    if (fileExists(lp)) return LoadMusicStream(lp.c_str());
+    return LoadMusicStream(np.c_str());
+}
+
+void Assets::load() {
+    std::string p;
+
+    p = Paths::sprite("enemy_bea.png");
+    enemyTex[ENEMY_BEA]    = loadTextureOrProcedural(p.c_str(), (Color){ 210, 45, 60, 255 });
+    p = Paths::sprite("enemy_marisa.png");
+    enemyTex[ENEMY_MARISA] = loadTextureOrProcedural(p.c_str(), (Color){ 60, 90, 210, 255 });
+    p = Paths::sprite("enemy_alt.png");
+    enemyTex[ENEMY_ALT]    = loadTextureOrProcedural(p.c_str(), (Color){ 160, 40, 200, 255 });
+
+    p = Paths::sprite("exit_portal.png");
+    portalTex    = LoadTexture(p.c_str());
+    hasPortalTex = portalTex.id != 0;
+    if (hasPortalTex) SetTextureFilter(portalTex, TEXTURE_FILTER_BILINEAR);
+
+    musicMenu  = loadMusicSmart("music_menu.ogg");
+    musicLevel = loadMusicSmart("music_level.ogg");
+
+    sfxCaught    = loadSoundSmart("sfx_caught.ogg");
+    sfxEscape    = loadSoundSmart("sfx_escape.ogg");
+    sfxFootstep  = loadSoundSmart("sfx_footstep.ogg");
+    sfxHeartbeat = loadSoundSmart("sfx_heartbeat.ogg");
+}
+
+void Assets::unload() {
+    for (int i = 0; i < ENEMY_KIND_COUNT; ++i)
+        if (enemyTex[i].id != 0) UnloadTexture(enemyTex[i]);
+    if (hasPortalTex && portalTex.id != 0) UnloadTexture(portalTex);
+    if (musicMenu.stream.buffer  != nullptr) UnloadMusicStream(musicMenu);
+    if (musicLevel.stream.buffer != nullptr) UnloadMusicStream(musicLevel);
+    if (sfxCaught.frameCount    > 0) UnloadSound(sfxCaught);
+    if (sfxEscape.frameCount    > 0) UnloadSound(sfxEscape);
+    if (sfxFootstep.frameCount  > 0) UnloadSound(sfxFootstep);
+    if (sfxHeartbeat.frameCount > 0) UnloadSound(sfxHeartbeat);
+}
+
+void Assets::applyVolumes(float master, float music, float sfx) {
+    float m = master * music;
+    float s = master * sfx;
+    if (musicMenu.stream.buffer  != nullptr) SetMusicVolume(musicMenu,  m);
+    if (musicLevel.stream.buffer != nullptr) SetMusicVolume(musicLevel, m);
+    if (sfxCaught.frameCount    > 0) SetSoundVolume(sfxCaught,    s);
+    if (sfxEscape.frameCount    > 0) SetSoundVolume(sfxEscape,    s);
+    if (sfxFootstep.frameCount  > 0) SetSoundVolume(sfxFootstep,  s);
+    if (sfxHeartbeat.frameCount > 0) SetSoundVolume(sfxHeartbeat, s);
+}
+

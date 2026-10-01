@@ -1,0 +1,21 @@
+menu.play=Play
+menu.play2=Two Players (split-screen)
+menu.endless=Endless levels
+menu.config=Settings
+menu.quit=Leave game
+menu.load=Load game
+
+hud.level=Level %d
+hud.time=Time: %.1f s
+hud.enemies=Enemies: %d
+
+pause.title=Paused
+pause.hint=ESC: resume M: menu
+
+level.complete=Level completed!
+level.controls=ENTER: next level ESC: menu
+level.finished=Level finished!
+level.catched=THEY CAUGHT YOU
+level.retry=R: retry ESC: menu
+level.catched.longtext=Bea found you in the halls of the school...
+

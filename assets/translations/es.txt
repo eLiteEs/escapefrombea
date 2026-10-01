@@ -1,0 +1,4 @@
+hud.level=Nivel %d
+hud.time=Tiempo: %.1f s
+hud.enemies=Enemigos: %d
+
