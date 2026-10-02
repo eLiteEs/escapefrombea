@@ -201,6 +201,7 @@ dist-windows: windows
 	@rm -rf $(DIST_WIN_DIR)
 	@mkdir -p $(DIST_WIN_DIR)
 	@cp $(BUILD_DIR)/$(APP_NAME).exe $(DIST_WIN_DIR)/
+	@cp libraries/libraylib.dll $(DIST_WIN_DIR)/
 	@$(MAKE) --no-print-directory package-windows
 	@cd $(DIST_DIR) && rm -f $(APP_NAME)-windows.zip && \
 		zip -qr $(APP_NAME)-windows.zip $(APP_NAME)-windows
