@@ -44,6 +44,7 @@ void Game::init() {
 
 void Game::shutdown() {
     cfg.save();
+    world.unload();                 // <-- NUEVO (antes de assets.unload)
     if (rtLeft.texture.id  != 0) UnloadRenderTexture(rtLeft);
     if (rtRight.texture.id != 0) UnloadRenderTexture(rtRight);
     assets.unload();
@@ -137,6 +138,7 @@ static void resetPlayerState(Player& p, Vector3 spawn) {
     p.exhausted = false;
     p.sprinting = false;
     p.escapeTime = 0.0f;
+    p.caughtBy = -1;
 }
 
 void Game::startLevel(int lvl) {
@@ -147,6 +149,7 @@ void Game::startLevel(int lvl) {
     uint32_t seed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
     currentSeed = seed;
     maze.generate(size, size, seed);
+    world.build(maze, assets);
 
     resetPlayerState(players[0], maze.cellCenter(1, 1));
     if (twoPlayers)
@@ -342,7 +345,16 @@ void Game::update(float dt) {
                     cfg.maxEndlessLevel = level; cfg.save();
                 }
                 autoSaveProgress();
-                state = ST_GAME_OVER;
+                
+		int caughtPlayer = players[0].caught ? 0 : 1;
+
+                if (!cfg.noJumpscares && players[caughtPlayer].caughtBy >= 0) {
+                    // Jumpscare
+                    startJumpscare(players[caughtPlayer].caughtBy);
+                } else {
+                    EnableCursor();
+                    state = ST_GAME_OVER;
+                }
             } else {
                 if (assets.sfxEscape.frameCount > 0) PlaySound(assets.sfxEscape);
                 if (mode == MODE_STORY) {
@@ -419,6 +431,18 @@ void Game::update(float dt) {
             } else if (next == "menu") {
                 toMenu();
             }
+        }
+    }
+    else if (state == ST_JUMPSCARE) {
+        jumpscareTimer -= dt;
+        if (jumpscareTimer <= 0.0f || IsKeyPressed(KEY_ESCAPE) ||
+            IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            jumpscareTimer = 0.0f;
+            jumpscareEnemy = -1;
+            EnableCursor();
+            state = ST_GAME_OVER;
         }
     }
     else if (state == ST_LEVEL_CLEAR) {
@@ -564,28 +588,68 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
     float mw = maze.w * C::CELL, mh = maze.h * C::CELL;
 
     BeginMode3D(cam);
-        DrawPlane({ mw/2, 0, mh/2 }, { mw, mh }, (Color){ 32, 32, 42, 255 });
-        DrawCube({ mw/2, C::WALL_H + 0.05f, mh/2 }, mw, 0.1f, mh,
-                 (Color){ 18, 18, 26, 255 });
+        // Suelo
+        if (world.floorModel.meshCount > 0) {
+            DrawModel(world.floorModel, { mw * 0.5f, 0.0f, mh * 0.5f }, 1.0f, WHITE);
+        } else {
+            DrawPlane({ mw/2, 0, mh/2 }, { mw, mh }, (Color){ 32, 32, 42, 255 });
+        }
 
-        Color wallA = { 72, 82, 112, 255 };
-        Color wallB = { 58, 66,  92, 255 };
-
+        // Paredes: 1 DrawModelEx por celda
         for (int y = 0; y < maze.h; ++y)
             for (int x = 0; x < maze.w; ++x) {
                 if (maze.g[y][x] != 1) continue;
-                float wx = x * C::CELL + C::CELL/2;
-                float wz = y * C::CELL + C::CELL/2;
+
+                float wx = x * C::CELL + C::CELL * 0.5f;
+                float wz = y * C::CELL + C::CELL * 0.5f;
                 float dx = wx - pl.pos.x, dz = wz - pl.pos.z;
                 float rd = renderDist();
                 if (dx*dx + dz*dz > rd*rd) continue;
-                rlPushMatrix();
-                rlTranslatef(wx, C::WALL_H/2, wz);
-                DrawCube({0,0,0}, C::CELL, C::WALL_H, C::CELL,
-                         ((x+y)&1) ? wallA : wallB);
-                rlPopMatrix();
+
+                // Tinte por distancia y paridad (anti-mareo)
+                float dist = sqrtf(dx*dx + dz*dz);
+                float distTint = 1.0f - (dist / rd) * 0.30f;
+                if (distTint < 0.35f) distTint = 0.35f;
+                float parity = ((x + y) & 1) ? 0.93f : 1.0f;
+                float tint = distTint * parity;
+
+                Color wallTint = {
+                    (unsigned char)(255 * tint),
+                    (unsigned char)(255 * tint),
+                    (unsigned char)(255 * tint),
+                    255
+                };
+
+                // Elegir modelo segun variante
+                int variant = 0;
+                if (y < (int)maze.wallVariant.size() &&
+                    x < (int)maze.wallVariant[y].size())
+                    variant = maze.wallVariant[y][x];
+
+                const Model* model = &world.wallModelTile;
+                if      (variant == 1 && world.wallModelLocker.meshCount > 0)
+                    model = &world.wallModelLocker;
+                else if (variant == 2 && world.wallModelBrick.meshCount > 0)
+                    model = &world.wallModelBrick;
+
+                if (model->meshCount > 0) {
+                    DrawModelEx(*model,
+                                { wx, C::WALL_H * 0.5f, wz },
+                                { 0, 1, 0 }, 0.0f,
+                                { 1.0f, 1.0f, 1.0f },
+                                wallTint);
+                } else {
+                    // Fallback sin texturas
+                    DrawCube({ wx, C::WALL_H * 0.5f, wz },
+                             C::CELL, C::WALL_H, C::CELL, wallTint);
+                }
             }
 
+        // Techo
+        DrawCube({ mw/2, C::WALL_H + 0.05f, mh/2 }, mw, 0.1f, mh,
+                 (Color){ 18, 18, 26, 255 });
+
+        // Portal
         float pulse = 1.0f + 0.15f * sinf((float)GetTime() * 4.0f);
         DrawCube({ exitPos.x, 1.2f, exitPos.z }, 1.6f*pulse, 2.4f, 1.6f*pulse,
                  (Color){ 70, 220, 130, 255 });
@@ -594,15 +658,20 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
             DrawBillboard(cam, assets.portalTex, { exitPos.x, 3.0f, exitPos.z },
                           1.6f*pulse, WHITE);
 
+        // Enemigos
         float bob = 0.12f * sinf((float)GetTime() * 3.0f);
         for (auto& e : enemies) {
             int kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+            Color tint = WHITE;
+            if (e.hitFlash > 0.0f)   tint = (Color){ 255, 80, 80, 255 };
+            else if (e.rageT > 0.0f) tint = (Color){ 255, 140, 90, 255 };
             DrawBillboard(cam, assets.enemyTex[kind],
-                          { e.pos.x, 1.35f + bob, e.pos.z }, 2.6f, WHITE);
+                          { e.pos.x, 1.35f + bob, e.pos.z }, 2.6f, tint);
             DrawCircle3D({ e.pos.x, 0.02f, e.pos.z }, 0.7f,
                          { 1, 0, 0 }, 90.0f, (Color){ 0, 0, 0, 90 });
         }
 
+        // Otro jugador
         if (twoPlayers) {
             const Player& other = (playerNum == 0) ? players[1] : players[0];
             if (!other.escaped && !other.caught)
@@ -611,7 +680,7 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
         }
 
         if (playerNum == 0) drawDebugWorld3D(pl);
-    EndMode3D();
+    EndMode3D();    
 
     DrawRectangleGradientV(0, 0, vw, vh/6, (Color){ 0, 0, 0, 140 }, (Color){ 0, 0, 0, 0 });
 
@@ -1355,6 +1424,8 @@ void Game::draw() {
         EndDrawing();
     } else if (state == ST_CINEMATIC) {
         drawCinematic();
+    } else if (state == ST_JUMPSCARE) {
+        drawJumpscare();
     } else {
         drawMenus();
     }
@@ -1405,7 +1476,7 @@ static const char* cbLabel(int idx) {
 
 void Game::drawConfigAccess() {
     drawConfigHeader(L("config.access", "Accesibilidad"));
-    int items = 6;
+    int items = 7;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
     auto save = [&]() { cfg.save(); };
@@ -1437,7 +1508,12 @@ void Game::drawConfigAccess() {
                    &navIndex, nullptr, navIndex == 4 ? lr : 0) != UI_NONE) {
         cfg.holdToSprint = !cfg.holdToSprint; save();
     }
-    if (uiOptionEx(5, items, 30, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(5, items, 30, L("access.jumpscares", "Sin sustos"),
+                   cfg.noJumpscares ? L("common.yes", "SI") : L("common.no", "NO"),
+                   &navIndex, nullptr, navIndex == 5 ? lr : 0) != UI_NONE) {
+        cfg.noJumpscares = !cfg.noJumpscares; save();
+    }
+    if (uiOptionEx(6, items, 30, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         IsKeyPressed(KEY_ESCAPE))
         state = ST_CONFIG;
 }
@@ -1765,5 +1841,106 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
     line(valC, buf);
     snprintf(buf, sizeof(buf), "[NUM3] Next lvl   [NUM4] Prev lvl");
     line(valC, buf);
+}
+
+void Game::startJumpscare(int enemyIdx) {
+    jumpscareEnemy = enemyIdx;
+    jumpscareTimer = C::JUMPSCARE_DURATION;
+    state = ST_JUMPSCARE;
+    EnableCursor();   // libera cursor por si el usuario quiere saltar
+}
+
+void Game::drawJumpscare() {
+    BeginDrawing();
+    ClearBackground(BLACK);
+
+    if (jumpscareEnemy < 0 || jumpscareEnemy >= (int)enemies.size()) {
+        EndDrawing();
+        return;
+    }
+
+    const Enemy& e = enemies[jumpscareEnemy];
+    int kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+    Texture2D tex = assets.enemyTex[kind];
+
+    int W = GetScreenWidth();
+    int H = GetScreenHeight();
+
+    // Progreso 0..1
+    float t = 1.0f - (jumpscareTimer / C::JUMPSCARE_DURATION);
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+
+    // Fase 1: zoom brusco de 0 a JUMPSCARE_ZOOM_IN
+    // Fase 2: mantener + shake + flash
+    float sizeScale;
+    if (t < C::JUMPSCARE_ZOOM_IN) {
+        // Rápido acercamiento
+        float k = t / C::JUMPSCARE_ZOOM_IN;
+        // Easing out (arranca rápido, frena un poco)
+        k = 1.0f - (1.0f - k) * (1.0f - k);
+        sizeScale = 0.5f + k * 1.2f;   // empieza al 50%, acaba al 170%
+    } else {
+        // Fase 2: mantiene tamaño + shake
+        sizeScale = 1.7f;
+    }
+
+    // Shake solo en fase 2
+    float shake = 0.0f;
+    if (t >= C::JUMPSCARE_ZOOM_IN) {
+        float k = (t - C::JUMPSCARE_ZOOM_IN) / (1.0f - C::JUMPSCARE_ZOOM_IN);
+        shake = (1.0f - k) * 14.0f;   // decae al final
+    }
+
+    float dx = ((float)GetRandomValue(-100, 100) / 100.0f) * shake;
+    float dy = ((float)GetRandomValue(-100, 100) / 100.0f) * shake;
+
+    // Centro + tamano
+    float drawSize = (float)H * sizeScale;
+    float x = W / 2.0f + dx;
+    float y = H / 2.0f + dy;
+
+    // Aplicar tinte de hit flash al principio
+    Color tint = WHITE;
+    if (t < 0.2f) {
+        unsigned char k = (unsigned char)((1.0f - t / 0.2f) * 100);
+        tint = (Color){ 255, (unsigned char)(255 - k), (unsigned char)(255 - k), 255 };
+    }
+
+    // Dibujar el sprite centrado, escalado
+    if (tex.id != 0) {
+        Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };
+        Rectangle dst = { x - drawSize / 2.0f, y - drawSize / 2.0f, drawSize, drawSize };
+        DrawTexturePro(tex, src, dst, { 0, 0 }, 0.0f, tint);
+    } else {
+        // Fallback: circulo gigante con el color del enemigo
+        Color c = (kind == ENEMY_BEA)    ? (Color){ 210, 45, 60, 255 } :
+                  (kind == ENEMY_MARISA) ? (Color){ 60, 90, 210, 255 } :
+                                            (Color){ 160, 40, 200, 255 };
+        DrawCircle((int)x, (int)y, drawSize * 0.4f, c);
+    }
+
+    // Flash blanco al inicio
+    if (t < 0.08f) {
+        unsigned char a = (unsigned char)((1.0f - t / 0.08f) * 255);
+        DrawRectangle(0, 0, W, H, (Color){ 255, 255, 255, a });
+    }
+
+    // Oscurecimiento al final (transición a game over)
+    if (t > 0.85f) {
+        float k = (t - 0.85f) / 0.15f;
+        unsigned char a = (unsigned char)(k * 255);
+        DrawRectangle(0, 0, W, H, (Color){ 0, 0, 0, a });
+    }
+
+    // Hint para saltar
+    if (t > 0.3f && ((int)(GetTime() * 3.0) & 1)) {
+        const char* hint = "Pulsa cualquier tecla para continuar";
+        int hs = 18;
+        DrawText(hint, W / 2 - MeasureText(hint, hs) / 2, H - 60, hs,
+                 (Color){ 180, 180, 180, 220 });
+    }
+
+    EndDrawing();
 }
 

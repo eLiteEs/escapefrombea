@@ -6,6 +6,16 @@ struct Assets {
     Texture2D portalTex = {};
     bool hasPortalTex   = false;
 
+    // NUEVO
+    Texture2D wallTile   = {};
+    Texture2D wallLocker = {};
+    Texture2D wallBrick  = {};
+    Texture2D floorTile  = {};
+    bool hasWallTile     = false;
+    bool hasWallLocker   = false;
+    bool hasWallBrick    = false;
+    bool hasFloorTile    = false;
+
     Music musicMenu  = {};
     Music musicLevel = {};
     Sound sfxCaught  = {};

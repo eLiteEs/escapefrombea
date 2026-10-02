@@ -9,6 +9,15 @@ static bool fileExists(const std::string& p) {
     return true;
 }
 
+static Texture2D loadTileable(const char* path, bool& hasFlag) {
+    Texture2D t = LoadTexture(path);
+    if (t.id == 0) { hasFlag = false; return t; }
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
+    hasFlag = true;
+    return t;
+}
+
 static Texture2D loadTextureOrProcedural(const char* path, Color bodyColor) {
     Texture2D t = LoadTexture(path);
     if (t.id != 0) { SetTextureFilter(t, TEXTURE_FILTER_BILINEAR); return t; }
@@ -63,6 +72,11 @@ void Assets::load() {
     hasPortalTex = portalTex.id != 0;
     if (hasPortalTex) SetTextureFilter(portalTex, TEXTURE_FILTER_BILINEAR);
 
+    wallTile   = loadTileable(Paths::sprite("wall_tile.png").c_str(),   hasWallTile);
+    wallLocker = loadTileable(Paths::sprite("wall_locker.png").c_str(), hasWallLocker);
+    wallBrick  = loadTileable(Paths::sprite("wall_brick.png").c_str(),  hasWallBrick);
+    floorTile  = loadTileable(Paths::sprite("floor_tile.png").c_str(),  hasFloorTile);
+
     musicMenu  = loadMusicSmart("music_menu.ogg");
     musicLevel = loadMusicSmart("music_level.ogg");
 
@@ -76,6 +90,12 @@ void Assets::unload() {
     for (int i = 0; i < ENEMY_KIND_COUNT; ++i)
         if (enemyTex[i].id != 0) UnloadTexture(enemyTex[i]);
     if (hasPortalTex && portalTex.id != 0) UnloadTexture(portalTex);
+
+    if (hasWallTile   && wallTile.id   != 0) UnloadTexture(wallTile);
+    if (hasWallLocker && wallLocker.id != 0) UnloadTexture(wallLocker);
+    if (hasWallBrick  && wallBrick.id  != 0) UnloadTexture(wallBrick);
+    if (hasFloorTile  && floorTile.id  != 0) UnloadTexture(floorTile);
+
     if (musicMenu.stream.buffer  != nullptr) UnloadMusicStream(musicMenu);
     if (musicLevel.stream.buffer != nullptr) UnloadMusicStream(musicLevel);
     if (sfxCaught.frameCount    > 0) UnloadSound(sfxCaught);

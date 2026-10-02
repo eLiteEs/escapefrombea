@@ -1,4 +1,5 @@
 #pragma once
+
 #include "raylib.h"
 #include "debug.h"
 #include "common.h"
@@ -7,6 +8,7 @@
 #include "maze.h"
 #include "assets.h"
 #include "cinematic.h"
+#include "world_mesh.h"
 #include "save.h"
 #include <vector>
 #include <string>
@@ -136,5 +138,12 @@ struct Game {
     void debugKillAll();
     void debugTeleportToExit();
     void debugRevealMap();
+
+    void startJumpscare(int enemyIdx);
+    void drawJumpscare();
+    float jumpscareTimer = 0.0f;
+    int   jumpscareEnemy = -1;
+
+    WorldMeshes world;
 };
 

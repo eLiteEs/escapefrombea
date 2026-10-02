@@ -105,6 +105,7 @@ void Config::save() const {
     fprintf(f, "reduceMotion=%d\n",  reduceMotion ? 1 : 0);
     fprintf(f, "bigSubtitles=%d\n",  bigSubtitles ? 1 : 0);
     fprintf(f, "holdToSprint=%d\n",  holdToSprint ? 1 : 0);
+    fprintf(f, "noJumpscares=%d\n", noJumpscares ? 1 : 0);
     fclose(f);
 }
 
@@ -153,6 +154,7 @@ void Config::load() {
         else if (!strcmp(key, "reduceMotion"))   reduceMotion   = asInt(val) != 0;
         else if (!strcmp(key, "bigSubtitles"))   bigSubtitles   = asInt(val) != 0;
         else if (!strcmp(key, "holdToSprint"))   holdToSprint   = asInt(val) != 0;
+        else if (!strcmp(key, "noJumpscares")) noJumpscares = asInt(val) != 0;
 	else {
             for (int p = 0; p < 2; ++p) {
                 char buf[16];

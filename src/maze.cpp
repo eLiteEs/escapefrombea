@@ -43,6 +43,27 @@ void Maze::generate(int mw, int mh, uint32_t seed) {
             bool ud = (g[y-1][x] == 0 && g[y+1][x] == 0);
             if ((lr || ud) && (rng() % 100) < 18) g[y][x] = 0;
         }
+
+    // Asignar variantes de pared
+    wallVariant.assign(h, std::vector<unsigned char>(w, 0));
+    std::mt19937 varRng(seed ^ 0x9E3779B9u);
+    for (int y = 1; y < h - 1; ++y)
+        for (int x = 1; x < w - 1; ++x) {
+            if (g[y][x] != 1) continue;
+            // Contar vecinos libres (pared expuesta)
+            int exposed = 0;
+            if (!wallAt(x - 1, y)) exposed++;
+            if (!wallAt(x + 1, y)) exposed++;
+            if (!wallAt(x, y - 1)) exposed++;
+            if (!wallAt(x, y + 1)) exposed++;
+
+            if (exposed == 0) { wallVariant[y][x] = 0; continue; }
+
+            int r = (int)(varRng() % 100);
+            if      (r < 12) wallVariant[y][x] = 1;   // 12% taquillas
+            else if (r < 18) wallVariant[y][x] = 2;   // 6% ladrillo
+            else             wallVariant[y][x] = 0;   // resto azulejo
+        }
 }
 
 bool Maze::wallAt(int cx, int cy) const {

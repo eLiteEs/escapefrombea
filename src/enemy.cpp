@@ -133,10 +133,12 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
         if (!Debug::godMode) {
             for (int p = 0; p < numPlayers; ++p) {
                 if (players[p].caught || players[p].escaped) continue;
-                if (Vector3Distance(e.pos, players[p].pos) < C::CATCH_R)
-                    players[p].caught = true;
+                if (Vector3Distance(e.pos, players[p].pos) < C::CATCH_R) {
+                    players[p].caught  = true;
+                    players[p].caughtBy = (int)i;
+                }
             }
-        } 
+        }
     }
 }
 

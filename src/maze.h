@@ -22,5 +22,7 @@ public:
 
     bool findPath(Vector2 fromCell, Vector2 toCell,
                   std::vector<Vector2>& out) const;
+    
+    std::vector<std::vector<unsigned char>> wallVariant;
 };
 

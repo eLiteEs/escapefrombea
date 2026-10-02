@@ -97,6 +97,7 @@ access.subtitles=Large subtitles
 access.sprint=Sprint (hold/toggle)
 access.sprint.hold=Hold
 access.sprint.toggle=Toggle
+access.nojumpscares=No jumpscares
 
 mode.title=Choose game mode
 mode.story=Story mode

@@ -97,6 +97,7 @@ access.subtitles=Subtítulos grandes
 access.sprint=Sprint (mantener/alternar)
 access.sprint.hold=Mantener
 access.sprint.toggle=Alternar
+access.nojumpscares=Sin sustos
 
 mode.title=Elegir modo de juego
 mode.story=Modo historia

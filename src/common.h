@@ -62,6 +62,10 @@ namespace C {
     constexpr float WHIP_CONE          = 0.70f;
     constexpr float WHIP_CD            = 1.0f;
     constexpr float SLING_CD           = 0.7f;
+
+    // Jumpscare
+    constexpr float JUMPSCARE_DURATION = 1.3f;   // duración total
+    constexpr float JUMPSCARE_ZOOM_IN  = 0.15f;  // primer 15% es zoom rápido
 }
 
 enum AppState {
@@ -71,6 +75,7 @@ enum AppState {
     ST_SLOT_SELECT,
     ST_CONFIG, ST_CONFIG_VIDEO, ST_CONFIG_AUDIO, ST_CONFIG_GAMEPLAY, ST_CONFIG_CONTROLS, ST_CONFIG_ACCESS,
     ST_CINEMATIC,
+    ST_JUMPSCARE,
     ST_PAUSED, ST_PLAYING, ST_LEVEL_CLEAR, ST_GAME_OVER
 };
 
@@ -100,8 +105,9 @@ struct Player {
     float   staminaDelay  = 0.0f;
     bool    exhausted     = false;
     float   escapeTime    = 0.0f;
-
-        // Armas
+    int   caughtBy = -1;
+    
+    // Armas
     int   weapon         = WEAPON_NONE;
     int   ammo           = 0;
     float attackCooldown = 0.0f;

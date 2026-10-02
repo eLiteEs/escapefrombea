@@ -61,5 +61,6 @@ struct Config {
     bool  reduceMotion   = false;
     bool  bigSubtitles   = false;
     bool  holdToSprint   = true;
+    bool noJumpscares = false;
 };
 
