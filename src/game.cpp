@@ -7,6 +7,7 @@
 #include "paths.h"
 #include "save.h"
 #include "rlgl.h"
+#include <iostream>
 #include <cmath>
 #include <ctime>
 #include <random>
@@ -91,7 +92,7 @@ void Game::beginPlay(bool two, GameMode m) {
     if (mode == MODE_STORY && cfg.playCinematics) {
         char name[64];
         snprintf(name, sizeof(name), "level_%02d_intro.txt", level);
-        if (hasStory(name)) {
+	if (hasStory(name)) {
             playCinematic(name, "playing");
             return;
         }
