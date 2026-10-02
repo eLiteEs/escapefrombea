@@ -1,6 +1,0 @@
-@music none
-@wait 0.5
-
-*Has llegado al aula de informatica. La puerta del fondo esta abierta.
-Tu|Eso ha sido demasiado cerca...
-Bea|La proxima vez no fallare.

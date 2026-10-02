@@ -1,8 +1,9 @@
-@music level
-@wait 0.8
-@speed 45
+@music none
+@wait 0.5
 
-Bea|Ahora conozco tu ruta. No la vas a repetir.
-Tu|Entonces improvisare.
-*El laberinto parece mas grande esta vez.
-
+*Has llegado al patio* 
+Tu|Eso ha sido demasiado cerca...
+*Bea se aproxima desde lo lejos*
+Tu|Oh no, otra vez
+Bea|Deja de correr, te alcanzaré
+*Empiezas a correr otra vez, esta vez hacia el aula de informatica*
