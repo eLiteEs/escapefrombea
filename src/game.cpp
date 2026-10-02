@@ -181,10 +181,12 @@ void Game::startLevel(int lvl) {
         e.turnT  = 0.0f;
         e.prevPos = p;
 
-        int r = (int)(rng() % 100);
-        if (lvl >= 5 && r < 30)      e.kind = ENEMY_MARISA;
-        else if (lvl >= 3 && r < 60) e.kind = ENEMY_ALT;
-        else                         e.kind = ENEMY_BEA;
+	int r = (int)(rng() % 100);
+        if (lvl >= 5 && r < 15)      e.kind = ENEMY_CV;    // raro, solo alto nivel
+        else if (lvl >= 4 && r < 40) e.kind = ENEMY_YE;
+        else if (lvl >= 3 && r < 65) e.kind = ENEMY_MARISA;
+        else if (lvl >= 2 && r < 85) e.kind = ENEMY_ALT;
+        else                          e.kind = ENEMY_BEA;
         e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
         enemies.push_back(e);
     }

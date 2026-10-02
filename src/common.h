@@ -50,7 +50,7 @@ namespace C {
     constexpr const char* GAME_VERSION = "beta 1.2";
     constexpr const char* GAME_TITLE   = "Escape From Marisa 3";
 
-        // Armas
+    // Armas
     constexpr int   SLINGSHOT_AMMO_DEF = 6;
     constexpr float STUN_SLING         = 1.5f;
     constexpr float RAGE_SLING_T       = 10.0f;
@@ -76,7 +76,7 @@ enum AppState {
 
 enum SlotPurpose { SLOT_NEW = 0, SLOT_LOAD = 1 };
 enum GameMode { MODE_STORY = 0, MODE_ENDLESS = 1 };
-enum EnemyKind { ENEMY_BEA = 0, ENEMY_MARISA, ENEMY_ALT, ENEMY_KIND_COUNT };
+enum EnemyKind { ENEMY_BEA = 0, ENEMY_MARISA, ENEMY_ALT, ENEMY_CV, ENEMY_YE, ENEMY_KIND_COUNT };
 enum Diff { DIFF_NORMAL = 0, DIFF_EXPERT, DIFF_NIGHTMARE, DIFF_COUNT };
 
 enum WeaponKind {
