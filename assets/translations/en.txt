@@ -4,13 +4,28 @@ menu.endless=Endless levels
 menu.config=Settings
 menu.quit=Leave game
 menu.load=Load game
+menu.subtitle=serious chat mode
+
+common.yes=Yes
+common.no=No
+common.back=Back
 
 hud.level=Level %d
 hud.time=Time: %.1f s
 hud.enemies=Enemies: %d
+hud.player=Player %d
+hud.stamina=Stamina
+hud.stamina.exhausted=Out of breath
+hud.caught.waiting=Caught - waiting...
+hud.escaped.waiting=You escaped - waiting...
 
 pause.title=Paused
 pause.hint=ESC: resume M: menu
+pause.resume=Back to game
+pause.save=Save game
+pause.nosave=(no slot - can't save)
+pause.menu=Back to menu
+pause.info=Level %d  -  %.1fs  -  Slot %d
 
 level.complete=Level completed!
 level.controls=ENTER: next level ESC: menu
@@ -18,4 +33,86 @@ level.finished=Level finished!
 level.catched=THEY CAUGHT YOU
 level.retry=R: retry ESC: menu
 level.catched.longtext=Bea found you in the halls of the school...
+level.stats.endless=Level %d - Best: %d
+level.stats.coop=P1: %.1fs   P2: %.1fs
+level.stats.single=Level %d in %.1f s
+level.catched.endless=You reached level %d - Best: %d
 
+config.video=Video
+config.audio=Audio
+config.gameplay=Gameplay
+config.controls=Controls
+config.access=Accessibility
+config.language=Language: %s
+config.hint=Up/down with D-pad, change with < > or A
+
+video.fullscreen=Fullscreen
+video.resolution=Window resolution
+video.fps=FPS limit
+video.fps.unlimited=Unlimited
+video.renderdist=Render distance
+video.renderdist.near=Near (40m)
+video.renderdist.medium=Medium (60m)
+video.renderdist.far=Far (100m)
+video.guiscale=Interface size
+video.vsync=VSync
+
+audio.master=Master volume
+audio.music=Music
+audio.sfx=Effects
+
+gameplay.difficulty=Difficulty
+gameplay.inverty=Invert Y axis
+gameplay.mousesens=Mouse sensitivity
+gameplay.padsens=Gamepad sensitivity
+gameplay.minimap=Minimap
+gameplay.sprintdrain=Sprint drain
+gameplay.sprintregen=Sprint regeneration
+gameplay.cinematics=Cutscenes
+
+controls.title=Controls and gamepad
+controls.pad=Gamepad %d: %s
+controls.pad.none=Gamepad %d: not detected
+controls.swap=Swap gamepads P1/P2
+controls.p1.up=P1 Forward
+controls.p1.down=P1 Back
+controls.p1.left=P1 Left
+controls.p1.right=P1 Right
+controls.p2.up=P2 Forward
+controls.p2.down=P2 Back
+controls.p2.left=P2 Left
+controls.p2.right=P2 Right
+controls.presskey=Press a key...
+controls.hint.remap=Press the key to assign (ESC cancels)
+controls.hint.pad=Gamepad: left stick moves, right stick looks, A confirms, LT sprints
+
+access.colorblind=Colorblind mode
+access.cb.none=None
+access.cb.deuteranopia=Deuteranopia
+access.cb.protanopia=Protanopia
+access.cb.tritanopia=Tritanopia
+access.contrast=High contrast
+access.motion=Reduce motion
+access.subtitles=Large subtitles
+access.sprint=Sprint (hold/toggle)
+access.sprint.hold=Hold
+access.sprint.toggle=Toggle
+
+mode.title=Choose game mode
+mode.story=Story mode
+mode.endless=Endless mode
+mode.hint=Story: cutscenes and progress. Endless: never ends, with a persistent record.
+
+players.title.story=Story mode - players
+players.title.endless=Endless mode - players
+players.one=1 player
+
+slot.title.new=Choose a slot (it will be overwritten)
+slot.used=Slot %d  -  Level %d  -  %s  -  %s
+slot.empty=Slot %d  -  Empty
+slot.mode.story=Story
+slot.mode.endless=Endless
+slot.hint=Choose a slot. Starting a new game overwrites it.
+
+toast.noslot=No slot assigned
+toast.saved=Game saved

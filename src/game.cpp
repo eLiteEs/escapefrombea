@@ -506,7 +506,7 @@ void Game::drawStaminaBar(const Player& pl, int vw, int vh) {
     DrawRectangle(bx, by, (int)(barW * pl.stamina), barH, c);
     DrawRectangleLines(bx, by, barW, barH, RAYWHITE);
 
-    const char* label = pl.exhausted ? "SIN ALIENTO" : "ENERGIA";
+    const char* label = pl.exhausted ? L("hud.stamina.exhausted", "Sin aliento") : L("hud.stamina", "Energía");
     int lw = UI::M(label, 14);
     UI::T(label, vw/2 - lw/2, by - 18, 14,
              pl.exhausted ? RED : LIGHTGRAY);
@@ -617,25 +617,25 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
     int fsize = vw < 900 ? 22 : 32;
     int small = fsize * 5 / 8;
     int hudX = 20, hudY = 20;
-    UI::T(TextFormat(L("hud.level", "NIVEL %d"), level), hudX, hudY, fsize, RAYWHITE);
+    UI::T(TextFormat(L("hud.level", "Nivel %d"), level), hudX, hudY, fsize, RAYWHITE);
     UI::T(TextFormat(L("hud.time", "Tiempo: %.1f s"), levelTime),
              hudX, hudY + fsize + 6, small, LIGHTGRAY);
     UI::T(TextFormat(L("hud.enemies", "Enemigos: %d"), (int)enemies.size()),
              hudX, hudY + fsize + 6 + small + 4, small, LIGHTGRAY);
 
     if (twoPlayers)
-        UI::T(TextFormat("JUGADOR %d", playerNum + 1),
+        UI::T(TextFormat(L("hud.player", "Jugador %d"), playerNum + 1),
                  hudX, vh - small - 10, small, playerColor(playerNum));
 
     drawStaminaBar(pl, vw, vh);
 
     if (pl.caught) {
         DrawRectangle(0, 0, vw, vh, (Color){ 120, 0, 0, 90 });
-        const char* msg = "ATRAPADO - esperando...";
+        const char* msg = L("hud.caught.waiting", "Atrapado - esperando...");
         UI::T(msg, vw/2 - UI::M(msg, small)/2, vh/2, small, RAYWHITE);
     } else if (pl.escaped) {
         DrawRectangle(0, 0, vw, vh, (Color){ 0, 80, 40, 90 });
-        const char* msg = "ESCAPASTE - esperando...";
+        const char* msg = L("hud.escaped.waiting", "Escapaste - esperando...");
         UI::T(msg, vw/2 - UI::M(msg, small)/2, vh/2, small, RAYWHITE);
     }
 }
@@ -670,6 +670,10 @@ void Game::drawCinematic() {
 }
 
 // ---------- Menús de config ----------
+static const char* yesNo(bool b) {
+    return b ? L("common.yes", "Sí") : L("common.no", "No");
+}
+
 static const char* pctStr(float v) {
     static char buf[8];
     snprintf(buf, sizeof(buf), "%d%%", (int)(v * 100 + 0.5f));
@@ -677,22 +681,22 @@ static const char* pctStr(float v) {
 }
 
 void Game::drawConfigHub() {
-    drawConfigHeader("CONFIGURACION");
+    drawConfigHeader(L("menu.config", "Configuración"));
     int items = 7;
     handleGamepadMenuNav(items);
 
-    if (uiButton(0, items, 30, "VIDEO",         &navIndexCfg, nullptr) ||
+    if (uiButton(0, items, 30, L("config.video", "Video"),         &navIndexCfg, nullptr) ||
         (navIndexCfg == 0 && consumeConfirm())) { state = ST_CONFIG_VIDEO;    navIndex = 0; }
-    if (uiButton(1, items, 30, "AUDIO",         &navIndexCfg, nullptr) ||
+    if (uiButton(1, items, 30, L("config.audio", "Audio"),         &navIndexCfg, nullptr) ||
         (navIndexCfg == 1 && consumeConfirm())) { state = ST_CONFIG_AUDIO;    navIndex = 0; }
-    if (uiButton(2, items, 30, "JUGABILIDAD",   &navIndexCfg, nullptr) ||
+    if (uiButton(2, items, 30, L("config.gameplay", "Jugabilidad"),   &navIndexCfg, nullptr) ||
         (navIndexCfg == 2 && consumeConfirm())) { state = ST_CONFIG_GAMEPLAY; navIndex = 0; }
-    if (uiButton(3, items, 30, "CONTROLES",     &navIndexCfg, nullptr) ||
+    if (uiButton(3, items, 30, L("config.controls", "Controles"),     &navIndexCfg, nullptr) ||
         (navIndexCfg == 3 && consumeConfirm())) { state = ST_CONFIG_CONTROLS; navIndex = 0; }
-    if (uiButton(4, items, 30, "ACCESIBILIDAD", &navIndexCfg, nullptr) ||
+    if (uiButton(4, items, 30, L("config.access", "Accesibilidad"), &navIndexCfg, nullptr) ||
         (navIndexCfg == 4 && consumeConfirm())) { state = ST_CONFIG_ACCESS;   navIndex = 0; }
     if (uiButton(5, items, 30,
-                 TextFormat("IDIOMA: %s", Lang::currentLang()),
+                 TextFormat(L("config.language", "Idioma: %s"), Lang::currentLang()),
                  &navIndexCfg, nullptr) ||
         (navIndexCfg == 5 && consumeConfirm())) {
         std::string cur = Lang::currentLang();
@@ -700,12 +704,12 @@ void Game::drawConfigHub() {
         Lang::load(cfg.language.c_str());
         cfg.save();
     }
-    if (uiButton(6, items, 30, "VOLVER", &navIndexCfg, nullptr) ||
+    if (uiButton(6, items, 30, L("common.back", "Volver"), &navIndexCfg, nullptr) ||
         (navIndexCfg == 6 && consumeConfirm())) {
         state = configReturn;
         if (configReturn == ST_PAUSED) navMenu = 0;
     }
-    const char* hint = "Sube/baja con D-pad, cambia con < > o A";
+    const char* hint = L("config.hint", "Sube/baja con D-pad, cambia con < > o A");
     int W = GetScreenWidth();
     UI::T(hint, W/2 - UI::M(hint, 18)/2, GetScreenHeight() - 40, 18, GRAY);
 }
@@ -713,34 +717,34 @@ void Game::drawConfigHub() {
 static const char* fpsLabel(int idx) {
     int v = C::FPS_OPTIONS[idx];
     static char buf[16];
-    if (v == 0) return "SIN LIMITE";
+    if (v == 0) return L("video.fps.unlimited", "Sin límite");
     snprintf(buf, sizeof(buf), "%d", v);
     return buf;
 }
 static const char* rdLabel(int idx) {
     switch (idx) {
-        case 0: return "CERCA (40m)";
-        case 1: return "MEDIA (60m)";
-        default: return "LEJOS (100m)";
+        case 0: return L("video.renderdist.near", "Cerca (40m)");
+        case 1: return L("video.renderdist.medium", "Media (60m)");
+        default: return L("video.renderdist.far", "Lejos (100m)");
     }
 }
 
 void Game::drawConfigVideo() {
-    drawConfigHeader("VIDEO");
+    drawConfigHeader(L("config.video", "Video"));
     int items = 7;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
     auto save = [&]() { cfg.save(); };
 
-    if (uiOptionEx(0, items, 30, "Pantalla completa",
-                   cfg.fullscreen ? "SI" : "NO",
+    if (uiOptionEx(0, items, 30, L("video.fullscreen", "Pantalla completa"),
+                   yesNo(cfg.fullscreen),
                    &navIndex, nullptr, navIndex == 0 ? lr : 0) != UI_NONE) {
         cfg.fullscreen = !cfg.fullscreen;
         ToggleFullscreen();
         applyVideoSettings();
         save();
     }
-    if (uiOptionEx(1, items, 30, "Resolucion ventana",
+    if (uiOptionEx(1, items, 30, L("video.resolution", "Resolución de ventana"),
                    TextFormat("%dx%d", cfg.windowW, cfg.windowH),
                    &navIndex, nullptr, navIndex == 1 ? lr : 0) != UI_NONE) {
         static const int presets[][2] = {
@@ -758,7 +762,7 @@ void Game::drawConfigVideo() {
         save();
     }
     {
-        UIAction a = uiOptionEx(2, items, 30, "Limite FPS",
+        UIAction a = uiOptionEx(2, items, 30, L("video.fps", "Límite de FPS"),
                                 fpsLabel(cfg.fpsLimit),
                                 &navIndex, nullptr, navIndex == 2 ? lr : 0);
         if (a == UI_LEFT)  cfg.fpsLimit = std::max(0, cfg.fpsLimit - 1);
@@ -767,7 +771,7 @@ void Game::drawConfigVideo() {
         if (a != UI_NONE) { applyVideoSettings(); save(); }
     }
     {
-        UIAction a = uiOptionEx(3, items, 30, "Distancia de dibujado",
+        UIAction a = uiOptionEx(3, items, 30, L("video.renderdist", "Distancia de dibujado"),
                                 rdLabel(cfg.renderDistance),
                                 &navIndex, nullptr, navIndex == 3 ? lr : 0);
         if (a == UI_LEFT)  cfg.renderDistance = std::max(0, cfg.renderDistance - 1);
@@ -777,25 +781,25 @@ void Game::drawConfigVideo() {
     }
     {
         char buf[16]; snprintf(buf, sizeof(buf), "%.2fx", cfg.guiScale);
-        UIAction a = uiOptionEx(4, items, 30, "Tamano de interfaz", buf,
+        UIAction a = uiOptionEx(4, items, 30, L("video.guiscale", "Tamaño de la interfaz"), buf,
                                 &navIndex, nullptr, navIndex == 4 ? lr : 0);
         if (a == UI_LEFT)  cfg.guiScale = std::max(0.75f, cfg.guiScale - 0.05f);
         if (a == UI_RIGHT) cfg.guiScale = std::min(2.00f, cfg.guiScale + 0.05f);
         if (a == UI_CONFIRM) cfg.guiScale = 1.0f;
         if (a != UI_NONE) { UI::scale = cfg.guiScale; save(); }
     }
-    if (uiOptionEx(5, items, 30, "VSync",
-                   cfg.vsync ? "SI" : "NO",
+    if (uiOptionEx(5, items, 30, L("video.vsync", "VSync"),
+                   yesNo(cfg.vsync),
                    &navIndex, nullptr, navIndex == 5 ? lr : 0) != UI_NONE) {
         cfg.vsync = !cfg.vsync; save();
     }
-    if (uiOptionEx(6, items, 30, "Volver", "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(6, items, 30, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         IsKeyPressed(KEY_ESCAPE))
         state = ST_CONFIG;
 }
 
 void Game::drawConfigAudio() {
-    drawConfigHeader("AUDIO");
+    drawConfigHeader(L("config.audio", "Audio"));
     int items = 4;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
@@ -806,7 +810,7 @@ void Game::drawConfigAudio() {
     };
 
     {
-        UIAction a = uiOptionEx(0, items, 40, "Volumen maestro", pctStr(cfg.masterVol),
+        UIAction a = uiOptionEx(0, items, 40, L("audio.master", "Volumen maestro"), pctStr(cfg.masterVol),
                                 &navIndex, nullptr, navIndex == 0 ? lr : 0);
         if (a == UI_LEFT)  cfg.masterVol = std::max(0.0f, cfg.masterVol - 0.05f);
         if (a == UI_RIGHT) cfg.masterVol = std::min(1.0f, cfg.masterVol + 0.05f);
@@ -814,7 +818,7 @@ void Game::drawConfigAudio() {
         if (a != UI_NONE) applyAndSave();
     }
     {
-        UIAction a = uiOptionEx(1, items, 40, "Musica", pctStr(cfg.musicVol),
+        UIAction a = uiOptionEx(1, items, 40, L("audio.music", "Música"), pctStr(cfg.musicVol),
                                 &navIndex, nullptr, navIndex == 1 ? lr : 0);
         if (a == UI_LEFT)  cfg.musicVol = std::max(0.0f, cfg.musicVol - 0.05f);
         if (a == UI_RIGHT) cfg.musicVol = std::min(1.0f, cfg.musicVol + 0.05f);
@@ -822,38 +826,38 @@ void Game::drawConfigAudio() {
         if (a != UI_NONE) applyAndSave();
     }
     {
-        UIAction a = uiOptionEx(2, items, 40, "Efectos", pctStr(cfg.sfxVol),
+        UIAction a = uiOptionEx(2, items, 40, L("audio.sfx", "Efectos"), pctStr(cfg.sfxVol),
                                 &navIndex, nullptr, navIndex == 2 ? lr : 0);
         if (a == UI_LEFT)  cfg.sfxVol = std::max(0.0f, cfg.sfxVol - 0.05f);
         if (a == UI_RIGHT) cfg.sfxVol = std::min(1.0f, cfg.sfxVol + 0.05f);
         if (a == UI_CONFIRM) cfg.sfxVol = 0.90f;
         if (a != UI_NONE) applyAndSave();
     }
-    if (uiOptionEx(3, items, 40, "Volver", "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(3, items, 40, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         IsKeyPressed(KEY_ESCAPE))
         state = ST_CONFIG;
 }
 
 void Game::drawConfigGameplay() {
-    drawConfigHeader("JUGABILIDAD");
+    drawConfigHeader(L("config.gameplay", "Jugabilidad"));
     int items = 9;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
     auto save = [&]() { cfg.save(); };
 
-    if (uiOptionEx(0, items, 40, "Dificultad", cfg.diffName(),
+    if (uiOptionEx(0, items, 40, L("gameplay.difficulty", "Dificultad"), cfg.diffName(),
                    &navIndex, nullptr, navIndex == 0 ? lr : 0) != UI_NONE) {
         cfg.difficulty = (cfg.difficulty + 1) % DIFF_COUNT;
         save();
     }
-    if (uiOptionEx(1, items, 40, "Invertir eje Y",
-                   cfg.invertY ? "SI" : "NO",
+    if (uiOptionEx(1, items, 40, L("gameplay.inverty", "Invertir eje Y"),
+                   yesNo(cfg.invertY),
                    &navIndex, nullptr, navIndex == 1 ? lr : 0) != UI_NONE) {
         cfg.invertY = !cfg.invertY; save();
     }
     {
         char buf[16]; snprintf(buf, sizeof(buf), "%.2f", cfg.mouseSens);
-        UIAction a = uiOptionEx(2, items, 40, "Sensibilidad raton", buf,
+        UIAction a = uiOptionEx(2, items, 40, L("gameplay.mousesens", "Sensibilidad del ratón"), buf,
                                 &navIndex, nullptr, navIndex == 2 ? lr : 0);
         if (a == UI_LEFT)  cfg.mouseSens = std::max(0.10f, cfg.mouseSens - 0.05f);
         if (a == UI_RIGHT) cfg.mouseSens = std::min(5.00f, cfg.mouseSens + 0.05f);
@@ -862,21 +866,21 @@ void Game::drawConfigGameplay() {
     }
     {
         char buf[16]; snprintf(buf, sizeof(buf), "%.2f", cfg.stickSens);
-        UIAction a = uiOptionEx(3, items, 40, "Sensibilidad mando", buf,
+        UIAction a = uiOptionEx(3, items, 40, L("gameplay.padsens", "Sensibilidad del mando"), buf,
                                 &navIndex, nullptr, navIndex == 3 ? lr : 0);
         if (a == UI_LEFT)  cfg.stickSens = std::max(0.10f, cfg.stickSens - 0.05f);
         if (a == UI_RIGHT) cfg.stickSens = std::min(5.00f, cfg.stickSens + 0.05f);
         if (a == UI_CONFIRM) cfg.stickSens = 1.0f;
         if (a != UI_NONE) save();
     }
-    if (uiOptionEx(4, items, 40, "Minimapa",
-                   cfg.showMinimap ? "SI" : "NO",
+    if (uiOptionEx(4, items, 40, L("gameplay.minimap", "Minimapa"),
+                   yesNo(cfg.showMinimap),
                    &navIndex, nullptr, navIndex == 4 ? lr : 0) != UI_NONE) {
         cfg.showMinimap = !cfg.showMinimap; save();
     }
     {
         char buf[16]; snprintf(buf, sizeof(buf), "%.2f", cfg.sprintDrain);
-        UIAction a = uiOptionEx(5, items, 40, "Consumo sprint", buf,
+        UIAction a = uiOptionEx(5, items, 40, L("gameplay.sprintdrain", "Consumo de sprint"), buf,
                                 &navIndex, nullptr, navIndex == 5 ? lr : 0);
         if (a == UI_LEFT)  cfg.sprintDrain = std::max(0.10f, cfg.sprintDrain - 0.05f);
         if (a == UI_RIGHT) cfg.sprintDrain = std::min(0.80f, cfg.sprintDrain + 0.05f);
@@ -885,36 +889,36 @@ void Game::drawConfigGameplay() {
     }
     {
         char buf[16]; snprintf(buf, sizeof(buf), "%.2f", cfg.sprintRegen);
-        UIAction a = uiOptionEx(6, items, 40, "Regeneracion sprint", buf,
+        UIAction a = uiOptionEx(6, items, 40, L("gameplay.sprintregen", "Regeneración de sprint"), buf,
                                 &navIndex, nullptr, navIndex == 6 ? lr : 0);
         if (a == UI_LEFT)  cfg.sprintRegen = std::max(0.05f, cfg.sprintRegen - 0.05f);
         if (a == UI_RIGHT) cfg.sprintRegen = std::min(0.60f, cfg.sprintRegen + 0.05f);
         if (a == UI_CONFIRM) cfg.sprintRegen = C::STAM_REGEN_DEF;
         if (a != UI_NONE) save();
     }
-    if (uiOptionEx(7, items, 40, "Cinemáticas",
-                   cfg.playCinematics ? "SI" : "NO",
+    if (uiOptionEx(7, items, 40, L("gameplay.cinematics", "Cinemáticas"),
+                   yesNo(cfg.playCinematics),
                    &navIndex, nullptr, navIndex == 7 ? lr : 0) != UI_NONE) {
         cfg.playCinematics = !cfg.playCinematics; save();
     }
-    if (uiOptionEx(8, items, 40, "Volver", "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(8, items, 40, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         IsKeyPressed(KEY_ESCAPE))
         state = ST_CONFIG;
 }
 
 void Game::drawConfigControls() {
-    drawConfigHeader("CONTROLES Y MANDO");
+    drawConfigHeader(L("controls.title", "Controles y mando"));
     int W = GetScreenWidth();
 
     bool pad0 = IsGamepadAvailable(0);
     bool pad1 = IsGamepadAvailable(1);
     char info[256];
-    if (pad0) snprintf(info, sizeof(info), "Mando 0: %s", GetGamepadName(0));
-    else      snprintf(info, sizeof(info), "Mando 0: no detectado");
+    if (pad0) snprintf(info, sizeof(info), L("controls.pad", "Mando %d: %s"), 0, GetGamepadName(0));
+    else      snprintf(info, sizeof(info), L("controls.pad.none", "Mando %d: no detectado"), 0);
     UI::T(info, W/2 - UI::M(info, 18)/2, 100, 18, pad0 ? LIME : GRAY);
 
-    if (pad1) snprintf(info, sizeof(info), "Mando 1: %s", GetGamepadName(1));
-    else      snprintf(info, sizeof(info), "Mando 1: no detectado");
+    if (pad1) snprintf(info, sizeof(info), L("controls.pad", "Mando %d: %s"), 1, GetGamepadName(1));
+    else      snprintf(info, sizeof(info), L("controls.pad.none", "Mando %d: no detectado"), 1);
     UI::T(info, W/2 - UI::M(info, 18)/2, 122, 18, pad1 ? LIME : GRAY);
 
     int items = 10;
@@ -922,8 +926,8 @@ void Game::drawConfigControls() {
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
 
-    if (uiOptionEx(row, items, 40, "Intercambiar mandos P1/P2",
-                   cfg.swapGamepads ? "SI" : "NO",
+    if (uiOptionEx(row, items, 40, L("controls.swap", "Intercambiar mandos J1/J2"),
+                   yesNo(cfg.swapGamepads),
                    &navIndex, nullptr, navIndex == row ? lr : 0) != UI_NONE) {
         cfg.swapGamepads = !cfg.swapGamepads;
         cfg.save();
@@ -933,18 +937,18 @@ void Game::drawConfigControls() {
 
     struct RowInfo { int player, action; const char* name; int key; };
     RowInfo infos[8] = {
-        {0, 0, "P1 Adelante",  cfg.binds[0].up},
-        {0, 1, "P1 Atras",     cfg.binds[0].down},
-        {0, 2, "P1 Izquierda", cfg.binds[0].left},
-        {0, 3, "P1 Derecha",   cfg.binds[0].right},
-        {1, 0, "P2 Adelante",  cfg.binds[1].up},
-        {1, 1, "P2 Atras",     cfg.binds[1].down},
-        {1, 2, "P2 Izquierda", cfg.binds[1].left},
-        {1, 3, "P2 Derecha",   cfg.binds[1].right},
+        {0, 0, L("controls.p1.up", "J1 Adelante"),  cfg.binds[0].up},
+        {0, 1, L("controls.p1.down", "J1 Atrás"),     cfg.binds[0].down},
+        {0, 2, L("controls.p1.left", "J1 Izquierda"), cfg.binds[0].left},
+        {0, 3, L("controls.p1.right", "J1 Derecha"),   cfg.binds[0].right},
+        {1, 0, L("controls.p2.up", "J2 Adelante"),  cfg.binds[1].up},
+        {1, 1, L("controls.p2.down", "J2 Atrás"),     cfg.binds[1].down},
+        {1, 2, L("controls.p2.left", "J2 Izquierda"), cfg.binds[1].left},
+        {1, 3, L("controls.p2.right", "J2 Derecha"),   cfg.binds[1].right},
     };
     for (int i = 0; i < 8; ++i) {
         const char* lbl = (remapAction == infos[i].action && remapPlayer == infos[i].player)
-                          ? "PULSA TECLA..." : Config::keyName(infos[i].key);
+                          ? L("controls.presskey", "Pulsa una tecla...") : Config::keyName(infos[i].key);
         if (uiOptionEx(row, items, 40, infos[i].name, lbl,
                        &navIndex, nullptr, navIndex == row ? lr : 0) != UI_NONE) {
             remapAction = infos[i].action;
@@ -952,13 +956,13 @@ void Game::drawConfigControls() {
         }
         row++;
     }
-    if (uiOptionEx(row, items, 40, "Volver", "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(row, items, 40, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         (IsKeyPressed(KEY_ESCAPE) && remapAction < 0))
         state = ST_CONFIG;
 
     const char* hint = remapAction >= 0
-        ? "Pulsa la tecla a asignar (ESC cancela)"
-        : "Con mando: stick izq mover, stick der mirar, A confirma, LT sprint";
+        ? L("controls.hint.remap", "Pulsa la tecla a asignar (ESC cancela)")
+        : L("controls.hint.pad", "Con mando: stick izq mover, stick der mirar, A confirma, LT sprint");
     UI::T(hint, W/2 - UI::M(hint, 18)/2, GetScreenHeight() - 36, 18, GRAY);
 }
 
@@ -989,7 +993,7 @@ void Game::showToast(const char* msg) {
 
 void Game::saveCurrentGame() {
     if (currentSlot < 0) {
-        showToast("Sin slot asignado");
+        showToast(L("toast.noslot", "Sin slot asignado"));
         return;
     }
     SaveSlot s;
@@ -999,7 +1003,7 @@ void Game::saveCurrentGame() {
     s.twoPlayers  = twoPlayers;
     s.playtime    = totalPlaytime;
     saves.saveSlot(currentSlot, s);
-    showToast("Partida guardada");
+    showToast(L("toast.saved", "Partida guardada"));
 }
 
 void Game::autoSaveProgress() {
@@ -1055,39 +1059,39 @@ void Game::loadGameFromSlot(int slot) {
     }
 }
 void Game::drawModeSelect() {
-    drawConfigHeader("ELEGIR MODO DE JUEGO");
+    drawConfigHeader(L("mode.title", "Elegir modo de juego"));
     int items = 3;
     handleGamepadMenuNav(items);
-    if (uiButton(0, items, 60, "MODO HISTORIA", &navMenu, nullptr) ||
+    if (uiButton(0, items, 60, L("mode.story", "Modo historia"), &navMenu, nullptr) ||
         (navMenu == 0 && consumeConfirm())) {
         pendingMode = MODE_STORY;
         state = ST_PLAYER_SELECT;
         navMenu = 0;
     }
-    if (uiButton(1, items, 60, "MODO INFINITO", &navMenu, nullptr) ||
+    if (uiButton(1, items, 60, L("mode.endless", "Modo infinito"), &navMenu, nullptr) ||
         (navMenu == 1 && consumeConfirm())) {
         pendingMode = MODE_ENDLESS;
         state = ST_PLAYER_SELECT;
         navMenu = 0;
     }
-    if (uiButton(2, items, 60, "VOLVER", &navMenu, nullptr) ||
+    if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
         (navMenu == 2 && consumeConfirm()) || consumeCancel()) {
         state = ST_MENU;
         navMenu = 0;
     }
-    const char* hint = "Historia = con cinemáticas y progreso. Infinito = sin fin, record persistente.";
+    const char* hint = L("mode.hint", "Historia: con cinemáticas y progreso. Infinito: sin fin, con récord persistente.");
     int W = GetScreenWidth();
     UI::T(hint, W/2 - UI::M(hint, 18)/2, GetScreenHeight() - 40, 18, GRAY);
 }
 
 void Game::drawPlayerSelect() {
     const char* titulo = (pendingMode == MODE_STORY)
-                         ? "MODO HISTORIA - JUGADORES"
-                         : "MODO INFINITO - JUGADORES";
+                         ? L("players.title.story", "Modo historia - jugadores")
+                         : L("players.title.endless", "Modo infinito - jugadores");
     drawConfigHeader(titulo);
     int items = 3;
     handleGamepadMenuNav(items);
-    if (uiButton(0, items, 60, "1 JUGADOR", &navMenu, nullptr) ||
+    if (uiButton(0, items, 60, L("players.one", "1 jugador"), &navMenu, nullptr) ||
         (navMenu == 0 && consumeConfirm())) {
         pendingTwoPlayers = false;
         slotPurpose = SLOT_NEW;
@@ -1096,7 +1100,7 @@ void Game::drawPlayerSelect() {
         // refresca por si acaso
         saves.refresh();
     }
-    if (uiButton(1, items, 60, "2 JUGADORES (PANTALLA DIVIDIDA)", &navMenu, nullptr) ||
+    if (uiButton(1, items, 60, L("menu.play2", "Dos jugadores (pantalla dividida)"), &navMenu, nullptr) ||
         (navMenu == 1 && consumeConfirm())) {
         pendingTwoPlayers = true;
         slotPurpose = SLOT_NEW;
@@ -1104,7 +1108,7 @@ void Game::drawPlayerSelect() {
         navSlot = 0;
         saves.refresh();
     }
-    if (uiButton(2, items, 60, "VOLVER", &navMenu, nullptr) ||
+    if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
         (navMenu == 2 && consumeConfirm()) || consumeCancel()) {
         state = ST_MODE_SELECT;
         navMenu = 0;
@@ -1113,8 +1117,8 @@ void Game::drawPlayerSelect() {
 
 void Game::drawSlotSelect() {
     const char* titulo = (slotPurpose == SLOT_NEW)
-                         ? "ELEGIR SLOT (se sobrescribe)"
-                         : "CARGAR PARTIDA";
+                         ? L("slot.title.new", "Elegir slot (se sobrescribe)")
+                         : L("menu.load", "Cargar partida");
     drawConfigHeader(titulo);
 
     // Añadimos un boton extra para borrar con click derecho? Mejor no,
@@ -1126,11 +1130,11 @@ void Game::drawSlotSelect() {
         const SaveSlot& s = saves.slot(i);
         char label[256];
         if (s.used) {
-            const char* modeStr = (s.mode == MODE_STORY) ? "Historia" : "Infinito";
-            snprintf(label, sizeof(label), "Slot %d  -  Nivel %d  -  %s  -  %s",
+            const char* modeStr = (s.mode == MODE_STORY) ? L("slot.mode.story", "Historia") : L("slot.mode.endless", "Infinito");
+            snprintf(label, sizeof(label), L("slot.used", "Slot %d  -  Nivel %d  -  %s  -  %s"),
                      i + 1, s.level, modeStr, formatDate(s.timestamp));
         } else {
-            snprintf(label, sizeof(label), "Slot %d  -  Vacio", i + 1);
+            snprintf(label, sizeof(label), L("slot.empty", "Slot %d  -  Vacío"), i + 1);
         }
 
         if (uiButton(i, items, 40, label, &navSlot, nullptr) ||
@@ -1144,7 +1148,7 @@ void Game::drawSlotSelect() {
         }
     }
 
-    if (uiButton(SaveManager::NUM_SLOTS, items, 40, "VOLVER", &navSlot, nullptr) ||
+    if (uiButton(SaveManager::NUM_SLOTS, items, 40, L("common.back", "Volver"), &navSlot, nullptr) ||
         (navSlot == SaveManager::NUM_SLOTS && consumeConfirm()) || consumeCancel()) {
         if (slotPurpose == SLOT_LOAD) {
             state = ST_MENU;
@@ -1154,7 +1158,7 @@ void Game::drawSlotSelect() {
         navMenu = 0;
     }
 
-    const char* hint = "Elige un slot. Al empezar partida nueva se sobrescribe el slot.";
+    const char* hint = L("slot.hint", "Elige un slot. Al empezar una partida nueva se sobrescribe el slot.");
     int W = GetScreenWidth();
     UI::T(hint, W/2 - UI::M(hint, 18)/2, GetScreenHeight() - 40, 18, GRAY);
 }
@@ -1163,7 +1167,7 @@ void Game::drawPauseMenu() {
     int W = GetScreenWidth(), H = GetScreenHeight();
     DrawRectangle(0, 0, W, H, (Color){ 0, 0, 0, 200 });
 
-    const char* t = "PAUSA";
+    const char* t = L("pause.title", "Pausa");
     UI::T(t, W/2 - UI::M(t, 64)/2, (int)(H * 0.12f), 64, RAYWHITE);
 
     bool canSave = (mode == MODE_STORY && currentSlot >= 0);
@@ -1173,32 +1177,32 @@ void Game::drawPauseMenu() {
     int items = 5;
     handleGamepadMenuNav(items);
 
-    if (uiButton(0, items, 40, "VOLVER AL JUEGO", &navMenu, nullptr) ||
+    if (uiButton(0, items, 40, L("pause.resume", "Volver al juego"), &navMenu, nullptr) ||
         (navMenu == 0 && consumeConfirm())) {
         DisableCursor();
         state = ST_PLAYING;
     }
     if (canSave) {
-        if (uiButton(1, items, 40, "GUARDAR PARTIDA", &navMenu, nullptr) ||
+        if (uiButton(1, items, 40, L("pause.save", "Guardar partida"), &navMenu, nullptr) ||
             (navMenu == 1 && consumeConfirm())) {
             saveCurrentGame();
         }
     } else {
         // Dibuja un boton deshabilitado para que no se descoloque la lista
-        uiButton(1, items, 40, "(sin slot - no se puede guardar)", nullptr, nullptr);
+        uiButton(1, items, 40, L("pause.nosave", "(sin slot - no se puede guardar)"), nullptr, nullptr);
     }
-    if (uiButton(2, items, 40, "OPCIONES", &navMenu, nullptr) ||
+    if (uiButton(2, items, 40, L("menu.config", "Configuración"), &navMenu, nullptr) ||
         (navMenu == 2 && consumeConfirm())) {
         configReturn = ST_PAUSED;
         state = ST_CONFIG;
         navIndexCfg = 0;
     }
-    if (uiButton(3, items, 40, "VOLVER AL MENU", &navMenu, nullptr) ||
+    if (uiButton(3, items, 40, L("pause.menu", "Volver al menú"), &navMenu, nullptr) ||
         (navMenu == 3 && consumeConfirm())) {
         autoSaveProgress();
         toMenu();
     }
-    if (uiButton(4, items, 40, "SALIR DEL JUEGO", &navMenu, nullptr) ||
+    if (uiButton(4, items, 40, L("menu.quit", "Salir del juego"), &navMenu, nullptr) ||
         (navMenu == 4 && consumeConfirm())) {
         autoSaveProgress();
         shouldQuit = true;
@@ -1206,7 +1210,7 @@ void Game::drawPauseMenu() {
 
     // HUD mini abajo
     char info[128];
-    snprintf(info, sizeof(info), "Nivel %d  -  %.1fs  -  Slot %d",
+    snprintf(info, sizeof(info), L("pause.info", "Nivel %d  -  %.1fs  -  Slot %d"),
              level, levelTime, currentSlot + 1);
     UI::T(info, W/2 - UI::M(info, 16)/2, H - 60, 16, LIGHTGRAY);
 }
@@ -1244,7 +1248,7 @@ void Game::drawMenus() {
             const char* t2 = "Escape from Bea";
             UI::T(t2, W/2 - UI::M(t2, 84)/2, y, 84, RED);
             y += 84 + 14;
-            const char* t3 = "modo serio chat";
+            const char* t3 = L("menu.subtitle", "modo serio chat");
             UI::T(t3, W/2 - UI::M(t3, 22)/2, y, 22, LIGHTGRAY);
 
             int items = 4;
@@ -1255,7 +1259,7 @@ void Game::drawMenus() {
                 state = ST_MODE_SELECT;
                 navMenu = 0;
             }
-            if (uiButton(1, items, 90, L("menu.load", "Cargar Partida"), &navIndex, nullptr) ||
+            if (uiButton(1, items, 90, L("menu.load", "Cargar partida"), &navIndex, nullptr) ||
                 (navIndex == 1 && consumeConfirm())) {
                 slotPurpose = SLOT_LOAD;
                 navSlot = 0;
@@ -1268,9 +1272,12 @@ void Game::drawMenus() {
                 state = ST_CONFIG;
                 navIndexCfg = 0;
             }
-            if (uiButton(3, items, 90, L("menu.quit", "Salir"), &navIndex, nullptr) ||
+            if (uiButton(3, items, 90, L("menu.quit", "Salir del juego"), &navIndex, nullptr) ||
                 (navIndex == 3 && consumeConfirm())) shouldQuit = true;
-            break;
+            
+	    std::string ver = std::string("Escape from Bea ") + Debug::version();
+	    UI::T(ver.c_str(), 5, H - 25, 20, RAYWHITE);
+	    break;
         }
         case ST_MODE_SELECT:   drawModeSelect();   break;
         case ST_PLAYER_SELECT: drawPlayerSelect(); break;
@@ -1285,35 +1292,35 @@ void Game::drawMenus() {
         case ST_LEVEL_CLEAR: {
             char buf[192];
             if (mode == MODE_ENDLESS) {
-                snprintf(buf, sizeof(buf), "Nivel %d - Record: %d",
+                snprintf(buf, sizeof(buf), L("level.stats.endless", "Nivel %d - Récord: %d"),
                          level, cfg.maxEndlessLevel);
                 drawCenterPanel(L("level.complete", "¡Nivel completado!"), buf,
-                                L("level.controls", "ENTER: siguiente ESC: menu"));
+                                L("level.controls", "ENTER: siguiente nivel ESC: menú"));
             } else if (twoPlayers) {
-                snprintf(buf, sizeof(buf), "P1: %.1fs   P2: %.1fs",
+                snprintf(buf, sizeof(buf), L("level.stats.coop", "J1: %.1fs   J2: %.1fs"),
                          players[0].escapeTime, players[1].escapeTime);
                 drawCenterPanel(L("level.finished", "¡Nivel superado!"), buf,
-                                L("level.controls", "ENTER: siguiente ESC: menu"));
+                                L("level.controls", "ENTER: siguiente nivel ESC: menú"));
             } else {
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Nivel %d en %.1f s",
+                snprintf(msg, sizeof(msg), L("level.stats.single", "Nivel %d en %.1f s"),
                          level, players[0].escapeTime);
                 drawCenterPanel(L("level.finished", "¡Nivel superado!"), msg,
-                                L("level.controls", "ENTER: siguiente ESC: menu"));
+                                L("level.controls", "ENTER: siguiente nivel ESC: menú"));
             }
             break;
         }
         case ST_GAME_OVER: {
             char buf[128];
             if (mode == MODE_ENDLESS) {
-                snprintf(buf, sizeof(buf), "Llegaste al nivel %d - Record: %d",
+                snprintf(buf, sizeof(buf), L("level.catched.endless", "Llegaste al nivel %d - Récord: %d"),
                          level, cfg.maxEndlessLevel);
                 drawCenterPanel(L("level.catched", "TE ATRAPARON"), buf,
-                                L("level.retry", "R: reintentar ESC: menu"));
+                                L("level.retry", "R: reintentar ESC: menú"));
             } else {
                 drawCenterPanel(L("level.catched", "TE ATRAPARON"),
-                    L("level.catched.longtext", "Bea te encontro por los pasillos del instituto..."),
-                    L("level.retry", "R: reintentar ESC: menu"));
+                    L("level.catched.longtext", "Bea te encontró por los pasillos del instituto..."),
+                    L("level.retry", "R: reintentar ESC: menú"));
             }
             break;
         }
@@ -1386,48 +1393,48 @@ void Game::applyVideoSettings() {
 
 static const char* cbLabel(int idx) {
     switch (idx) {
-        case 0: return "NINGUNO";
-        case 1: return "DEUTERANOPIA";
-        case 2: return "PROTANOPIA";
-        default:return "TRITANOPIA";
+        case 0: return L("access.cb.none", "Ninguno");
+        case 1: return L("access.cb.deuteranopia", "Deuteranopía");
+        case 2: return L("access.cb.protanopia", "Protanopía");
+        default:return L("access.cb.tritanopia", "Tritanopía");
     }
 }
 
 void Game::drawConfigAccess() {
-    drawConfigHeader("ACCESIBILIDAD");
+    drawConfigHeader(L("config.access", "Accesibilidad"));
     int items = 6;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
     auto save = [&]() { cfg.save(); };
 
-    if (uiOptionEx(0, items, 30, "Modo daltonismo",
+    if (uiOptionEx(0, items, 30, L("access.colorblind", "Modo daltonismo"),
                    cbLabel(cfg.colorblindMode),
                    &navIndex, nullptr, navIndex == 0 ? lr : 0) != UI_NONE) {
         cfg.colorblindMode = (cfg.colorblindMode + 1) % CB_COUNT;
         UI::colorblind = cfg.colorblindMode;
         save();
     }
-    if (uiOptionEx(1, items, 30, "Alto contraste",
-                   cfg.highContrast ? "SI" : "NO",
+    if (uiOptionEx(1, items, 30, L("access.contrast", "Alto contraste"),
+                   yesNo(cfg.highContrast),
                    &navIndex, nullptr, navIndex == 1 ? lr : 0) != UI_NONE) {
         cfg.highContrast = !cfg.highContrast; save();
     }
-    if (uiOptionEx(2, items, 30, "Reducir movimiento",
-                   cfg.reduceMotion ? "SI" : "NO",
+    if (uiOptionEx(2, items, 30, L("access.motion", "Reducir movimiento"),
+                   yesNo(cfg.reduceMotion),
                    &navIndex, nullptr, navIndex == 2 ? lr : 0) != UI_NONE) {
         cfg.reduceMotion = !cfg.reduceMotion; save();
     }
-    if (uiOptionEx(3, items, 30, "Subtitulos grandes",
-                   cfg.bigSubtitles ? "SI" : "NO",
+    if (uiOptionEx(3, items, 30, L("access.subtitles", "Subtítulos grandes"),
+                   yesNo(cfg.bigSubtitles),
                    &navIndex, nullptr, navIndex == 3 ? lr : 0) != UI_NONE) {
         cfg.bigSubtitles = !cfg.bigSubtitles; save();
     }
-    if (uiOptionEx(4, items, 30, "Sprint (mantener/alternar)",
-                   cfg.holdToSprint ? "MANTENER" : "ALTERNAR",
+    if (uiOptionEx(4, items, 30, L("access.sprint", "Sprint (mantener/alternar)"),
+                   cfg.holdToSprint ? L("access.sprint.hold", "Mantener") : L("access.sprint.toggle", "Alternar"),
                    &navIndex, nullptr, navIndex == 4 ? lr : 0) != UI_NONE) {
         cfg.holdToSprint = !cfg.holdToSprint; save();
     }
-    if (uiOptionEx(5, items, 30, "Volver", "", &navIndex, nullptr, 0) != UI_NONE ||
+    if (uiOptionEx(5, items, 30, L("common.back", "Volver"), "", &navIndex, nullptr, 0) != UI_NONE ||
         IsKeyPressed(KEY_ESCAPE))
         state = ST_CONFIG;
 }
@@ -1650,7 +1657,7 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
     char buf[256];
 
     // --- Header ---
-    line(titleC, TextFormat("%s  v%s", C::GAME_TITLE, Debug::version()));
+    line(titleC, TextFormat("%s  %s", C::GAME_TITLE, Debug::version()));
     snprintf(buf, sizeof(buf), "Build: %s  |  %s",
              Debug::buildString(), Debug::compilerName());
     line(labelC, buf);

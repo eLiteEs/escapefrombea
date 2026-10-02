@@ -1,4 +1,118 @@
+menu.play=Jugar
+menu.play2=Dos jugadores (pantalla dividida)
+menu.endless=Niveles infinitos
+menu.config=Configuración
+menu.quit=Salir del juego
+menu.load=Cargar partida
+menu.subtitle=modo serio chat
+
+common.yes=Sí
+common.no=No
+common.back=Volver
+
 hud.level=Nivel %d
 hud.time=Tiempo: %.1f s
 hud.enemies=Enemigos: %d
+hud.player=Jugador %d
+hud.stamina=Energía
+hud.stamina.exhausted=Sin aliento
+hud.caught.waiting=Atrapado - esperando...
+hud.escaped.waiting=Escapaste - esperando...
 
+pause.title=Pausa
+pause.hint=ESC: reanudar M: menú
+pause.resume=Volver al juego
+pause.save=Guardar partida
+pause.nosave=(sin slot - no se puede guardar)
+pause.menu=Volver al menú
+pause.info=Nivel %d  -  %.1fs  -  Slot %d
+
+level.complete=¡Nivel completado!
+level.controls=ENTER: siguiente nivel ESC: menú
+level.finished=¡Nivel superado!
+level.catched=TE ATRAPARON
+level.retry=R: reintentar ESC: menú
+level.catched.longtext=Bea te encontró por los pasillos del instituto...
+level.stats.endless=Nivel %d - Récord: %d
+level.stats.coop=J1: %.1fs   J2: %.1fs
+level.stats.single=Nivel %d en %.1f s
+level.catched.endless=Llegaste al nivel %d - Récord: %d
+
+config.video=Video
+config.audio=Audio
+config.gameplay=Jugabilidad
+config.controls=Controles
+config.access=Accesibilidad
+config.language=Idioma: %s
+config.hint=Sube/baja con D-pad, cambia con < > o A
+
+video.fullscreen=Pantalla completa
+video.resolution=Resolución de ventana
+video.fps=Límite de FPS
+video.fps.unlimited=Sin límite
+video.renderdist=Distancia de dibujado
+video.renderdist.near=Cerca (40m)
+video.renderdist.medium=Media (60m)
+video.renderdist.far=Lejos (100m)
+video.guiscale=Tamaño de la interfaz
+video.vsync=VSync
+
+audio.master=Volumen maestro
+audio.music=Música
+audio.sfx=Efectos
+
+gameplay.difficulty=Dificultad
+gameplay.inverty=Invertir eje Y
+gameplay.mousesens=Sensibilidad del ratón
+gameplay.padsens=Sensibilidad del mando
+gameplay.minimap=Minimapa
+gameplay.sprintdrain=Consumo de sprint
+gameplay.sprintregen=Regeneración de sprint
+gameplay.cinematics=Cinemáticas
+
+controls.title=Controles y mando
+controls.pad=Mando %d: %s
+controls.pad.none=Mando %d: no detectado
+controls.swap=Intercambiar mandos J1/J2
+controls.p1.up=J1 Adelante
+controls.p1.down=J1 Atrás
+controls.p1.left=J1 Izquierda
+controls.p1.right=J1 Derecha
+controls.p2.up=J2 Adelante
+controls.p2.down=J2 Atrás
+controls.p2.left=J2 Izquierda
+controls.p2.right=J2 Derecha
+controls.presskey=Pulsa una tecla...
+controls.hint.remap=Pulsa la tecla a asignar (ESC cancela)
+controls.hint.pad=Con mando: stick izq mover, stick der mirar, A confirma, LT sprint
+
+access.colorblind=Modo daltonismo
+access.cb.none=Ninguno
+access.cb.deuteranopia=Deuteranopía
+access.cb.protanopia=Protanopía
+access.cb.tritanopia=Tritanopía
+access.contrast=Alto contraste
+access.motion=Reducir movimiento
+access.subtitles=Subtítulos grandes
+access.sprint=Sprint (mantener/alternar)
+access.sprint.hold=Mantener
+access.sprint.toggle=Alternar
+
+mode.title=Elegir modo de juego
+mode.story=Modo historia
+mode.endless=Modo infinito
+mode.hint=Historia: con cinemáticas y progreso. Infinito: sin fin, con récord persistente.
+
+players.title.story=Modo historia - jugadores
+players.title.endless=Modo infinito - jugadores
+players.one=1 jugador
+
+slot.title.new=Elegir slot (se sobrescribe)
+slot.used=Slot %d  -  Nivel %d  -  %s  -  %s
+slot.empty=Slot %d  -  Vacío
+slot.mode.story=Historia
+slot.mode.endless=Infinito
+slot.hint=Elige un slot. Al empezar una partida nueva se sobrescribe el slot.
+
+toast.noslot=Sin slot asignado
+toast.saved=Partida guardada
