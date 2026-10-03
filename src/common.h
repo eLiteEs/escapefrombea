@@ -40,7 +40,11 @@ namespace C {
     constexpr int   ENDLESS_MAX_SIZE = 31;
 
     // Persistencia
+#if defined(__EMSCRIPTEN__)
+    constexpr const char* CONFIG_PATH = "/saves/config.cfg";
+#else
     constexpr const char* CONFIG_PATH = "config.cfg";
+#endif
 
     constexpr float RENDER_DIST[3] = { 40.0f, 60.0f, 100.0f };
     constexpr int   FPS_OPTIONS[6] = { 0, 30, 60, 120, 144, 240 };

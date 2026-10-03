@@ -75,6 +75,7 @@ struct Game {
     void init();
     void shutdown();
     void run();
+    void tick();
 
     // Estado
     void toMenu();

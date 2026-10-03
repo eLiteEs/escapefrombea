@@ -14,6 +14,9 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#if defined(__EMSCRIPTEN__)
+#  include <emscripten.h>
+#endif
 
 // ---------- Util ----------
 Color Game::playerColor(int idx) const {
@@ -27,7 +30,7 @@ void Game::init() {
     SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
     InitWindow(GetMonitorWidth(0), GetMonitorHeight(0),
                "Escape From Marisa 3: Escape From Bea");
-    SetWindowState(FLAG_FULLSCREEN_MODE);
+//    SetWindowState(FLAG_FULLSCREEN_MODE);
     SetMouseCursor(MOUSE_CURSOR_ARROW);
 
     SetExitKey(KEY_NULL);   // ESC ya no cierra la ventana; lo gestionamos nosotros
@@ -800,23 +803,23 @@ static const char* rdLabel(int idx) {
         default: return L("video.renderdist.far", "Lejos (100m)");
     }
 }
-
 void Game::drawConfigVideo() {
-    drawConfigHeader(L("config.video", "Video"));
+    drawConfigHeader("VIDEO");
     int items = 7;
     handleGamepadMenuNav(items);
     int lr = gamepadLeftRight();
     auto save = [&]() { cfg.save(); };
 
-    if (uiOptionEx(0, items, 30, L("video.fullscreen", "Pantalla completa"),
-                   yesNo(cfg.fullscreen),
+#if !defined(__EMSCRIPTEN__)
+    if (uiOptionEx(0, items, 30, "Pantalla completa",
+                   cfg.fullscreen ? "SI" : "NO",
                    &navIndex, nullptr, navIndex == 0 ? lr : 0) != UI_NONE) {
         cfg.fullscreen = !cfg.fullscreen;
         ToggleFullscreen();
         applyVideoSettings();
         save();
     }
-    if (uiOptionEx(1, items, 30, L("video.resolution", "Resolución de ventana"),
+    if (uiOptionEx(1, items, 30, "Resolucion ventana",
                    TextFormat("%dx%d", cfg.windowW, cfg.windowH),
                    &navIndex, nullptr, navIndex == 1 ? lr : 0) != UI_NONE) {
         static const int presets[][2] = {
@@ -833,6 +836,7 @@ void Game::drawConfigVideo() {
         applyVideoSettings();
         save();
     }
+#endif
     {
         UIAction a = uiOptionEx(2, items, 30, L("video.fps", "Límite de FPS"),
                                 fpsLabel(cfg.fpsLimit),
@@ -1431,11 +1435,15 @@ void Game::draw() {
     }
 }
 
+void Game::tick() {
+    float dt = GetFrameTime();
+    update(dt);
+    draw();
+}
+
 void Game::run() {
     while (!WindowShouldClose() && !shouldQuit) {
-        float dt = GetFrameTime();
-        update(dt);
-        draw();
+        tick();
     }
 }
 
@@ -1444,11 +1452,10 @@ float Game::renderDist() const {
 }
 
 void Game::applyVideoSettings() {
-    // FPS
     int fps = C::FPS_OPTIONS[std::clamp(cfg.fpsLimit, 0, C::FPS_COUNT - 1)];
     SetTargetFPS(fps == 0 ? -1 : fps);
 
-    // Ventana
+#if !defined(__EMSCRIPTEN__)
     if (!cfg.fullscreen) {
         int W = GetMonitorWidth(0), H = GetMonitorHeight(0);
         if (cfg.windowW > W) cfg.windowW = W;
@@ -1457,8 +1464,8 @@ void Game::applyVideoSettings() {
     } else {
         SetWindowSize(GetMonitorWidth(0), GetMonitorHeight(0));
     }
+#endif
 
-    // Escalado UI
     UI::scale = cfg.guiScale;
     UI::colorblind = cfg.colorblindMode;
 
