@@ -133,7 +133,22 @@ void SaveManager::refresh() {
         MKDIR_SAVES();
         FILE* f = fopen(slotPath(i).c_str(), "r");
         if (!f) continue;
-        // ... el parser actual con fgets ...
+        char line[256];
+        while (fgets(line, sizeof(line), f)) {
+            for (char* p = line; *p; ++p)
+                if (*p == '\r' || *p == '\n') { *p = 0; break; }
+            char* eq = strchr(line, '=');
+            if (!eq) continue;
+            *eq = 0;
+            const char* key = line;
+            const char* val = eq + 1;
+            if      (!strcmp(key, "level"))     slots_[i].level     = atoi(val);
+            else if (!strcmp(key, "maxLevel"))  slots_[i].maxLevel  = atoi(val);
+            else if (!strcmp(key, "mode"))      slots_[i].mode      = atoi(val);
+            else if (!strcmp(key, "twoPlayers"))slots_[i].twoPlayers= atoi(val) != 0;
+            else if (!strcmp(key, "playtime"))  slots_[i].playtime  = (float)atof(val);
+            else if (!strcmp(key, "timestamp")) slots_[i].timestamp = (std::time_t)atoll(val);
+        }
         fclose(f);
         slots_[i].used = true;
 #endif
