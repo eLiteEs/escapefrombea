@@ -21,7 +21,7 @@ struct Config {
     bool  invertY      = false;
     float mouseSens    = 1.0f;
     float stickSens    = 1.0f;
-    bool  showMinimap  = true;
+    bool  showMinimap  = false;
     bool  headBob      = true;
     float sprintDrain  = C::STAM_DRAIN_DEF;
     float sprintRegen  = C::STAM_REGEN_DEF;
