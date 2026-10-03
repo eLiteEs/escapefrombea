@@ -43,7 +43,10 @@ void Game::init() {
     credits.load("assets/credits.txt");
 
     applyVideoSettings();
-    
+ 
+    // Attract mode: maze decorativo del menu
+    attract.init(15, (uint32_t)time(nullptr) + 12345u, assets); 
+ 
     saves.refresh();
     ensureRenderTargets();
 }
@@ -53,6 +56,7 @@ void Game::shutdown() {
     world.unload();                 // <-- NUEVO (antes de assets.unload)
     if (rtLeft.texture.id  != 0) UnloadRenderTexture(rtLeft);
     if (rtRight.texture.id != 0) UnloadRenderTexture(rtRight);
+    attract.unload();
     assets.unload();
     CloseAudioDevice();
     CloseWindow();
@@ -271,7 +275,11 @@ int Game::gamepadLeftRight() {
 void Game::update(float dt) {
     UI::scale      = cfg.guiScale;
     UI::colorblind = cfg.colorblindMode;
-	
+
+    if (state == ST_MENU) {
+        attract.update(dt);
+    }
+
     if (assets.musicMenu.stream.buffer  != nullptr) UpdateMusicStream(assets.musicMenu);
     if (assets.musicLevel.stream.buffer != nullptr) UpdateMusicStream(assets.musicLevel);
 
@@ -1341,9 +1349,19 @@ void Game::drawToast() {
 // ---------- Menús principales ----------
 void Game::drawMenus() {
     BeginDrawing();
-    ClearBackground((Color){ 12, 12, 18, 255 });
-    drawBackground2D();
+    int W = GetScreenWidth();
+    int H = GetScreenHeight();
 
+    if (state == ST_MENU) {
+        ClearBackground(BLACK);
+        attract.draw(W, H);
+        // Overlay oscuro para que el texto se lea bien
+        DrawRectangle(0, 0, W, H, (Color){ 0, 0, 0, 130 });
+    } else {
+        ClearBackground((Color){ 12, 12, 18, 255 });
+        drawBackground2D();
+    }
+    
     switch (state) {
         case ST_MENU: {
             if (assets.musicMenu.stream.buffer != nullptr && !musicMenuPlaying) {

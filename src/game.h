@@ -2,6 +2,7 @@
 
 #include "raylib.h"
 #include "debug.h"
+#include "attract.h"
 #include "common.h"
 #include "weapon.h"
 #include "config.h"
@@ -17,6 +18,7 @@
 struct Game {
     Config cfg;
     Maze   maze;
+    AttractMode attract;
     Assets assets;
     SaveManager saves;
 
