@@ -72,6 +72,9 @@ void Assets::load() {
     hasPortalTex = portalTex.id != 0;
     if (hasPortalTex) SetTextureFilter(portalTex, TEXTURE_FILTER_BILINEAR);
 
+    p = Paths::sprite("crosshair.png");
+    crosshair = loadTextureOrProcedural(p.c_str(), (Color){ 160, 40, 200, 255 });
+
     wallTile   = loadTileable(Paths::sprite("wall_tile.png").c_str(),   hasWallTile);
     wallLocker = loadTileable(Paths::sprite("wall_locker.png").c_str(), hasWallLocker);
     wallBrick  = loadTileable(Paths::sprite("wall_brick.png").c_str(),  hasWallBrick);
@@ -90,6 +93,8 @@ void Assets::unload() {
     for (int i = 0; i < ENEMY_KIND_COUNT; ++i)
         if (enemyTex[i].id != 0) UnloadTexture(enemyTex[i]);
     if (hasPortalTex && portalTex.id != 0) UnloadTexture(portalTex);
+
+    if(hasCrosshair && crosshair.id != 0) UnloadTexture(crosshair);
 
     if (hasWallTile   && wallTile.id   != 0) UnloadTexture(wallTile);
     if (hasWallLocker && wallLocker.id != 0) UnloadTexture(wallLocker);

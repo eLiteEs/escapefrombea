@@ -746,6 +746,25 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
 
     drawStaminaBar(pl, vw, vh);
 
+    if (assets.crosshair.id != 0) {
+        float scale = 1.0f;   // ajusta si la quieres mas grande/pequena
+        float cw = (float)assets.crosshair.width  * scale;
+        float ch = (float)assets.crosshair.height * scale;
+        float cx = vw * 0.5f - cw * 0.5f;
+        float cy = vh * 0.5f - ch * 0.5f;
+
+        // Solo lo dibujamos si el jugador no esta atrapado/escapado/hidden
+        if (!pl.caught && !pl.escaped ) {
+            DrawTexturePro(
+                assets.crosshair,
+                { 0, 0, (float)assets.crosshair.width, (float)assets.crosshair.height },
+                { cx, cy, cw, ch },
+                { 0, 0 }, 0.0f,
+                (Color){ 255, 255, 255, 200 }
+            );
+        }
+    }
+
     if (pl.caught) {
         DrawRectangle(0, 0, vw, vh, (Color){ 120, 0, 0, 90 });
         const char* msg = L("hud.caught.waiting", "Atrapado - esperando...");

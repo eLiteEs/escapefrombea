@@ -11,10 +11,12 @@ struct Assets {
     Texture2D wallLocker = {};
     Texture2D wallBrick  = {};
     Texture2D floorTile  = {};
+    Texture2D crosshair = {};
     bool hasWallTile     = false;
     bool hasWallLocker   = false;
     bool hasWallBrick    = false;
     bool hasFloorTile    = false;
+    bool hasCrosshair    = false;
 
     Music musicMenu  = {};
     Music musicLevel = {};
