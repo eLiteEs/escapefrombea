@@ -2,7 +2,11 @@
 #include "common.h"
 #include <string>
 
-struct KeyBindings { int up, down, left, right, menu; };
+struct KeyBindings {
+    int up, down, left, right, menu;
+    int interact;
+    int drop;
+}; 
 
 struct Config {
     // Vídeo
@@ -38,8 +42,8 @@ struct Config {
     int   maxEndlessLevel = 1;
 
     KeyBindings binds[2] = {
-        { KEY_W,  KEY_S,    KEY_A,     KEY_D,     KEY_ESCAPE },
-        { KEY_UP, KEY_DOWN, KEY_LEFT,  KEY_RIGHT, KEY_ESCAPE }
+        { KEY_W,  KEY_S,    KEY_A,     KEY_D,     KEY_ESCAPE, KEY_F,  KEY_Q         },
+        { KEY_UP, KEY_DOWN, KEY_LEFT,  KEY_RIGHT, KEY_ESCAPE, KEY_SLASH, KEY_RIGHT_SHIFT }
     };
 
     void load();

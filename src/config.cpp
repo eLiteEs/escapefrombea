@@ -58,7 +58,11 @@ const char* Config::keyName(int key) {
         case KEY_LEFT_SHIFT: return "SHIFT IZQ";
         case KEY_LEFT_CONTROL: return "CTRL IZQ";
         case KEY_ENTER: return "ENTER";
-        default: {
+        case KEY_F: return "F";
+        case KEY_SLASH: return "/";
+        case KEY_Q: return "Q";
+        case KEY_RIGHT_SHIFT: return "SHIFT DER";
+	default: {
             static char buf[32];
             snprintf(buf, sizeof(buf), "TECLA %d", key);
             return buf;
@@ -94,6 +98,8 @@ void Config::save() const {
         fprintf(f, "p%d_down=%d\n",  p+1, binds[p].down);
         fprintf(f, "p%d_left=%d\n",  p+1, binds[p].left);
         fprintf(f, "p%d_right=%d\n", p+1, binds[p].right);
+        fprintf(f, "p%d_interact=%d\n", p+1, binds[p].interact);
+        fprintf(f, "p%d_drop=%d\n",     p+1, binds[p].drop);
     }
     fprintf(f, "windowW=%d\n",       windowW);
     fprintf(f, "windowH=%d\n",       windowH);
@@ -162,7 +168,9 @@ void Config::load() {
                 snprintf(buf, sizeof(buf), "p%d_down", p+1);  if (!strcmp(key, buf)) binds[p].down  = asInt(val);
                 snprintf(buf, sizeof(buf), "p%d_left", p+1);  if (!strcmp(key, buf)) binds[p].left  = asInt(val);
                 snprintf(buf, sizeof(buf), "p%d_right", p+1); if (!strcmp(key, buf)) binds[p].right = asInt(val);
-            }
+                snprintf(buf, sizeof(buf), "p%d_interact", p+1); if (!strcmp(key, buf)) binds[p].interact = asInt(val);
+                snprintf(buf, sizeof(buf), "p%d_drop", p+1);     if (!strcmp(key, buf)) binds[p].drop     = asInt(val);
+	    }
         }
     }
     fclose(f);

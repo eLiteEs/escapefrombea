@@ -27,7 +27,8 @@ static int closestVisibleTarget(const Enemy& self,
     float bestDist = C::SEE_DIST;
     for (int p = 0; p < n; ++p) {
         if (players[p].caught || players[p].escaped) continue;
-        float dx = players[p].pos.x - self.pos.x;
+        if (players[p].hidden) continue; 
+	float dx = players[p].pos.x - self.pos.x;
         float dz = players[p].pos.z - self.pos.z;
         float d = sqrtf(dx*dx + dz*dz);
         if (d < bestDist && lineOfSight(maze, self.pos, players[p].pos)) {
@@ -67,6 +68,37 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
 
         int target = closestVisibleTarget(e, maze, players, numPlayers);
 
+        // Stun: no hace nada
+        if (e.stunT > 0.0f) {
+            separateEnemies(enemies, i, dt);
+            if (!Debug::godMode) {
+                for (int p = 0; p < numPlayers; ++p) {
+                    if (players[p].caught || players[p].escaped) continue;
+                    if (players[p].hidden) continue;   // <-- NUEVO
+                    if (Vector3Distance(e.pos, players[p].pos) < C::CATCH_R)
+                        players[p].caught = true;
+                }
+            }
+            continue;
+        }
+
+        // Rage: multiplicador de velocidad + siempre te tiene localizado
+        float effectiveSpeed = e.speed * e.rageMult;
+        if (e.rageT > 0.0f) {
+            int nearest = -1;
+            float best = 1e9f;
+            for (int p = 0; p < numPlayers; ++p) {
+                if (players[p].caught || players[p].escaped) continue;
+                if (players[p].hidden) continue;   // <-- NUEVO
+                float d = Vector3Distance(players[p].pos, e.pos);
+                if (d < best) { best = d; nearest = p; }
+            }
+            if (nearest >= 0) {
+                e.lastSeen = players[nearest].pos;
+                e.memoryT  = memoryT;
+            }
+        }
+
         if (target >= 0) {
             e.lastSeen = players[target].pos;
             e.memoryT = memoryT;
@@ -75,7 +107,7 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
             float d = sqrtf(dx*dx + dz*dz);
             if (d > 0.01f) {
                 moveEntity(maze, e.pos.x, e.pos.z,
-                           (dx/d) * e.speed * dt, (dz/d) * e.speed * dt, C::E_RADIUS);
+                           (dx/d) * effectiveSpeed * dt, (dz/d) * effectiveSpeed * dt, C::E_RADIUS);
             }
         }
         else if (e.memoryT > 0.0f) {
@@ -83,7 +115,7 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
             float dx = e.lastSeen.x - e.pos.x;
             float dz = e.lastSeen.z - e.pos.z;
             float d = sqrtf(dx*dx + dz*dz);
-            float spd = e.speed * (e.repathT <= 0.0f ? 0.9f : 0.75f);
+            float spd = effectiveSpeed * (e.repathT <= 0.0f ? 0.9f : 0.75f);
             e.repathT = C::REPATH_CD;
             if (d > 0.01f) {
                 moveEntity(maze, e.pos.x, e.pos.z,
@@ -92,8 +124,8 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
         }
         else {
             e.turnT -= dt;
-            float nx = e.pos.x + e.dir.x * e.speed * dt;
-            float nz = e.pos.z + e.dir.y * e.speed * dt;
+            float nx = e.pos.x + e.dir.x * effectiveSpeed * dt;
+            float nz = e.pos.z + e.dir.y * effectiveSpeed * dt;
             if (e.turnT <= 0 || maze.circleHitsWall(nx, nz, C::E_RADIUS)) {
                 std::mt19937 rng((uint32_t)(GetTime() * 1000) ^ (uint32_t)(i * 7919));
                 for (int tries = 0; tries < 8; ++tries) {
@@ -109,8 +141,8 @@ void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
                 e.turnT = 1.0f + (rng() % 100) / 50.0f;
             }
             moveEntity(maze, e.pos.x, e.pos.z,
-                       e.dir.x * e.speed * 0.55f * dt,
-                       e.dir.y * e.speed * 0.55f * dt, C::E_RADIUS);
+                       e.dir.x * effectiveSpeed * 0.55f * dt,
+                       e.dir.y * effectiveSpeed * 0.55f * dt, C::E_RADIUS);
         }
 
         float moved2 = (e.pos.x - e.prevPos.x)*(e.pos.x - e.prevPos.x) +

@@ -8,6 +8,15 @@ public:
     int w = 0, h = 0;
     std::vector<std::vector<int>>  g;
     std::vector<std::vector<bool>> explored;
+    
+    std::vector<std::vector<unsigned char>> wallVariant;
+    std::vector<std::vector<bool>>          fountains;
+
+    bool hasFountain(int cx, int cy) const {
+        if (cx < 0 || cy < 0 || cx >= w || cy >= h) return false;
+        if ((int)fountains.size() != h) return false;
+        return fountains[cy][cx];
+    }
 
     void generate(int mw, int mh, uint32_t seed);
 
@@ -22,7 +31,5 @@ public:
 
     bool findPath(Vector2 fromCell, Vector2 toCell,
                   std::vector<Vector2>& out) const;
-    
-    std::vector<std::vector<unsigned char>> wallVariant;
 };
 

@@ -16,6 +16,7 @@ bool updatePlayer(Player& pl, const KeyBindings& kb, float dt,
                   bool allowMouseLook, const Config& cfg, const Maze& maze)
 {
     if (pl.caught || pl.escaped) return false;
+    if (pl.hidden) return false;
 
     bool hasPad = pl.gamepadId >= 0 && IsGamepadAvailable(pl.gamepadId);
 

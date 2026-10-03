@@ -70,6 +70,20 @@ namespace C {
     // Jumpscare
     constexpr float JUMPSCARE_DURATION = 1.3f;   // duración total
     constexpr float JUMPSCARE_ZOOM_IN  = 0.15f;  // primer 15% es zoom rápido
+
+    // Inventario e items
+    constexpr int   INV_SLOTS        = 5;
+    constexpr float PICKUP_RANGE     = 1.9f;
+    constexpr float INTERACT_RANGE   = 1.4f;
+    constexpr float ROCK_THROW_SPEED = 24.0f;
+    constexpr float ROCK_THROW_CD    = 0.45f;
+    constexpr float ROCK_STUN        = 1.8f;
+    constexpr float ROCK_RAGE_T      = 6.0f;
+    constexpr float ROCK_RAGE_MULT   = 1.4f;
+    constexpr float ROCK_PICKUP_BOB  = 0.18f;
+    constexpr float STAM_WATER_MAX   = 2.0f;
+    constexpr float WATER_COOLDOWN   = 0.5f;
+    constexpr float DROP_DIST        = 0.9f;
 }
 
 enum AppState {
@@ -89,13 +103,31 @@ enum GameMode { MODE_STORY = 0, MODE_ENDLESS = 1 };
 enum EnemyKind { ENEMY_BEA = 0, ENEMY_MARISA, ENEMY_ALT, ENEMY_CV, ENEMY_YE, ENEMY_KIND_COUNT };
 enum Diff { DIFF_NORMAL = 0, DIFF_EXPERT, DIFF_NIGHTMARE, DIFF_COUNT };
 
-enum WeaponKind {
-    WEAPON_NONE = 0,
-    WEAPON_SLINGSHOT,
-    WEAPON_WHIP,
-    WEAPON_KIND_COUNT
+enum ItemKind {
+    ITEM_NONE = 0,
+    ITEM_ROCK,
+    ITEM_KIND_COUNT
 };
 
+struct InvItem {
+    ItemKind kind  = ITEM_NONE;
+    int      count = 0;
+};
+
+struct WorldPickup {
+    ItemKind kind = ITEM_NONE;
+    Vector3  pos  = { 0, 0, 0 };
+    float    bobT = 0.0f;
+};
+
+struct Projectile {
+    Vector3 pos      = { 0, 0, 0 };
+    Vector3 vel      = { 0, 0, 0 };
+    float   lifetime = 0.0f;
+    bool    alive    = true;
+    int     ownerId  = 0;
+    ItemKind kind    = ITEM_ROCK;
+};
 
 struct Player {
     Vector3 pos       = { 0, 0, 0 };
@@ -110,13 +142,20 @@ struct Player {
     float   staminaDelay  = 0.0f;
     bool    exhausted     = false;
     float   escapeTime    = 0.0f;
-    int   caughtBy = -1;
-    
-    // Armas
-    int   weapon         = WEAPON_NONE;
-    int   ammo           = 0;
-    float attackCooldown = 0.0f;
-    float attackFlash    = 0.0f;
+    int   caughtBy = -1;   
+
+    // Inventario
+    InvItem inventory[C::INV_SLOTS];
+    int     selectedSlot  = 0;
+    float   throwCooldown = 0.0f;
+    float   attackFlash   = 0.0f;
+
+    // Esconderse
+    bool    hidden        = false;
+    Vector3 hiddenExitPos = { 0, 0, 0 };
+    float   hiddenExitYaw = 0.0f;
+    int     hiddenCellX   = -1;
+    int     hiddenCellY   = -1;
 };
 
 struct Enemy {
@@ -131,7 +170,7 @@ struct Enemy {
     float   stuckT    = 0.0f;
     Vector3 prevPos   = { 0, 0, 0 };
 
-        // Estados de armas
+    // Estados de proyectiles
     float stunT    = 0.0f;
     float rageT    = 0.0f;
     float rageMult = 1.0f;
@@ -145,10 +184,4 @@ enum ColorblindMode {
     CB_TRITANOPIA,
     CB_COUNT
 };
-struct Projectile {
-    Vector3 pos      = { 0, 0, 0 };
-    Vector3 vel      = { 0, 0, 0 };
-    float   lifetime = 0.0f;
-    bool    alive    = true;
-    int     ownerId  = 0;
-};
+

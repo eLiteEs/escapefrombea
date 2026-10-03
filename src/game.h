@@ -4,7 +4,7 @@
 #include "debug.h"
 #include "attract.h"
 #include "common.h"
-#include "weapon.h"
+#include "inventory.h"
 #include "config.h"
 #include "maze.h"
 #include "assets.h"
@@ -26,6 +26,9 @@ struct Game {
     std::vector<Enemy> enemies;
     Vector3 exitPos = { 0, 0, 0 };
     std::vector<Projectile> projectiles;
+
+    std::vector<WorldPickup>  worldItems;
+    float fountainCooldown[2] = { 0.0f, 0.0f };
 
     int     level = 1;
     float   levelTime = 0.0f;
@@ -151,5 +154,14 @@ struct Game {
     WorldMeshes world;
 
     CreditsScreen credits;
+
+    void spawnWorldItems(int lvl, int size, std::mt19937& rng);
+    void updateWorldItems(float dt);
+    void drawWorldItems(const Player& pl);
+
+    void handleInteraction(int playerIdx);
+    void handleItemInput(int playerIdx);
+    int  findInteractable(const Player& pl, int& outCx, int& outCy, bool& isLocker) const;
+    void drawInventory(const Player& pl, int vw, int vh);
 };
 

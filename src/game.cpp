@@ -27,28 +27,72 @@ void Game::init() {
     cfg.load();
     Lang::load(cfg.language.c_str());
 
+    // ---------- 1) Ventana pequeña, sin bordes, centrada ----------
     SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
-    InitWindow(GetMonitorWidth(0), GetMonitorHeight(0),
-               "Escape From Marisa 3: Escape From Bea");
-//    SetWindowState(FLAG_FULLSCREEN_MODE);
+    SetConfigFlags(FLAG_WINDOW_UNDECORATED);
+    InitWindow(640, 400, "Cargando...");
+
+    int monW = GetMonitorWidth(0);
+    int monH = GetMonitorHeight(0);
+    SetWindowPosition((monW - 640) / 2, (monH - 400) / 2);
+
+    SetTargetFPS(60);
     SetMouseCursor(MOUSE_CURSOR_ARROW);
+    SetExitKey(KEY_NULL);
 
-    SetExitKey(KEY_NULL);   // ESC ya no cierra la ventana; lo gestionamos nosotros
-    EnableCursor();
+    // ---------- 2) Carga y dibuja el splash ----------
+    Texture2D splash = LoadTexture(Paths::sprite("splash.png").c_str());
+    if (splash.id != 0)
+        SetTextureFilter(splash, TEXTURE_FILTER_BILINEAR);
 
+    BeginDrawing();
+    ClearBackground(BLACK);
+    if (splash.id != 0) {
+        float scale = std::min(640.0f / splash.width,
+                               400.0f / splash.height);
+        float tw = splash.width  * scale;
+        float th = splash.height * scale;
+        DrawTexturePro(splash,
+            { 0, 0, (float)splash.width, (float)splash.height },
+            { 320.0f - tw/2, 200.0f - th/2, tw, th },
+            { 0, 0 }, 0.0f, WHITE);
+    } else {
+        const char* t = "ESCAPE FROM BEA";
+        DrawText(t, 320 - MeasureText(t, 36)/2, 180, 36, RED);
+    }
+    EndDrawing();
+
+    // ---------- 3) Carga pesada (audio + assets + resto) ----------
     InitAudioDevice();
     assets.load();
     assets.applyVolumes(cfg.masterVol, cfg.musicVol, cfg.sfxVol);
-   
-    credits.load("assets/credits.txt");
 
-    applyVideoSettings();
- 
-    // Attract mode: maze decorativo del menu
-    attract.init(15, (uint32_t)time(nullptr) + 12345u, assets); 
- 
     saves.refresh();
+    credits.load("assets/credits.txt");
+    attract.init(15, (uint32_t)time(nullptr) + 12345u, assets);
+
+    WaitTime(1);
+
+    // ---------- 4) Pasar a la ventana real ----------
+    if (splash.id != 0) UnloadTexture(splash);
+
+    ClearWindowState(FLAG_WINDOW_UNDECORATED);
+
+    if (cfg.fullscreen) {
+        SetWindowSize(monW, monH);
+        SetWindowState(FLAG_FULLSCREEN_MODE);
+        SetWindowPosition(0, 0);
+    } else {
+        SetWindowSize(cfg.windowW, cfg.windowH);
+        SetWindowPosition((monW - cfg.windowW) / 2,
+                          (monH - cfg.windowH) / 2);
+    }
+
+    // Ahora sí, con la ventana definitiva
+    applyVideoSettings();
     ensureRenderTargets();
+
+    state = ST_MENU;
 }
 
 void Game::shutdown() {
@@ -149,6 +193,17 @@ static void resetPlayerState(Player& p, Vector3 spawn) {
     p.sprinting = false;
     p.escapeTime = 0.0f;
     p.caughtBy = -1;
+
+    // NUEVO
+    p.hidden = false;
+    p.hiddenExitPos = spawn;
+    p.hiddenExitYaw = 0.0f;
+    p.hiddenCellX = -1;
+    p.hiddenCellY = -1;
+    p.selectedSlot  = 0;
+    p.throwCooldown = 0.0f;
+    p.attackFlash   = 0.0f;
+    for (int i = 0; i < C::INV_SLOTS; ++i) p.inventory[i] = {};
 }
 
 void Game::startLevel(int lvl) {
@@ -203,6 +258,12 @@ void Game::startLevel(int lvl) {
         e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
         enemies.push_back(e);
     }
+
+    worldItems.clear();
+    projectiles.clear();
+    spawnWorldItems(lvl, size, rng);
+    fountainCooldown[0] = 0.0f;
+    fountainCooldown[1] = 0.0f;
 
     maze.markExplored(players[0].pos.x, players[0].pos.z, C::FOG_RADIUS);
     if (twoPlayers) maze.markExplored(players[1].pos.x, players[1].pos.z, C::FOG_RADIUS);
@@ -309,8 +370,21 @@ void Game::update(float dt) {
             }
         }
 
-        updateEnemies(enemies, maze, players, numPlayers, gdt,
-                      C::SEE_DIST, C::MEMORY_T);
+        for (int p = 0; p < numPlayers; ++p) {
+            if (players[p].caught || players[p].escaped) continue;
+            handleInteraction(p);
+            handleItemInput(p);
+
+            if (fountainCooldown[p] > 0.0f)  fountainCooldown[p]  -= gdt;
+            if (players[p].throwCooldown > 0.0f) players[p].throwCooldown -= gdt;
+            if (players[p].attackFlash   > 0.0f) players[p].attackFlash   -= gdt;
+        }
+
+        // Enemigos y proyectiles
+        updateEnemies(enemies, maze, players, numPlayers, gdt, C::SEE_DIST, C::MEMORY_T);
+        Inventory::updateProjectiles(projectiles, maze, enemies, gdt);
+        Inventory::updateEnemyStatus(enemies, gdt);
+        updateWorldItems(gdt);
 
         heartbeatCd -= gdt;
         if (heartbeatCd <= 0.0f) {
@@ -539,7 +613,9 @@ void Game::update(float dt) {
                 case 1: cfg.binds[remapPlayer].down  = k; break;
                 case 2: cfg.binds[remapPlayer].left  = k; break;
                 case 3: cfg.binds[remapPlayer].right = k; break;
-            }
+                case 4: cfg.binds[remapPlayer].interact = k; break;
+                case 5: cfg.binds[remapPlayer].drop     = k; break;
+	    }
             remapAction = -1;
             cfg.save();
         }
@@ -703,6 +779,52 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
             DrawBillboard(cam, assets.portalTex, { exitPos.x, 3.0f, exitPos.z },
                           1.6f*pulse, WHITE);
 
+        for (auto& w : worldItems) {
+            float dx = w.pos.x - pl.pos.x, dz = w.pos.z - pl.pos.z;
+            if (dx*dx + dz*dz > 35.0f*35.0f) continue;
+
+            float bob = sinf(w.bobT) * C::ROCK_PICKUP_BOB;
+            Vector3 dp = { w.pos.x, w.pos.y + bob, w.pos.z };
+            Color c = Inventory::itemColor(w.kind);
+
+            DrawCube(dp, 0.28f, 0.28f, 0.28f, c);
+            DrawCubeWires(dp, 0.30f, 0.30f, 0.30f, (Color){ 40, 40, 50, 255 });
+
+            if (dx*dx + dz*dz < C::PICKUP_RANGE * C::PICKUP_RANGE * 1.5f) {
+                float p2 = 0.35f + 0.10f * sinf((float)GetTime() * 5.0f);
+                DrawCubeWires(dp, 0.36f + p2, 0.36f + p2, 0.36f + p2,
+                              (Color){ 255, 240, 120, 200 });
+            }
+        }
+
+        for (int y = 0; y < maze.h; ++y)
+            for (int x = 0; x < maze.w; ++x) {
+                if (!maze.hasFountain(x, y)) continue;
+                Vector3 fp = {
+                    x * C::CELL + C::CELL * 0.5f, 0.0f,
+                    y * C::CELL + C::CELL * 0.5f
+                };
+                float dx = fp.x - pl.pos.x, dz = fp.z - pl.pos.z;
+                if (dx*dx + dz*dz > 40.0f*40.0f) continue;
+
+                DrawCylinder({ fp.x, 0.0f, fp.z }, 0.55f, 0.65f, 0.9f, 12,
+                             (Color){ 90, 95, 115, 255 });
+                DrawCylinderWires({ fp.x, 0.0f, fp.z }, 0.55f, 0.65f, 0.9f, 12,
+                                  (Color){ 40, 45, 60, 255 });
+
+                float ripple = 0.03f * sinf((float)GetTime() * 3.0f + x + y);
+                DrawCylinder({ fp.x, 0.9f + ripple, fp.z }, 0.55f, 0.55f, 0.05f, 16,
+                             (Color){ 60, 180, 220, 220 });
+                DrawCube({ fp.x, 1.05f, fp.z }, 0.06f, 0.3f, 0.06f,
+                         (Color){ 120, 210, 240, 200 });
+            }
+
+	for (auto& pr : projectiles) {
+            Color c = Inventory::itemColor(pr.kind);
+            DrawSphere(pr.pos, 0.11f, c);
+            DrawSphereWires(pr.pos, 0.15f, 4, 4, (Color){ 220, 220, 220, 180 });
+        }
+
         // Enemigos
         float bob = 0.12f * sinf((float)GetTime() * 3.0f);
         for (auto& e : enemies) {
@@ -745,6 +867,7 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
                  hudX, vh - small - 10, small, playerColor(playerNum));
 
     drawStaminaBar(pl, vw, vh);
+    drawInventory(pl, vw, vh);
 
     if (assets.crosshair.id != 0) {
         float scale = 1.0f;   // ajusta si la quieres mas grande/pequena
@@ -754,7 +877,7 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
         float cy = vh * 0.5f - ch * 0.5f;
 
         // Solo lo dibujamos si el jugador no esta atrapado/escapado/hidden
-        if (!pl.caught && !pl.escaped ) {
+        if (!pl.caught && !pl.escaped && !pl.hidden) {
             DrawTexturePro(
                 assets.crosshair,
                 { 0, 0, (float)assets.crosshair.width, (float)assets.crosshair.height },
@@ -1073,17 +1196,21 @@ void Game::drawConfigControls() {
     row++;
 
     struct RowInfo { int player, action; const char* name; int key; };
-    RowInfo infos[8] = {
-        {0, 0, L("controls.p1.up", "J1 Adelante"),  cfg.binds[0].up},
-        {0, 1, L("controls.p1.down", "J1 Atrás"),     cfg.binds[0].down},
-        {0, 2, L("controls.p1.left", "J1 Izquierda"), cfg.binds[0].left},
-        {0, 3, L("controls.p1.right", "J1 Derecha"),   cfg.binds[0].right},
-        {1, 0, L("controls.p2.up", "J2 Adelante"),  cfg.binds[1].up},
-        {1, 1, L("controls.p2.down", "J2 Atrás"),     cfg.binds[1].down},
-        {1, 2, L("controls.p2.left", "J2 Izquierda"), cfg.binds[1].left},
-        {1, 3, L("controls.p2.right", "J2 Derecha"),   cfg.binds[1].right},
+    RowInfo infos[16] = {
+        {0, 0, "P1 Adelante",     cfg.binds[0].up},
+        {0, 1, "P1 Atras",        cfg.binds[0].down},
+        {0, 2, "P1 Izquierda",    cfg.binds[0].left},
+        {0, 3, "P1 Derecha",      cfg.binds[0].right},
+        {0, 4, "P1 Interactuar",  cfg.binds[0].interact},
+        {0, 5, "P1 Dropear",      cfg.binds[0].drop},
+        {1, 0, "P2 Adelante",     cfg.binds[1].up},
+        {1, 1, "P2 Atras",        cfg.binds[1].down},
+        {1, 2, "P2 Izquierda",    cfg.binds[1].left},
+        {1, 3, "P2 Derecha",      cfg.binds[1].right},
+        {1, 4, "P2 Interactuar",  cfg.binds[1].interact},
+        {1, 5, "P2 Dropear",      cfg.binds[1].drop},
     };
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 16; ++i) {
         const char* lbl = (remapAction == infos[i].action && remapPlayer == infos[i].player)
                           ? L("controls.presskey", "Pulsa una tecla...") : Config::keyName(infos[i].key);
         if (uiOptionEx(row, items, 40, infos[i].name, lbl,
@@ -1875,16 +2002,16 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
         snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f  Stamina: %.0f%%",
                  p.yaw * 180.0f / PI, p.pitch * 180.0f / PI, p.stamina * 100.0f);
         line(valC, buf);
-        const char* wname = "NONE";
-        switch (p.weapon) {
-            case WEAPON_SLINGSHOT: wname = "SLING"; break;
-            case WEAPON_WHIP:      wname = "WHIP";  break;
-            default: break;
-        }
-        snprintf(buf, sizeof(buf), "Arma: %s  Ammo: %d  Sprint: %s  Cd: %.2f",
-                 wname, p.ammo, p.sprinting ? "SI" : "no", p.attackCooldown);
+
+        const InvItem& sel = p.inventory[p.selectedSlot];
+        const char* iname = (sel.kind == ITEM_NONE || sel.count <= 0)
+                            ? "-" : Inventory::itemName(sel.kind);
+        snprintf(buf, sizeof(buf), "Slot %d: %s x%d  Sprint: %s  Cd: %.2f",
+                 p.selectedSlot + 1, iname, sel.count,
+                 p.sprinting ? "SI" : "no", p.throwCooldown);
         line(valC, buf);
-        snprintf(buf, sizeof(buf), "Flags: %s%s%s",
+
+	snprintf(buf, sizeof(buf), "Flags: %s%s%s",
                  p.caught  ? "[CAUGHT] " : "",
                  p.escaped ? "[ESCAPED] " : "",
                  p.exhausted ? "[EXHAUSTED]" : "");
@@ -2049,3 +2176,216 @@ void Game::drawJumpscare() {
     EndDrawing();
 }
 
+void Game::spawnWorldItems(int lvl, int size, std::mt19937& rng) {
+    int count = std::min(2 + lvl / 2, 6);
+    float minDistFromSpawn = size * C::CELL * 0.20f;
+
+    int attempts = 0;
+    while ((int)worldItems.size() < count && attempts < 500) {
+        ++attempts;
+        int cx = 1 + (int)(rng() % (size - 2));
+        int cy = 1 + (int)(rng() % (size - 2));
+        if (maze.wallAt(cx, cy)) continue;
+        if (maze.hasFountain(cx, cy)) continue;
+
+        Vector3 p = maze.cellCenter(cx, cy);
+        if (Vector3Distance(p, players[0].pos) < minDistFromSpawn) continue;
+
+        bool overlap = false;
+        for (auto& w : worldItems)
+            if (Vector3Distance(p, w.pos) < C::CELL * 0.4f) { overlap = true; break; }
+        if (overlap) continue;
+
+        WorldPickup wp;
+        wp.kind = ITEM_ROCK;
+        wp.pos  = { p.x, 0.35f, p.z };
+        wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
+        worldItems.push_back(wp);
+    }
+}
+
+void Game::updateWorldItems(float dt) {
+    for (auto& w : worldItems) w.bobT += dt * 2.0f;
+}
+
+int Game::findInteractable(const Player& pl, int& outCx, int& outCy, bool& isLocker) const {
+    Vector3 fwd = { sinf(pl.yaw), 0.0f, -cosf(pl.yaw) };
+    Vector3 probe = {
+        pl.pos.x + fwd.x * C::INTERACT_RANGE,
+        0.0f,
+        pl.pos.z + fwd.z * C::INTERACT_RANGE
+    };
+    int cx = (int)floorf(probe.x / C::CELL);
+    int cy = (int)floorf(probe.z / C::CELL);
+    outCx = cx;
+    outCy = cy;
+
+    // Taquilla: pared con variante 1
+    if (maze.wallAt(cx, cy)) {
+        int variant = 0;
+        if (cy < (int)maze.wallVariant.size() &&
+            cx < (int)maze.wallVariant[cy].size())
+            variant = maze.wallVariant[cy][cx];
+        if (variant == 1) { isLocker = true; return 1; }
+        return 0;
+    }
+
+    // Fuente
+    if (maze.hasFountain(cx, cy)) { isLocker = false; return 2; }
+    return 0;
+}
+
+void Game::handleInteraction(int p) {
+    Player& pl = players[p];
+    if (pl.caught || pl.escaped) return;
+
+    bool interactPressed = IsKeyPressed(cfg.binds[p].interact) ||
+                           (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
+
+    // ---- Salir de la taquilla ----
+    if (pl.hidden) {
+        if (interactPressed) {
+            pl.hidden = false;
+            pl.pos = pl.hiddenExitPos;
+            pl.yaw = pl.hiddenExitYaw;
+            pl.hiddenCellX = -1;
+            pl.hiddenCellY = -1;
+            if (p == 0) showToast("Saliste de la taquilla");
+        }
+        return;
+    }
+
+    if (fountainCooldown[p] > 0.0f) return;
+    if (!interactPressed) return;
+
+    // 1) Recoger item cercano
+    int idx = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
+    if (idx >= 0) {
+        if (Inventory::collectPickup(pl, worldItems, idx)) {
+            if (p == 0) showToast(TextFormat("Recogido: %s",
+                                             Inventory::itemName(worldItems.empty() ? ITEM_ROCK : ITEM_ROCK)));
+        } else {
+            if (p == 0) showToast("Inventario lleno");
+        }
+        return;
+    }
+
+    // 2) Taquilla / fuente
+    int cx, cy; bool isLocker;
+    int what = findInteractable(pl, cx, cy, isLocker);
+    if (what == 0) return;
+
+    if (what == 1) {
+        // Esconderse
+        pl.hidden = true;
+        pl.hiddenExitPos = pl.pos;
+        pl.hiddenExitYaw = pl.yaw;
+        pl.hiddenCellX = cx;
+        pl.hiddenCellY = cy;
+        pl.yaw += PI;
+        while (pl.yaw >  PI) pl.yaw -= 2.0f * PI;
+        while (pl.yaw < -PI) pl.yaw += 2.0f * PI;
+        pl.sprinting = false;
+        if (p == 0) showToast(TextFormat("Escondido. [%s/RMB] salir",
+                                         Config::keyName(cfg.binds[p].interact)));
+    }
+    else if (what == 2) {
+        // Beber agua
+        if (pl.stamina < C::STAM_WATER_MAX - 0.01f) {
+            pl.stamina = C::STAM_WATER_MAX;
+            pl.exhausted = false;
+            pl.staminaDelay = 0.0f;
+            fountainCooldown[p] = C::WATER_COOLDOWN;
+            if (p == 0) showToast("Energia al maximo!");
+        } else {
+            if (p == 0) showToast("Ya tienes la energia llena");
+            fountainCooldown[p] = 0.3f;
+        }
+    }
+}
+
+void Game::handleItemInput(int p) {
+    Player& pl = players[p];
+    if (pl.caught || pl.escaped) return;
+
+    // Cambiar de slot
+    if (p == 0) {
+        for (int i = 0; i < C::INV_SLOTS; ++i)
+            if (IsKeyPressed(KEY_ONE + i)) pl.selectedSlot = i;
+
+        float wheel = GetMouseWheelMove();
+        if (wheel > 0.0f)
+            pl.selectedSlot = (pl.selectedSlot - 1 + C::INV_SLOTS) % C::INV_SLOTS;
+        else if (wheel < 0.0f)
+            pl.selectedSlot = (pl.selectedSlot + 1) % C::INV_SLOTS;
+    }
+
+    // Dropear
+    if (IsKeyPressed(cfg.binds[p].drop)) {
+        if (Inventory::dropSelected(pl, maze, worldItems)) {
+            if (p == 0) showToast("Item dropeado");
+        }
+    }
+
+    // Usar (lanzar) el item seleccionado
+    bool usePressed = IsKeyPressed(cfg.binds[p].interact == 0 ? KEY_E : KEY_E) ||
+                      (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+    // Nota: usar la tecla E explicitamente. Si quieres que sea remapeable,
+    // anade un campo "use" a KeyBindings.
+    usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) || IsKeyPressed(KEY_E);
+
+    if (usePressed) {
+        if (!Inventory::useSelected(pl, maze, projectiles)) {
+            // Nada que lanzar
+        }
+    }
+}
+
+void Game::drawInventory(const Player& pl, int vw, int vh) {
+    const int slotSize = std::max(42, vw / 32);
+    const int gap      = 6;
+    const int pad      = 10;
+
+    int totalH = C::INV_SLOTS * slotSize + (C::INV_SLOTS - 1) * gap;
+    int startX = pad + 4;
+    int startY = vh / 2 - totalH / 2;
+
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+        int x = startX;
+        int y = startY + i * (slotSize + gap);
+
+        Rectangle r = { (float)x, (float)y, (float)slotSize, (float)slotSize };
+
+        bool selected = (i == pl.selectedSlot);
+        Color bg = selected
+            ? (Color){ 60, 70, 100, 200 }
+            : (Color){ 20, 22, 32, 170 };
+        Color border = selected
+            ? (Color){ 255, 240, 140, 230 }
+            : (Color){ 90, 100, 130, 180 };
+
+        DrawRectangleRec(r, bg);
+        DrawRectangleLinesEx(r, selected ? 2.0f : 1.0f, border);
+
+        DrawText(TextFormat("%d", i + 1), x + 4, y + 2, 12,
+                 (Color){ 180, 180, 180, 180 });
+
+        const InvItem& it = pl.inventory[i];
+        if (it.kind != ITEM_NONE && it.count > 0) {
+            Color itemCol = Inventory::itemColor(it.kind);
+            int isz = slotSize - 16;
+            int ix = x + (slotSize - isz) / 2;
+            int iy = y + (slotSize - isz) / 2;
+            DrawRectangle(ix, iy, isz, isz, itemCol);
+            DrawRectangleLines(ix, iy, isz, isz, (Color){ 40, 40, 50, 200 });
+
+            if (it.count > 1) {
+                const char* cnt = TextFormat("%d", it.count);
+                int fs = 14;
+                int tw = MeasureText(cnt, fs);
+                DrawText(cnt, x + slotSize - tw - 4,
+                         y + slotSize - fs - 3, fs, RAYWHITE);
+            }
+        }
+    }
+}
