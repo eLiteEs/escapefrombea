@@ -8,6 +8,7 @@
 #include "maze.h"
 #include "assets.h"
 #include "cinematic.h"
+#include "credits.h"
 #include "world_mesh.h"
 #include "save.h"
 #include <vector>
@@ -146,5 +147,7 @@ struct Game {
     int   jumpscareEnemy = -1;
 
     WorldMeshes world;
+
+    CreditsScreen credits;
 };
 

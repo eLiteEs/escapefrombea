@@ -1,0 +1,52 @@
+# Escape From Marisa 3: Escape From Bea
+- modo serio
+
+- Programación y diseño
+* Blas Fernández 
+* Adam Aknaf
+
+- Motor gráfico
+* raylib (Ramon Santamaria y colaboradores)
+
+- Música y sonido
+* yanvince (NCS)
+* Creeper_Ciller78 (freesound)
+* nuFF3 (freesound)
+* .name (freesound) 
+
+- Sprites
+* Adam Aknaf
+* docformats
+* pexels
+* indiamart
+* unplash
+* Floor & Decor (pinterest)
+
+* Gracias por jugar
+* Y por dejar que Bea te atrape al menos una vez
+
+- Gracias a:
+* itch.io para distrubuir este juego
+* Desarolladores de raylib por facilitarme el desarollo de este juego
+* El equipo de Deepseek por hacer una buena IA que no rompe cosas
+* Pinta, mtPaint, Audacity, Arch Linux, vim, git, qutebrowser, cmake, make, GNU C++, Emscripten por ser un buen software libre
+* Adam Aknaf por todos los momentos que han podido hacer la historia de este juego
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

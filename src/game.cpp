@@ -39,6 +39,9 @@ void Game::init() {
     InitAudioDevice();
     assets.load();
     assets.applyVolumes(cfg.masterVol, cfg.musicVol, cfg.sfxVol);
+   
+    credits.load("assets/credits.txt");
+
     applyVideoSettings();
     
     saves.refresh();
@@ -388,6 +391,19 @@ void Game::update(float dt) {
             state = ST_PLAYING;
         }
     }
+    else if (state == ST_CREDITS) {
+        bool advance = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
+                       IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        bool back    = IsKeyPressed(KEY_ESCAPE) ||
+                       consumeCancel();
+        credits.update(dt, advance, back);
+
+        if (credits.isFinished()) {
+            credits.stop();
+            state = ST_MENU;
+            EnableCursor();
+        }
+    }
     else if (state == ST_CINEMATIC) {
         bool advance = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) ||
                        IsKeyPressed(KEY_ESCAPE) ||
@@ -451,14 +467,32 @@ void Game::update(float dt) {
     else if (state == ST_LEVEL_CLEAR) {
         if (consumeConfirm()) {
             ++level;
+
             if (mode == MODE_STORY && cfg.playCinematics) {
+                // ¿Existe intro del siguiente nivel?
                 char introName[64];
                 snprintf(introName, sizeof(introName), "level_%02d_intro.txt", level);
                 if (hasStory(introName)) {
                     playCinematic(introName, "playing");
                     return;
                 }
+
+                // Si no existe intro del siguiente nivel, ¿existe el nivel
+                // propiamente? Lo definimos como "existe intro O outro del
+                // nivel actual+1". Si no existe ninguno de los dos, fin de
+                // la historia.
+                char outroName[64];
+                snprintf(outroName, sizeof(outroName), "level_%02d_outro.txt", level);
+                bool nextLevelExists = hasStory(introName) || hasStory(outroName);
+
+                if (!nextLevelExists) {
+                    // Fin de la historia -> creditos
+                    credits.start();
+                    state = ST_CREDITS;
+                    return;
+                }
             }
+
             startLevel(level);
             assignGamepads();
             DisableCursor();
@@ -1327,6 +1361,28 @@ void Game::drawMenus() {
             const char* t3 = L("menu.subtitle", "modo serio chat");
             UI::T(t3, W/2 - UI::M(t3, 22)/2, y, 22, LIGHTGRAY);
 
+            // Zona clickeable: el titulo completo (t1 + t2)
+            int titleTop = (int)(H * 0.10f);
+            int titleH   = 54 + 6 + 84;
+            Rectangle titleRect = {
+                (float)(W/2 - 400), (float)titleTop,
+                800.0f, (float)titleH
+            };
+            bool hoveringTitle = CheckCollisionPointRec(GetMousePosition(), titleRect);
+
+            if (hoveringTitle) {
+                // Cursor de mano + subrayado sutil
+                SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+                DrawRectangleLinesEx(titleRect, 1, (Color){ 255, 255, 255, 40 });
+            } else {
+                SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+            }
+
+            if (hoveringTitle && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                credits.start();
+                state = ST_CREDITS;
+            }
+
             int items = 4;
             handleGamepadMenuNav(items);
 
@@ -1425,6 +1481,11 @@ void Game::draw() {
             drawToast();
             drawDebugOverlay(GetScreenWidth(), GetScreenHeight(), 0);
             if (cfg.showFps && !Debug::showOverlay) DrawFPS(GetScreenWidth() - 90, 20);
+        EndDrawing();
+    } else if (state == ST_CREDITS) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        credits.draw(GetScreenWidth(), GetScreenHeight());
         EndDrawing();
     } else if (state == ST_CINEMATIC) {
         drawCinematic();
