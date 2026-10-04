@@ -13,6 +13,14 @@ static void web_frame() {
 #endif
 
 int main() {
+#if defined(NDEBUG) || !defined(_DEBUG)
+    // Release: solo warnings y errores
+    SetTraceLogLevel(LOG_WARNING);
+#else
+    // Debug: info normal
+    SetTraceLogLevel(LOG_INFO);
+#endif
+    
     Game game;
     g_game = &game;
     game.init();
