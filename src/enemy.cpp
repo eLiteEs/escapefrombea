@@ -26,7 +26,7 @@ static int closestVisibleTarget(const Enemy& self,
     int best = -1;
     float bestDist = C::SEE_DIST;
     for (int p = 0; p < n; ++p) {
-        if (players[p].caught || players[p].escaped) continue;
+        if (players[p].caught || players[p].escaped || players[p].hidden) continue;
         if (players[p].hidden) continue; 
 	float dx = players[p].pos.x - self.pos.x;
         float dz = players[p].pos.z - self.pos.z;

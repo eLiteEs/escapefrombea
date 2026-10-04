@@ -21,11 +21,13 @@ struct Assets {
     Texture2D itemTex[ITEM_KIND_COUNT] = {};
     bool hasItemTex[ITEM_KIND_COUNT]   = {};
 
-    Music musicMenu  = {};
-    Music musicLevel = {};
-    Sound sfxCaught  = {};
-    Sound sfxEscape  = {};
-    Sound sfxFootstep = {};
+    Music musicMenu    = {};
+    Music musicLevel   = {};
+    Sound sfxCaught    = {};
+    Sound sfxFootstep  = {};
+    Sound sfxEscape    = {};
+    Sound sfxThrow     = {};
+    Sound sfxPickup    = {};
     Sound sfxHeartbeat = {};
 
     void load();

@@ -183,6 +183,10 @@ static Vector3 findFreeSpawnNear(const Maze& maze, int cx, int cy, Vector3 fallb
 }
 
 static void resetPlayerState(Player& p, Vector3 spawn) {
+    if(p.caught) {
+        for (int i = 0; i < C::INV_SLOTS; ++i) p.inventory[i] = {};
+    }
+	
     p.pos = spawn;
     p.yaw = p.pitch = 0;
     p.caught = p.escaped = false;
@@ -203,7 +207,6 @@ static void resetPlayerState(Player& p, Vector3 spawn) {
     p.selectedSlot  = 0;
     p.throwCooldown = 0.0f;
     p.attackFlash   = 0.0f;
-    for (int i = 0; i < C::INV_SLOTS; ++i) p.inventory[i] = {};
 }
 
 void Game::startLevel(int lvl) {
@@ -428,7 +431,7 @@ void Game::update(float dt) {
 
         if (allDone) {
             EnableCursor();
-            if (anyCaught) {
+	    if (anyCaught) {
                 if (assets.sfxCaught.frameCount > 0) PlaySound(assets.sfxCaught);
                 if (mode == MODE_ENDLESS && level > cfg.maxEndlessLevel) {
                     cfg.maxEndlessLevel = level; cfg.save();
@@ -905,7 +908,7 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
         float cy = vh * 0.5f - ch * 0.5f;
 
         // Solo lo dibujamos si el jugador no esta atrapado/escapado/hidden
-        if (!pl.caught && !pl.escaped && !pl.hidden) {
+	if (!pl.caught && !pl.escaped && !pl.hidden) {
             DrawTexturePro(
                 assets.crosshair,
                 { 0, 0, (float)assets.crosshair.width, (float)assets.crosshair.height },
@@ -1916,7 +1919,7 @@ void Game::drawDebugWorld3D(const Player& pl) {
             // Busca un objetivo visible
             int target = -1;
             for (int i = 0; i < (twoPlayers ? 2 : 1); ++i) {
-                if (players[i].caught || players[i].escaped) continue;
+                if (players[i].caught || players[i].escaped || players[i].hidden) continue;
                 if (Vector3Distance(e.pos, players[i].pos) < C::SEE_DIST &&
                     lineOfSight(maze, e.pos, players[i].pos)) {
                     target = i;
@@ -2318,7 +2321,9 @@ void Game::handleInteraction(int p) {
     if (idx >= 0) {
 	ItemKind kind = worldItems[idx].kind;
         if (Inventory::collectPickup(pl, worldItems, idx)) {
-            if (p == 0) showToast(TextFormat("%s", Inventory::itemName(kind)));
+            if (assets.sfxPickup.frameCount > 0)
+                PlaySound(assets.sfxPickup);
+	    if (p == 0) showToast(TextFormat("%s", Inventory::itemName(kind)));
         } else {
             if (p == 0) showToast(L("toast.inventory.full", "Inventario lleno"));
         }
@@ -2378,7 +2383,12 @@ void Game::handleItemInput(int p) {
     // Dropear
     if (IsKeyPressed(cfg.binds[p].drop)) {
         if (Inventory::dropSelected(pl, maze, worldItems)) {
-            if (p == 0) showToast(L("toast.item.dropped", "Item dropeado"));
+            if (assets.sfxPickup.frameCount > 0) {
+                SetSoundPitch(assets.sfxPickup, 0.7f);   // más grave
+                PlaySound(assets.sfxPickup);
+                SetSoundPitch(assets.sfxPickup, 1.0f);
+	    }
+	    if (p == 0) showToast(L("toast.item.dropped", "Item dropeado"));
         }
     }
 
@@ -2390,8 +2400,9 @@ void Game::handleItemInput(int p) {
     usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) || IsKeyPressed(KEY_E);
 
     if (usePressed) {
-        if (!Inventory::useSelected(pl, maze, projectiles)) {
-            // Nada que lanzar
+        if (Inventory::useSelected(pl, maze, projectiles)) {
+            if (assets.sfxThrow.frameCount > 0)
+                PlaySound(assets.sfxThrow);
         }
     }
 }

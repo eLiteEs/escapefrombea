@@ -2,6 +2,8 @@
 #include <cmath>
 #include "lang.h"
 #include <algorithm>
+#include "assets.h"
+#include "game.h"
 
 namespace Inventory {
 
@@ -156,7 +158,7 @@ bool useSelected(Player& p, const Maze& maze,
             p.throwCooldown = C::ROCK_THROW_CD;
 	    break;
     }
-    
+   
     p.attackFlash   = 0.10f;
     (void)maze;
     return true;

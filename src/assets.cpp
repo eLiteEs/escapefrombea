@@ -101,8 +101,10 @@ void Assets::load() {
     musicMenu  = loadMusicSmart("music_menu.ogg");
     musicLevel = loadMusicSmart("music_level.ogg");
 
-    sfxCaught    = loadSoundSmart("sfx_caught.ogg");
     sfxEscape    = loadSoundSmart("sfx_escape.ogg");
+    sfxCaught    = loadSoundSmart("sfx_caught.ogg");
+    sfxPickup    = loadSoundSmart("sfx_pickup.ogg");
+    sfxThrow     = loadSoundSmart("sfx_throw.ogg");
     sfxFootstep  = loadSoundSmart("sfx_footstep.ogg");
     sfxHeartbeat = loadSoundSmart("sfx_heartbeat.ogg");
 }
@@ -127,8 +129,10 @@ void Assets::unload() {
     if (musicLevel.stream.buffer != nullptr) UnloadMusicStream(musicLevel);
     if (sfxCaught.frameCount    > 0) UnloadSound(sfxCaught);
     if (sfxEscape.frameCount    > 0) UnloadSound(sfxEscape);
-    if (sfxFootstep.frameCount  > 0) UnloadSound(sfxFootstep);
     if (sfxHeartbeat.frameCount > 0) UnloadSound(sfxHeartbeat);
+    if (sfxFootstep.frameCount  > 0) UnloadSound(sfxFootstep);
+    if (sfxThrow.frameCount     > 0) UnloadSound(sfxThrow);
+    if (sfxPickup.frameCount    > 0) UnloadSound(sfxPickup);
 }
 
 void Assets::applyVolumes(float master, float music, float sfx) {
