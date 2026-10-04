@@ -879,6 +879,8 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
 
         if (playerNum == 0) drawDebugWorld3D(pl);
     EndMode3D();    
+ 
+    DrawRectangle(0, 0, vw, vh, (Color){ 0, 0, 0, 70 });
 
     DrawRectangleGradientV(0, 0, vw, vh/6, (Color){ 0, 0, 0, 140 }, (Color){ 0, 0, 0, 0 });
 
