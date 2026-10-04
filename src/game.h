@@ -163,5 +163,7 @@ struct Game {
     void handleItemInput(int playerIdx);
     int  findInteractable(const Player& pl, int& outCx, int& outCy, bool& isLocker) const;
     void drawInventory(const Player& pl, int vw, int vh);
+
+    void drawHandItem3D(const Player& pl, const Camera3D& cam);
 };
 

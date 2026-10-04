@@ -842,8 +842,8 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
             switch (pr.kind) {
                 case ITEM_ROCK:    size = 0.18f; break;
                 case ITEM_BOX:     size = 0.35f; break;
-                case ITEM_LIME:    size = 0.45f; break;
-                case ITEM_BICIMAD: size = 0.55f; break;
+                case ITEM_LIME:    size = 0.80f; break;
+                case ITEM_BICIMAD: size = 1.25; break;
                 default: break;
             }
             if (assets.hasItemTex[pr.kind]) {
@@ -878,6 +878,8 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
         }
 
         if (playerNum == 0) drawDebugWorld3D(pl);
+
+	drawHandItem3D(pl, cam);
     EndMode3D();    
  
     DrawRectangle(0, 0, vw, vh, (Color){ 0, 0, 0, 70 });
@@ -2466,3 +2468,143 @@ void Game::drawInventory(const Player& pl, int vw, int vh) {
         }
     }
 }
+
+void Game::drawHandItem3D(const Player& pl, const Camera3D& cam) {
+    if (pl.caught || pl.escaped || pl.hidden) return;
+    int slot = pl.selectedSlot;
+    if (slot < 0 || slot >= C::INV_SLOTS) return;
+
+    const InvItem& it = pl.inventory[slot];
+    if (it.kind == ITEM_NONE || it.count <= 0) return;
+
+    // ---------- Ejes de la camara ----------
+    Vector3 fwd = {
+        cam.target.x - cam.position.x,
+        cam.target.y - cam.position.y,
+        cam.target.z - cam.position.z
+    };
+    float fwdLen = sqrtf(fwd.x*fwd.x + fwd.y*fwd.y + fwd.z*fwd.z);
+    if (fwdLen < 0.0001f) return;
+    fwd.x /= fwdLen; fwd.y /= fwdLen; fwd.z /= fwdLen;
+
+    // right = fwd x up
+    Vector3 right = {
+        fwd.y * cam.up.z - fwd.z * cam.up.y,
+        fwd.z * cam.up.x - fwd.x * cam.up.z,
+        fwd.x * cam.up.y - fwd.y * cam.up.x
+    };
+    float rightLen = sqrtf(right.x*right.x + right.y*right.y + right.z*right.z);
+    if (rightLen < 0.0001f) return;
+    right.x /= rightLen; right.y /= rightLen; right.z /= rightLen;
+
+    // upReal = right x fwd
+    Vector3 up = {
+        right.y * fwd.z - right.z * fwd.y,
+        right.z * fwd.x - right.x * fwd.z,
+        right.x * fwd.y - right.y * fwd.x
+    };
+
+    // ---------- Offset en espacio de camara ----------
+    float dFwd   = 0.55f;
+    float dRight = 0.30f;
+    float dDown  = -0.22f;
+
+    // Bob del caminar
+    if (pl.footstepT > 0.0f) {
+        float phase = (C::STEP_SLOW - pl.footstepT) * 14.0f;
+        dDown  += sinf(phase) * 0.035f;
+        dRight += cosf(phase) * 0.015f;
+    }
+
+    Vector3 pos = {
+        cam.position.x + fwd.x * dFwd + right.x * dRight + up.x * dDown,
+        cam.position.y + fwd.y * dFwd + right.y * dRight + up.y * dDown,
+        cam.position.z + fwd.z * dFwd + right.z * dRight + up.z * dDown
+    };
+
+    // ---------- Tamano por item ----------
+    float size = 0.22f;
+    switch (it.kind) {
+        case ITEM_ROCK:    size = 0.16f; break;
+        case ITEM_BOX:     size = 0.26f; break;
+        case ITEM_LIME:    size = 0.45f; break;
+        case ITEM_BICIMAD: size = 0.60f; break;
+        default: break;
+    }
+
+    // ---------- Rotacion del quad en su propio plano ----------
+    // Un pequeño roll para dar inclinacion "agarrada". Alrededor de fwd.
+    // Tambien un pequeño pitch alrededor de right, ligero.
+    float rollRad  = 18.0f * DEG2RAD;
+    float pitchRad = -8.0f * DEG2RAD;
+
+    float cr = cosf(rollRad),  sr = sinf(rollRad);
+    float cp = cosf(pitchRad), sp = sinf(pitchRad);
+
+    // Ejes rotados: aplicamos roll a (right, up), luego pitch a (fwd, up)
+    // 1) roll alrededor de fwd: right' = right*cr + up*sr, up' = -right*sr + up*cr
+    Vector3 r1 = { right.x*cr + up.x*sr, right.y*cr + up.y*sr, right.z*cr + up.z*sr };
+    Vector3 u1 = { -right.x*sr + up.x*cr, -right.y*sr + up.y*cr, -right.z*sr + up.z*cr };
+
+    // 2) pitch alrededor de r1: fwd' = fwd*cp + u1*sp, u2 = -fwd*sp + u1*cp
+    Vector3 f2 = { fwd.x*cp + u1.x*sp, fwd.y*cp + u1.y*sp, fwd.z*cp + u1.z*sp };
+    Vector3 u2 = { -fwd.x*sp + u1.x*cp, -fwd.y*sp + u1.y*cp, -fwd.z*sp + u1.z*cp };
+
+    // Usamos r1 como "right", u2 como "up", f2 como "forward" del quad
+    float h = size * 0.5f;
+
+    // Los 4 vertices del quad centrado en pos
+    Vector3 v0 = {
+        pos.x + r1.x*(-h) + u2.x*(-h),
+        pos.y + r1.y*(-h) + u2.y*(-h),
+        pos.z + r1.z*(-h) + u2.z*(-h)
+    };
+    Vector3 v1 = {
+        pos.x + r1.x*( h) + u2.x*(-h),
+        pos.y + r1.y*( h) + u2.y*(-h),
+        pos.z + r1.z*( h) + u2.z*(-h)
+    };
+    Vector3 v2 = {
+        pos.x + r1.x*( h) + u2.x*( h),
+        pos.y + r1.y*( h) + u2.y*( h),
+        pos.z + r1.z*( h) + u2.z*( h)
+    };
+    Vector3 v3 = {
+        pos.x + r1.x*(-h) + u2.x*( h),
+        pos.y + r1.y*(-h) + u2.y*( h),
+        pos.z + r1.z*(-h) + u2.z*( h)
+    };
+
+    // ---------- Dibujar por encima de todo ----------
+    rlDisableDepthTest();
+    rlDisableBackfaceCulling();
+
+    if (assets.hasItemTex[it.kind]) {
+        Texture2D tex = assets.itemTex[it.kind];
+        rlSetTexture(tex.id);
+        rlBegin(RL_QUADS);
+            rlColor4ub(255, 255, 255, 255);
+            // Normal apuntando hacia la camara
+            rlNormal3f(-f2.x, -f2.y, -f2.z);
+            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(v0.x, v0.y, v0.z);
+            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(v1.x, v1.y, v1.z);
+            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(v2.x, v2.y, v2.z);
+            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(v3.x, v3.y, v3.z);
+        rlEnd();
+        rlSetTexture(0);
+    } else {
+        Color c = Inventory::itemColor(it.kind);
+        // Fallback: dos quads cruzados para que tenga volumen
+        rlBegin(RL_QUADS);
+            rlColor4ub(c.r, c.g, c.b, 255);
+            rlVertex3f(v0.x, v0.y, v0.z);
+            rlVertex3f(v1.x, v1.y, v1.z);
+            rlVertex3f(v2.x, v2.y, v2.z);
+            rlVertex3f(v3.x, v3.y, v3.z);
+        rlEnd();
+    }
+
+    rlEnableBackfaceCulling();
+    rlEnableDepthTest();
+}
+
