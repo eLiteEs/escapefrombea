@@ -59,7 +59,7 @@ void Maze::generate(int mw, int mh, uint32_t seed) {
             if (exposed == 0) continue;
 
             int r = (int)(varRng() % 100);
-            if      (r < 4)  wallVariant[y][x] = 1;   // 4% taquillas
+            if      (r < 8)  wallVariant[y][x] = 1;   // 4% taquillas
             else if (r < 12) wallVariant[y][x] = 2;   // 8% ladrillo
             else             wallVariant[y][x] = 0;   // resto azulejo
         }

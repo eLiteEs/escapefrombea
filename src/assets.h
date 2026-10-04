@@ -18,6 +18,9 @@ struct Assets {
     bool hasFloorTile    = false;
     bool hasCrosshair    = false;
 
+    Texture2D itemTex[ITEM_KIND_COUNT] = {};
+    bool hasItemTex[ITEM_KIND_COUNT]   = {};
+
     Music musicMenu  = {};
     Music musicLevel = {};
     Sound sfxCaught  = {};

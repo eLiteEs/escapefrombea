@@ -1,5 +1,6 @@
 #include "inventory.h"
 #include <cmath>
+#include "lang.h"
 #include <algorithm>
 
 namespace Inventory {
@@ -94,8 +95,8 @@ bool useSelected(Player& p, const Maze& maze,
     if (it.kind == ITEM_NONE || it.count <= 0) return false;
 
     // Solo la piedra es lanzable por ahora
-    if (it.kind != ITEM_ROCK) return false;
-
+    if (it.kind != ITEM_ROCK && it.kind != ITEM_BOX && it.kind != ITEM_LIME && it.kind != ITEM_BICIMAD) return false;
+    
     Vector3 fwd = {
         sinf(p.yaw) * cosf(p.pitch),
         sinf(p.pitch),
@@ -106,16 +107,56 @@ bool useSelected(Player& p, const Maze& maze,
     pr.pos = { p.pos.x + fwd.x * 0.4f,
                C::EYE_H - 0.10f,
                p.pos.z + fwd.z * 0.4f };
-    pr.vel = { fwd.x * C::ROCK_THROW_SPEED,
-               fwd.y * C::ROCK_THROW_SPEED + 2.0f,
-               fwd.z * C::ROCK_THROW_SPEED };
+
+    switch(it.kind) {
+        case ITEM_ROCK:
+		pr.vel = { fwd.x * C::ROCK_THROW_SPEED, fwd.y * C::ROCK_THROW_SPEED + 2.0f, fwd.z * C::ROCK_THROW_SPEED };
+		break;
+
+        case ITEM_BOX:
+		pr.vel = { fwd.x * C::BOX_THROW_SPEED, fwd.y * C::BOX_THROW_SPEED + 2.0f, fwd.z * C::BOX_THROW_SPEED };
+		break;
+
+        case ITEM_LIME:
+		pr.vel = { fwd.x * C::LIME_THROW_SPEED, fwd.y * C::LIME_THROW_SPEED + 2.0f, fwd.z * C::LIME_THROW_SPEED };
+		break;
+
+        case ITEM_BICIMAD:
+		pr.vel = { fwd.x * C::BICIMAD_THROW_SPEED, fwd.y * C::BICIMAD_THROW_SPEED + 2.0f, fwd.z * C::BICIMAD_THROW_SPEED };
+		break;
+        default:
+		pr.vel = { fwd.x * C::ROCK_THROW_SPEED, fwd.y * C::ROCK_THROW_SPEED + 2.0f, fwd.z * C::ROCK_THROW_SPEED };
+		break;
+    }
+
     pr.lifetime = 3.0f;
     pr.alive    = true;
     pr.kind     = it.kind;
     projectiles.push_back(pr);
 
     removeOne(p, p.selectedSlot);
-    p.throwCooldown = C::ROCK_THROW_CD;
+    
+    switch(it.kind) {
+        case ITEM_ROCK:
+            p.throwCooldown = C::ROCK_THROW_CD;
+   	    break;
+
+        case ITEM_BOX:
+            p.throwCooldown = C::BOX_THROW_CD;
+            break;
+
+        case ITEM_LIME:
+            p.throwCooldown = C::LIME_THROW_CD;
+	    break;
+
+        case ITEM_BICIMAD:
+            p.throwCooldown = C::BICIMAD_THROW_CD;
+	    break;
+        default:
+            p.throwCooldown = C::ROCK_THROW_CD;
+	    break;
+    }
+    
     p.attackFlash   = 0.10f;
     (void)maze;
     return true;
@@ -149,10 +190,38 @@ void updateProjectiles(std::vector<Projectile>& projs,
                 float dz = e.pos.z - pr.pos.z;
                 float dy = 1.35f - pr.pos.y;
                 if (dx*dx + dz*dz < 0.5f*0.5f && fabsf(dy) < 1.2f) {
-                    e.stunT    = C::ROCK_STUN;
-                    e.rageT    = C::ROCK_RAGE_T;
-                    e.rageMult = C::ROCK_RAGE_MULT;
-                    e.hitFlash = 0.30f;
+                    switch(pr.kind) {
+                        case ITEM_ROCK:
+                            e.stunT    = C::ROCK_STUN;
+                            e.rageT    = C::ROCK_RAGE_T;
+                            e.rageMult = C::ROCK_RAGE_MULT;
+   	                    break;
+
+                        case ITEM_BOX:
+                            e.stunT    = C::BOX_STUN;
+                            e.rageT    = C::BOX_RAGE_T;
+                            e.rageMult = C::BOX_RAGE_MULT;
+                            break;
+
+                        case ITEM_LIME:
+	                    e.stunT    = C::LIME_STUN;
+                            e.rageT    = C::LIME_RAGE_T;
+                            e.rageMult = C::LIME_RAGE_MULT;
+                            break;
+
+                        case ITEM_BICIMAD:
+	                    e.stunT    = C::BICIMAD_STUN;
+                            e.rageT    = C::BICIMAD_RAGE_T;
+                            e.rageMult = C::BICIMAD_RAGE_MULT;
+                            break;
+                        default:
+	                    e.stunT    = C::ROCK_STUN;
+                            e.rageT    = C::ROCK_RAGE_T;
+                            e.rageMult = C::ROCK_RAGE_MULT;
+                            break;
+                    }
+                    
+		    e.hitFlash = 0.30f;
                     pr.alive = false;
                     break;
                 }
@@ -186,14 +255,20 @@ void updateEnemyStatus(std::vector<Enemy>& enemies, float dt) {
 Color itemColor(ItemKind kind) {
     switch (kind) {
         case ITEM_ROCK: return (Color){ 130, 130, 145, 255 };
-        default:        return (Color){ 200, 200, 200, 255 };
+        case ITEM_BOX: return (Color){0,100,0};
+	case ITEM_LIME: return (Color){0,255,0};
+	case ITEM_BICIMAD: return (Color){100,100,255};
+	default:        return (Color){ 200, 200, 200, 255 };
     }
 }
 
 const char* itemName(ItemKind kind) {
     switch (kind) {
-        case ITEM_ROCK: return "piedra";
-        default:        return "item";
+        case ITEM_ROCK: return L("item.rock", "piedra");
+	case ITEM_BOX: return L("item.box", "caja");
+	case ITEM_LIME: return "lime";
+	case ITEM_BICIMAD: return "bicimad";
+	default:        return L("item", "item");
     }
 }
 

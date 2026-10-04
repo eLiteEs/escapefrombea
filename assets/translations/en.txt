@@ -117,3 +117,13 @@ slot.hint=Choose a slot. Starting a new game overwrites it.
 
 toast.noslot=No slot assigned
 toast.saved=Game saved
+toast.locker.hidden=Hidden. [%s/RMB] leave
+toast.locker.leave=Leaved the locker
+toast.inventory.full=Full inventory
+toast.energy.full=Energy refilled!
+toast.energy.alreadyfull=You already have the energy full
+toast.item.dropped=Dropped item
+
+item=item
+item.rock=rock
+item.box=box

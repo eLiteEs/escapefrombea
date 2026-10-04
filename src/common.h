@@ -54,32 +54,39 @@ namespace C {
     constexpr const char* GAME_VERSION = "beta 1.5";
     constexpr const char* GAME_TITLE   = "Escape From Marisa 3";
 
-    // Armas
-    constexpr int   SLINGSHOT_AMMO_DEF = 6;
-    constexpr float STUN_SLING         = 1.5f;
-    constexpr float RAGE_SLING_T       = 10.0f;
-    constexpr float RAGE_SLING_MULT    = 1.8f;
-    constexpr float STUN_WHIP          = 0.6f;
-    constexpr float RAGE_WHIP_T        = 8.0f;
-    constexpr float RAGE_WHIP_MULT     = 1.5f;
-    constexpr float WHIP_RANGE         = 3.0f;
-    constexpr float WHIP_CONE          = 0.70f;
-    constexpr float WHIP_CD            = 1.0f;
-    constexpr float SLING_CD           = 0.7f;
-
     // Jumpscare
     constexpr float JUMPSCARE_DURATION = 1.3f;   // duración total
     constexpr float JUMPSCARE_ZOOM_IN  = 0.15f;  // primer 15% es zoom rápido
 
     // Inventario e items
     constexpr int   INV_SLOTS        = 5;
-    constexpr float PICKUP_RANGE     = 1.9f;
-    constexpr float INTERACT_RANGE   = 1.4f;
+    constexpr float PICKUP_RANGE     = 3.0f;
+    constexpr float INTERACT_RANGE   = 2.0f;
+    
     constexpr float ROCK_THROW_SPEED = 24.0f;
     constexpr float ROCK_THROW_CD    = 0.45f;
     constexpr float ROCK_STUN        = 1.8f;
     constexpr float ROCK_RAGE_T      = 6.0f;
     constexpr float ROCK_RAGE_MULT   = 1.4f;
+    
+    constexpr float BOX_THROW_SPEED  = 20.0f;
+    constexpr float BOX_THROW_CD     = 0.45f;
+    constexpr float BOX_STUN         = 2.0f;
+    constexpr float BOX_RAGE_T       = 7.0f;
+    constexpr float BOX_RAGE_MULT    = 1.4f;
+    
+    constexpr float LIME_THROW_SPEED = 16.0f;
+    constexpr float LIME_THROW_CD    = 1.0f;
+    constexpr float LIME_STUN        = 2.0f;
+    constexpr float LIME_RAGE_T      = 8.0f;
+    constexpr float LIME_RAGE_MULT   = 1.8f;
+    
+    constexpr float BICIMAD_THROW_SPEED = 12.0f;
+    constexpr float BICIMAD_THROW_CD    = 2.0f;
+    constexpr float BICIMAD_STUN        = 3.0f;
+    constexpr float BICIMAD_RAGE_T      = 10.0f;
+    constexpr float BICIMAD_RAGE_MULT   = 2.0f;
+   
     constexpr float ROCK_PICKUP_BOB  = 0.18f;
     constexpr float STAM_WATER_MAX   = 2.0f;
     constexpr float WATER_COOLDOWN   = 0.5f;
@@ -106,6 +113,9 @@ enum Diff { DIFF_NORMAL = 0, DIFF_EXPERT, DIFF_NIGHTMARE, DIFF_COUNT };
 enum ItemKind {
     ITEM_NONE = 0,
     ITEM_ROCK,
+    ITEM_BOX,
+    ITEM_LIME,
+    ITEM_BICIMAD,
     ITEM_KIND_COUNT
 };
 

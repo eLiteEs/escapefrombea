@@ -80,6 +80,22 @@ void Assets::load() {
     wallBrick  = loadTileable(Paths::sprite("wall_brick.png").c_str(),  hasWallBrick);
     floorTile  = loadTileable(Paths::sprite("floor_tile.png").c_str(),  hasFloorTile);
 
+    {
+        struct { ItemKind kind; const char* file; } defs[] = {
+            { ITEM_ROCK,    "rock.png"    },
+            { ITEM_BOX,     "box.png"     },
+            { ITEM_LIME,    "lime.png"    },
+            { ITEM_BICIMAD, "bicimad.png" },
+        };
+        for (auto& d : defs) {
+            std::string path = Paths::sprite(d.file);
+            itemTex[d.kind] = LoadTexture(path.c_str());
+            hasItemTex[d.kind] = (itemTex[d.kind].id != 0);
+            if (hasItemTex[d.kind])
+                SetTextureFilter(itemTex[d.kind], TEXTURE_FILTER_BILINEAR);
+        }
+    }
+
     musicMenu  = loadMusicSmart("music_menu.ogg");
     musicLevel = loadMusicSmart("music_level.ogg");
 
@@ -100,6 +116,10 @@ void Assets::unload() {
     if (hasWallLocker && wallLocker.id != 0) UnloadTexture(wallLocker);
     if (hasWallBrick  && wallBrick.id  != 0) UnloadTexture(wallBrick);
     if (hasFloorTile  && floorTile.id  != 0) UnloadTexture(floorTile);
+
+    for (int i = 0; i < ITEM_KIND_COUNT; ++i)
+        if (hasItemTex[i] && itemTex[i].id != 0)
+            UnloadTexture(itemTex[i]);
 
     if (musicMenu.stream.buffer  != nullptr) UnloadMusicStream(musicMenu);
     if (musicLevel.stream.buffer != nullptr) UnloadMusicStream(musicLevel);

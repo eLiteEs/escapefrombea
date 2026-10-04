@@ -785,19 +785,35 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
 
             float bob = sinf(w.bobT) * C::ROCK_PICKUP_BOB;
             Vector3 dp = { w.pos.x, w.pos.y + bob, w.pos.z };
-            Color c = Inventory::itemColor(w.kind);
 
-            DrawCube(dp, 0.28f, 0.28f, 0.28f, c);
-            DrawCubeWires(dp, 0.30f, 0.30f, 0.30f, (Color){ 40, 40, 50, 255 });
+            float size = 0.55f;
+            switch (w.kind) {
+                case ITEM_ROCK:    size = 0.35f; break;
+                case ITEM_BOX:     size = 0.70f; break;
+                case ITEM_LIME:    size = 0.85f; break;
+                case ITEM_BICIMAD: size = 1.00f; break;
+                default: break;
+            }
+
+            if (assets.hasItemTex[w.kind]) {
+                DrawBillboard(cam, assets.itemTex[w.kind],
+                              { dp.x, dp.y + size * 0.5f, dp.z },
+                              size, WHITE);
+            } else {
+                Color c = Inventory::itemColor(w.kind);
+                DrawCube(dp, size * 0.6f, size * 0.6f, size * 0.6f, c);
+                DrawCubeWires(dp, size * 0.6f, size * 0.6f, size * 0.6f,
+                              (Color){ 40, 40, 50, 255 });
+            }
 
             if (dx*dx + dz*dz < C::PICKUP_RANGE * C::PICKUP_RANGE * 1.5f) {
                 float p2 = 0.35f + 0.10f * sinf((float)GetTime() * 5.0f);
-                DrawCubeWires(dp, 0.36f + p2, 0.36f + p2, 0.36f + p2,
+                DrawCubeWires(dp, size * 0.7f + p2, size * 0.7f + p2, size * 0.7f + p2,
                               (Color){ 255, 240, 120, 200 });
             }
         }
 
-        for (int y = 0; y < maze.h; ++y)
+	for (int y = 0; y < maze.h; ++y)
             for (int x = 0; x < maze.w; ++x) {
                 if (!maze.hasFountain(x, y)) continue;
                 Vector3 fp = {
@@ -819,10 +835,23 @@ void Game::drawGameplayView(const Player& pl, int vw, int vh, int playerNum) {
                          (Color){ 120, 210, 240, 200 });
             }
 
-	for (auto& pr : projectiles) {
-            Color c = Inventory::itemColor(pr.kind);
-            DrawSphere(pr.pos, 0.11f, c);
-            DrawSphereWires(pr.pos, 0.15f, 4, 4, (Color){ 220, 220, 220, 180 });
+        for (auto& pr : projectiles) {
+            float size = 0.25f;
+            switch (pr.kind) {
+                case ITEM_ROCK:    size = 0.18f; break;
+                case ITEM_BOX:     size = 0.35f; break;
+                case ITEM_LIME:    size = 0.45f; break;
+                case ITEM_BICIMAD: size = 0.55f; break;
+                default: break;
+            }
+            if (assets.hasItemTex[pr.kind]) {
+                DrawBillboard(cam, assets.itemTex[pr.kind], pr.pos, size, WHITE);
+            } else {
+                Color c = Inventory::itemColor(pr.kind);
+                DrawSphere(pr.pos, size * 0.5f, c);
+                DrawSphereWires(pr.pos, size * 0.6f, 4, 4,
+                                (Color){ 220, 220, 220, 180 });
+            }
         }
 
         // Enemigos
@@ -2177,11 +2206,34 @@ void Game::drawJumpscare() {
 }
 
 void Game::spawnWorldItems(int lvl, int size, std::mt19937& rng) {
-    int count = std::min(2 + lvl / 2, 6);
+    int count = std::min(3 + lvl / 2, 8);
+
     float minDistFromSpawn = size * C::CELL * 0.20f;
 
+    struct Weighted { ItemKind kind; int weight; };
+    const Weighted pool[] = {
+        { ITEM_ROCK,    50 },
+        { ITEM_BOX,     20 },
+        { ITEM_LIME,  20 },
+        { ITEM_BICIMAD,     10 },
+    };
+    const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
+
+    int totalWeight = 0;
+    for (int i = 0; i < POOL_SIZE; ++i) totalWeight += pool[i].weight;
+
+    auto rollKind = [&]() -> ItemKind {
+        int r = (int)(rng() % totalWeight);
+        int acc = 0;
+        for (int i = 0; i < POOL_SIZE; ++i) {
+            acc += pool[i].weight;
+            if (r < acc) return pool[i].kind;
+        }
+        return ITEM_ROCK;
+    };
+
     int attempts = 0;
-    while ((int)worldItems.size() < count && attempts < 500) {
+    while ((int)worldItems.size() < count && attempts < 800) {
         ++attempts;
         int cx = 1 + (int)(rng() % (size - 2));
         int cy = 1 + (int)(rng() % (size - 2));
@@ -2197,7 +2249,7 @@ void Game::spawnWorldItems(int lvl, int size, std::mt19937& rng) {
         if (overlap) continue;
 
         WorldPickup wp;
-        wp.kind = ITEM_ROCK;
+        wp.kind = rollKind();
         wp.pos  = { p.x, 0.35f, p.z };
         wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
         worldItems.push_back(wp);
@@ -2250,7 +2302,7 @@ void Game::handleInteraction(int p) {
             pl.yaw = pl.hiddenExitYaw;
             pl.hiddenCellX = -1;
             pl.hiddenCellY = -1;
-            if (p == 0) showToast("Saliste de la taquilla");
+            if (p == 0) showToast(L("toast.locker.leave","Saliste de la taquilla"));
         }
         return;
     }
@@ -2261,11 +2313,11 @@ void Game::handleInteraction(int p) {
     // 1) Recoger item cercano
     int idx = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
     if (idx >= 0) {
+	ItemKind kind = worldItems[idx].kind;
         if (Inventory::collectPickup(pl, worldItems, idx)) {
-            if (p == 0) showToast(TextFormat("Recogido: %s",
-                                             Inventory::itemName(worldItems.empty() ? ITEM_ROCK : ITEM_ROCK)));
+            if (p == 0) showToast(TextFormat("%s", Inventory::itemName(kind)));
         } else {
-            if (p == 0) showToast("Inventario lleno");
+            if (p == 0) showToast(L("toast.inventory.full", "Inventario lleno"));
         }
         return;
     }
@@ -2286,7 +2338,7 @@ void Game::handleInteraction(int p) {
         while (pl.yaw >  PI) pl.yaw -= 2.0f * PI;
         while (pl.yaw < -PI) pl.yaw += 2.0f * PI;
         pl.sprinting = false;
-        if (p == 0) showToast(TextFormat("Escondido. [%s/RMB] salir",
+        if (p == 0) showToast(TextFormat(L("toast.locker.hidden", "Escondido. [%s/RMB] salir"),
                                          Config::keyName(cfg.binds[p].interact)));
     }
     else if (what == 2) {
@@ -2296,9 +2348,9 @@ void Game::handleInteraction(int p) {
             pl.exhausted = false;
             pl.staminaDelay = 0.0f;
             fountainCooldown[p] = C::WATER_COOLDOWN;
-            if (p == 0) showToast("Energia al maximo!");
+            if (p == 0) showToast(L("toast.energy.full", "Energia al maximo!"));
         } else {
-            if (p == 0) showToast("Ya tienes la energia llena");
+            if (p == 0) showToast(L("toast.energy.alreadyfull", "Ya tienes la energia llena"));
             fountainCooldown[p] = 0.3f;
         }
     }
@@ -2323,7 +2375,7 @@ void Game::handleItemInput(int p) {
     // Dropear
     if (IsKeyPressed(cfg.binds[p].drop)) {
         if (Inventory::dropSelected(pl, maze, worldItems)) {
-            if (p == 0) showToast("Item dropeado");
+            if (p == 0) showToast(L("toast.item.dropped", "Item dropeado"));
         }
     }
 
@@ -2372,12 +2424,21 @@ void Game::drawInventory(const Player& pl, int vw, int vh) {
 
         const InvItem& it = pl.inventory[i];
         if (it.kind != ITEM_NONE && it.count > 0) {
-            Color itemCol = Inventory::itemColor(it.kind);
             int isz = slotSize - 16;
             int ix = x + (slotSize - isz) / 2;
             int iy = y + (slotSize - isz) / 2;
-            DrawRectangle(ix, iy, isz, isz, itemCol);
-            DrawRectangleLines(ix, iy, isz, isz, (Color){ 40, 40, 50, 200 });
+
+            if (assets.hasItemTex[it.kind]) {
+                Texture2D tex = assets.itemTex[it.kind];
+                DrawTexturePro(tex,
+                    { 0, 0, (float)tex.width, (float)tex.height },
+                    { (float)ix, (float)iy, (float)isz, (float)isz },
+                    { 0, 0 }, 0.0f, WHITE);
+            } else {
+                Color itemCol = Inventory::itemColor(it.kind);
+                DrawRectangle(ix, iy, isz, isz, itemCol);
+                DrawRectangleLines(ix, iy, isz, isz, (Color){ 40, 40, 50, 200 });
+            }
 
             if (it.count > 1) {
                 const char* cnt = TextFormat("%d", it.count);
