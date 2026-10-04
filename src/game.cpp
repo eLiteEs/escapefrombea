@@ -933,20 +933,11 @@ void Game::drawSplitScreen() {
         ClearBackground((Color){ 12, 12, 18, 255 });
         drawGameplayView(players[0], rtLeft.texture.width, rtLeft.texture.height, 0);
     EndTextureMode();
+
     BeginTextureMode(rtRight);
         ClearBackground((Color){ 12, 12, 18, 255 });
         drawGameplayView(players[1], rtRight.texture.width, rtRight.texture.height, 1);
     EndTextureMode();
-    BeginDrawing();
-        ClearBackground(BLACK);
-        DrawTextureRec(rtLeft.texture,
-            { 0, 0, (float)rtLeft.texture.width, -(float)rtLeft.texture.height },
-            { 0, 0 }, WHITE);
-        DrawTextureRec(rtRight.texture,
-            { 0, 0, (float)rtRight.texture.width, -(float)rtRight.texture.height },
-            { (float)rtLeft.texture.width, 0 }, WHITE);
-        DrawRectangle(rtLeft.texture.width - 2, 0, 4, rtH, BLACK);
-    EndDrawing();
 }
 
 void Game::drawCinematic() {
@@ -1662,12 +1653,29 @@ void Game::drawMenus() {
 void Game::draw() {
     if (state == ST_PLAYING && twoPlayers) {
         drawSplitScreen();
+
         BeginDrawing();
+            ClearBackground(BLACK);
+
+            // Blit de cada mitad a la pantalla
+            DrawTextureRec(rtLeft.texture,
+                { 0, 0, (float)rtLeft.texture.width, -(float)rtLeft.texture.height },
+                { 0, 0 }, WHITE);
+            DrawTextureRec(rtRight.texture,
+                { 0, 0, (float)rtRight.texture.width, -(float)rtRight.texture.height },
+                { (float)rtLeft.texture.width, 0 }, WHITE);
+
+            // Separador central
+            DrawRectangle(rtLeft.texture.width - 2, 0, 4, rtH, BLACK);
+
+            // Overlays encima
             drawToast();
             drawDebugOverlay(GetScreenWidth(), GetScreenHeight(), -1);
-            if (cfg.showFps && !Debug::showOverlay) DrawFPS(GetScreenWidth() - 90, 20);
+            if (cfg.showFps && !Debug::showOverlay)
+                DrawFPS(GetScreenWidth() - 90, 20);
         EndDrawing();
-    } else if (state == ST_PLAYING) {
+    }
+    else if (state == ST_PLAYING) {
         BeginDrawing();
             ClearBackground((Color){ 12, 12, 18, 255 });
             drawGameplayView(players[0], GetScreenWidth(), GetScreenHeight(), 0);
@@ -1675,16 +1683,20 @@ void Game::draw() {
             drawDebugOverlay(GetScreenWidth(), GetScreenHeight(), 0);
             if (cfg.showFps && !Debug::showOverlay) DrawFPS(GetScreenWidth() - 90, 20);
         EndDrawing();
-    } else if (state == ST_CREDITS) {
+    }
+    else if (state == ST_CREDITS) {
         BeginDrawing();
-        ClearBackground(BLACK);
-        credits.draw(GetScreenWidth(), GetScreenHeight());
+            ClearBackground(BLACK);
+            credits.draw(GetScreenWidth(), GetScreenHeight());
         EndDrawing();
-    } else if (state == ST_CINEMATIC) {
+    }
+    else if (state == ST_CINEMATIC) {
         drawCinematic();
-    } else if (state == ST_JUMPSCARE) {
+    }
+    else if (state == ST_JUMPSCARE) {
         drawJumpscare();
-    } else {
+    }
+    else {
         drawMenus();
     }
 }
