@@ -537,10 +537,8 @@ void Game::update(float dt) {
     }
     else if (state == ST_JUMPSCARE) {
         jumpscareTimer -= dt;
-        if (jumpscareTimer <= 0.0f || IsKeyPressed(KEY_ESCAPE) ||
-            IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-        {
+    
+        if (jumpscareTimer <= 0.0f) {
             jumpscareTimer = 0.0f;
             jumpscareEnemy = -1;
             EnableCursor();
@@ -2205,14 +2203,6 @@ void Game::drawJumpscare() {
         float k = (t - 0.85f) / 0.15f;
         unsigned char a = (unsigned char)(k * 255);
         DrawRectangle(0, 0, W, H, (Color){ 0, 0, 0, a });
-    }
-
-    // Hint para saltar
-    if (t > 0.3f && ((int)(GetTime() * 3.0) & 1)) {
-        const char* hint = "Pulsa cualquier tecla para continuar";
-        int hs = 18;
-        DrawText(hint, W / 2 - MeasureText(hint, hs) / 2, H - 60, hs,
-                 (Color){ 180, 180, 180, 220 });
     }
 
     EndDrawing();
