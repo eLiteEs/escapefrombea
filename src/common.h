@@ -51,7 +51,7 @@ namespace C {
     constexpr int   FPS_COUNT      = 6;
 
     // Version
-    constexpr const char* GAME_VERSION = "beta 1.5";
+    constexpr const char* GAME_VERSION = "beta 1.6";
     constexpr const char* GAME_TITLE   = "Escape From Marisa 3";
 
     // Jumpscare
