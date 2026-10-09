@@ -1,0 +1,22 @@
+IDI_ICON1 ICON "icon.ico"
+
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName",      "Buhardilla Prods"
+      VALUE "FileDescription",  "Escape from Bea"
+      VALUE "FileVersion",      "1.6b"
+      VALUE "ProductName",      "Escape from Bea"
+      VALUE "ProductVersion",   "1.6b"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END

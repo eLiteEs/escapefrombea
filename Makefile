@@ -26,7 +26,7 @@ DIST_DIR     := dist
 SOURCES      := $(wildcard $(SRC_DIR)/*.cpp)
 HEADERS      := $(wildcard $(SRC_DIR)/*.h)
 OBJ_LINUX    := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-linux/%.o,$(SOURCES))
-OBJ_WIN      := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-win/%.o,$(SOURCES))
+OBJ_WIN      := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-win/%.o,$(SOURCES)) win/resources.o
 
 EMCC	 ?= em++
 SRC_DIR      := src
