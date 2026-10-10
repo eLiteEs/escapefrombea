@@ -264,7 +264,9 @@ void Game::startLevel(int lvl) {
     e.prevPos = p;
 
     int r = (int)(rng() % 100);
-    if (lvl >= 4 && r < 30)
+    if (lvl >= 5 && r > 10) {
+      e.kind = ENEMY_HYPERGAMY;
+    } else if (lvl >= 4 && r < 30)
       e.kind = ENEMY_ALMEIDA;
     else if (lvl >= 3 && r < 30)
       e.kind = ENEMY_CV; // raro, solo alto nivel
