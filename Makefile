@@ -18,7 +18,7 @@
 
 APP_NAME     := escape_from_bea
 GAME_TITLE   := Escape From Marisa 3 - Escape From Bea
-VERSION      ?= 1.0.0
+VERSION      ?= 1.5.1b
 SRC_DIR      := src
 BUILD_DIR    := build
 DIST_DIR     := dist
@@ -28,7 +28,7 @@ HEADERS      := $(wildcard $(SRC_DIR)/*.h)
 OBJ_LINUX    := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-linux/%.o,$(SOURCES))
 OBJ_WIN      := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-win/%.o,$(SOURCES)) win/resources.o
 
-EMCC	 ?= em++
+EMCC         ?= em++
 SRC_DIR      := src
 WEB_VENDOR   ?= vendor/web
 WEB_INC      := $(WEB_VENDOR)/include
