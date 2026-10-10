@@ -1,0 +1,290 @@
+[
+  {
+    "file": "src/assets.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/assets.cpp",
+      "-o",
+      "build/obj-linux/assets.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/assets.o"
+  },
+  {
+    "file": "src/attract.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/attract.cpp",
+      "-o",
+      "build/obj-linux/attract.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/attract.o"
+  },
+  {
+    "file": "src/cinematic.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/cinematic.cpp",
+      "-o",
+      "build/obj-linux/cinematic.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/cinematic.o"
+  },
+  {
+    "file": "src/config.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/config.cpp",
+      "-o",
+      "build/obj-linux/config.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/config.o"
+  },
+  {
+    "file": "src/credits.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/credits.cpp",
+      "-o",
+      "build/obj-linux/credits.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/credits.o"
+  },
+  {
+    "file": "src/debug.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/debug.cpp",
+      "-o",
+      "build/obj-linux/debug.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/debug.o"
+  },
+  {
+    "file": "src/enemy.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/enemy.cpp",
+      "-o",
+      "build/obj-linux/enemy.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/enemy.o"
+  },
+  {
+    "file": "src/game.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/game.cpp",
+      "-o",
+      "build/obj-linux/game.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/game.o"
+  },
+  {
+    "file": "src/inventory.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/inventory.cpp",
+      "-o",
+      "build/obj-linux/inventory.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/inventory.o"
+  },
+  {
+    "file": "src/lang.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/lang.cpp",
+      "-o",
+      "build/obj-linux/lang.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/lang.o"
+  },
+  {
+    "file": "src/main.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/main.cpp",
+      "-o",
+      "build/obj-linux/main.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/main.o"
+  },
+  {
+    "file": "src/maze.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/maze.cpp",
+      "-o",
+      "build/obj-linux/maze.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/maze.o"
+  },
+  {
+    "file": "src/player.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/player.cpp",
+      "-o",
+      "build/obj-linux/player.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/player.o"
+  },
+  {
+    "file": "src/save.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/save.cpp",
+      "-o",
+      "build/obj-linux/save.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/save.o"
+  },
+  {
+    "file": "src/ui.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/ui.cpp",
+      "-o",
+      "build/obj-linux/ui.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/ui.o"
+  },
+  {
+    "file": "src/world_mesh.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Isrc",
+      "-c",
+      "src/world_mesh.cpp",
+      "-o",
+      "build/obj-linux/world_mesh.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/world_mesh.o"
+  }
+]
