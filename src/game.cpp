@@ -1510,6 +1510,24 @@ void Game::showToast(const char *msg) {
   toastTimer = 1.8f;
 }
 
+static void fillSaveFromPlayers(SaveSlot &s, const Player *players,
+                                int numPlayers) {
+  // Limpia por si acaso
+  for (int p = 0; p < 2; ++p) {
+    s.selectedSlot[p] = 0;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      s.inventory[p][i].kind = 0;
+      s.inventory[p][i].count = 0;
+    }
+  }
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    s.selectedSlot[p] = players[p].selectedSlot;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      s.inventory[p][i].kind = (int)players[p].inventory[i].kind;
+      s.inventory[p][i].count = players[p].inventory[i].count;
+    }
+  }
+}
 void Game::saveCurrentGame() {
   if (currentSlot < 0) {
     showToast(L("toast.noslot", "Sin slot asignado"));
@@ -1521,6 +1539,8 @@ void Game::saveCurrentGame() {
   s.mode = mode;
   s.twoPlayers = twoPlayers;
   s.playtime = totalPlaytime;
+  fillSaveFromPlayers(s, players, twoPlayers ? 2 : 1);
+
   saves.saveSlot(currentSlot, s);
   showToast(L("toast.saved", "Partida guardada"));
 }
@@ -1534,6 +1554,8 @@ void Game::autoSaveProgress() {
   s.mode = mode;
   s.twoPlayers = twoPlayers;
   s.playtime = totalPlaytime;
+  fillSaveFromPlayers(s, players, twoPlayers ? 2 : 1);
+
   saves.saveSlot(currentSlot, s);
 }
 
@@ -1567,6 +1589,29 @@ void Game::loadGameFromSlot(int slot) {
   // Sin cinemática al cargar
   startLevel(level);
   assignGamepads();
+
+  // Restaurar inventario (startLevel ya ha reseteado el resto)
+  int numPlayers = twoPlayers ? 2 : 1;
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    int sel = s.selectedSlot[p];
+    if (sel < 0 || sel >= C::INV_SLOTS)
+      sel = 0;
+    players[p].selectedSlot = sel;
+
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      ItemKind k = (ItemKind)s.inventory[p][i].kind;
+      int c = s.inventory[p][i].count;
+
+      if (k <= ITEM_NONE || k >= ITEM_KIND_COUNT || c <= 0) {
+        players[p].inventory[i].kind = ITEM_NONE;
+        players[p].inventory[i].count = 0;
+      } else {
+        players[p].inventory[i].kind = k;
+        players[p].inventory[i].count = c;
+      }
+    }
+  }
+
   DisableCursor();
   state = ST_PLAYING;
 
