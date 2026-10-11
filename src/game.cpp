@@ -213,84 +213,6 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.attackFlash = 0.0f;
 }
 
-void Game::startLevel(int lvl) {
-  int size = 11 + (lvl - 1) * 2;
-  if (mode == MODE_ENDLESS && size > C::ENDLESS_MAX_SIZE)
-    size = C::ENDLESS_MAX_SIZE;
-
-  uint32_t seed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
-  currentSeed = seed;
-  maze.generate(size, size, seed);
-  world.build(maze, assets);
-
-  resetPlayerState(players[0], maze.cellCenter(1, 1));
-  if (twoPlayers)
-    resetPlayerState(players[1],
-                     findFreeSpawnNear(maze, 1, 1, maze.cellCenter(1, 1)));
-
-  exitPos = maze.cellCenter(size - 2, size - 2);
-  levelTime = 0.0f;
-
-  enemies.clear();
-  int count;
-  if (mode == MODE_ENDLESS)
-    count = std::min(2 + lvl / 2, 12);
-  else
-    count = lvl + 1;
-
-  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();
-  float minDist = size * C::CELL * 0.35f;
-
-  std::mt19937 rng(seed ^ 0xA5A5A5A5u);
-
-  int attempts = 0;
-  while ((int)enemies.size() < count && attempts < 1000) {
-    ++attempts;
-    int cx = 1 + (int)(rng() % (size - 2));
-    int cy = 1 + (int)(rng() % (size - 2));
-    if (maze.wallAt(cx, cy))
-      continue;
-    Vector3 p = maze.cellCenter(cx, cy);
-    if (Vector3Distance(p, players[0].pos) < minDist)
-      continue;
-
-    Enemy e;
-    e.pos = p;
-    e.dir = {0, 0};
-    e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
-    e.turnT = 0.0f;
-    e.prevPos = p;
-
-    int r = (int)(rng() % 100);
-    if (lvl >= 5 && r > 10) {
-      e.kind = ENEMY_HYPERGAMY;
-    } else if (lvl >= 4 && r < 30)
-      e.kind = ENEMY_ALMEIDA;
-    else if (lvl >= 3 && r < 30)
-      e.kind = ENEMY_CV; // raro, solo alto nivel
-    else if (lvl >= 3 && r < 40)
-      e.kind = ENEMY_YE;
-    else if (lvl >= 2 && r < 65)
-      e.kind = ENEMY_MARISA;
-    else if (lvl >= 2 && r < 85)
-      e.kind = ENEMY_ALT;
-    else
-      e.kind = ENEMY_BEA;
-    e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
-    enemies.push_back(e);
-  }
-
-  worldItems.clear();
-  projectiles.clear();
-  spawnWorldItems(lvl, size, rng);
-  fountainCooldown[0] = 0.0f;
-  fountainCooldown[1] = 0.0f;
-
-  maze.markExplored(players[0].pos.x, players[0].pos.z, C::FOG_RADIUS);
-  if (twoPlayers)
-    maze.markExplored(players[1].pos.x, players[1].pos.z, C::FOG_RADIUS);
-}
-
 // ---------- Cinemáticas ----------
 bool Game::hasStory(const char *name) const {
   std::string full = Paths::story(name);
@@ -3007,4 +2929,234 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
 
   rlEnableBackfaceCulling();
   rlEnableDepthTest();
+}
+
+bool Game::tryLoadCustomLevel(int lvl, LevelExtras &extras) {
+  if (mode != MODE_STORY)
+    return false;
+
+  char fname[64];
+  snprintf(fname, sizeof(fname), "level_%02d_map.dgn", lvl);
+  std::string full = Paths::level(fname);
+
+  FILE *f = fopen(full.c_str(), "rb");
+  if (!f)
+    return false;
+  fclose(f);
+
+  return maze.loadFromFile(full.c_str(), extras);
+}
+
+void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
+                                     int lvl, std::mt19937 &rng) {
+  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();
+
+  for (const auto &p : positions) {
+    // Solo colocamos si la celda es transitable
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+
+    Enemy e;
+    e.pos = p;
+    e.dir = {0, 0};
+    e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
+    e.turnT = 0.0f;
+    e.prevPos = p;
+
+    int r = (int)(rng() % 100);
+    if (lvl >= 5 && r > 10)
+      e.kind = ENEMY_HYPERGAMY;
+    else if (lvl >= 4 && r < 30)
+      e.kind = ENEMY_ALMEIDA;
+    else if (lvl >= 3 && r < 30)
+      e.kind = ENEMY_CV;
+    else if (lvl >= 3 && r < 40)
+      e.kind = ENEMY_YE;
+    else if (lvl >= 2 && r < 65)
+      e.kind = ENEMY_MARISA;
+    else if (lvl >= 2 && r < 85)
+      e.kind = ENEMY_ALT;
+    else
+      e.kind = ENEMY_BEA;
+
+    e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+    enemies.push_back(e);
+  }
+}
+
+void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
+                                   std::mt19937 &rng) {
+  struct Weighted {
+    ItemKind kind;
+    int weight;
+  };
+  const Weighted pool[] = {{ITEM_ROCK, 30},    {ITEM_BOX, 20},
+                           {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
+                           {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
+  const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
+
+  int totalWeight = 0;
+  for (int i = 0; i < POOL_SIZE; ++i)
+    totalWeight += pool[i].weight;
+
+  auto rollKind = [&]() -> ItemKind {
+    int r = (int)(rng() % totalWeight);
+    int acc = 0;
+    for (int i = 0; i < POOL_SIZE; ++i) {
+      acc += pool[i].weight;
+      if (r < acc)
+        return pool[i].kind;
+    }
+    return ITEM_ROCK;
+  };
+
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+
+    WorldPickup wp;
+    wp.kind = rollKind();
+    wp.pos = {p.x, 0.35f, p.z};
+    wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
+    worldItems.push_back(wp);
+  }
+}
+
+void Game::startLevel(int lvl) {
+  // ============================================================
+  // 1) Intentar cargar un mapa custom (solo modo historia)
+  // ============================================================
+  bool usedCustom = false;
+  LevelExtras extras;
+
+  if (tryLoadCustomLevel(lvl, extras)) {
+    usedCustom = true;
+    currentSeed = 0; // los mapas custom no tienen semilla procedural
+  } else {
+    // ========================================================
+    // 2) Generación procedural (código original)
+    // ========================================================
+    int size = 11 + (lvl - 1) * 2;
+    if (mode == MODE_ENDLESS && size > C::ENDLESS_MAX_SIZE)
+      size = C::ENDLESS_MAX_SIZE;
+
+    uint32_t seed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
+    currentSeed = seed;
+    maze.generate(size, size, seed);
+  }
+
+  // ============================================================
+  // 3) Construir mallas (una vez sepamos el laberinto final)
+  // ============================================================
+  world.build(maze, assets);
+  levelTime = 0.0f;
+
+  // ============================================================
+  // 4) Spawns de jugadores
+  // ============================================================
+  Vector3 p1Spawn;
+  Vector3 p2Spawn;
+
+  if (usedCustom && !extras.spawns.empty()) {
+    p1Spawn = extras.spawns[0];
+    if (extras.spawns.size() >= 2)
+      p2Spawn = extras.spawns[1];
+    else {
+      Vector2 c = maze.worldToCell(p1Spawn.x, p1Spawn.z);
+      p2Spawn = findFreeSpawnNear(maze, (int)c.x, (int)c.y, p1Spawn);
+    }
+  } else {
+    p1Spawn = maze.cellCenter(1, 1);
+    p2Spawn = findFreeSpawnNear(maze, 1, 1, p1Spawn);
+  }
+
+  resetPlayerState(players[0], p1Spawn);
+  if (twoPlayers)
+    resetPlayerState(players[1], p2Spawn);
+
+  // ============================================================
+  // 5) Salida
+  // ============================================================
+  if (usedCustom) {
+    exitPos = extras.exit;
+  } else {
+    exitPos = maze.cellCenter(maze.w - 2, maze.h - 2);
+  }
+
+  // ============================================================
+  // 6) Enemigos e items
+  // ============================================================
+  enemies.clear();
+  worldItems.clear();
+  projectiles.clear();
+
+  std::mt19937 rng((uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919) ^
+                   0xA5A5A5A5u);
+
+  if (usedCustom) {
+    spawnEnemiesFromPositions(extras.enemies, lvl, rng);
+    spawnItemsFromPositions(extras.items, rng);
+  } else {
+    // ----- Enemigos: código original -----
+    int count;
+    if (mode == MODE_ENDLESS)
+      count = std::min(2 + lvl / 2, 12);
+    else
+      count = lvl + 1;
+
+    float spd =
+        C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();
+    float minDist = maze.w * C::CELL * 0.35f;
+
+    int attempts = 0;
+    while ((int)enemies.size() < count && attempts < 1000) {
+      ++attempts;
+      int cx = 1 + (int)(rng() % (maze.w - 2));
+      int cy = 1 + (int)(rng() % (maze.h - 2));
+      if (maze.wallAt(cx, cy))
+        continue;
+      Vector3 p = maze.cellCenter(cx, cy);
+      if (Vector3Distance(p, players[0].pos) < minDist)
+        continue;
+
+      Enemy e;
+      e.pos = p;
+      e.dir = {0, 0};
+      e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
+      e.turnT = 0.0f;
+      e.prevPos = p;
+
+      int r = (int)(rng() % 100);
+      if (lvl >= 5 && r > 10)
+        e.kind = ENEMY_HYPERGAMY;
+      else if (lvl >= 4 && r < 30)
+        e.kind = ENEMY_ALMEIDA;
+      else if (lvl >= 3 && r < 30)
+        e.kind = ENEMY_CV;
+      else if (lvl >= 3 && r < 40)
+        e.kind = ENEMY_YE;
+      else if (lvl >= 2 && r < 65)
+        e.kind = ENEMY_MARISA;
+      else if (lvl >= 2 && r < 85)
+        e.kind = ENEMY_ALT;
+      else
+        e.kind = ENEMY_BEA;
+
+      e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+      enemies.push_back(e);
+    }
+
+    // ----- Items: código original -----
+    spawnWorldItems(lvl, maze.w, rng);
+  }
+
+  // ============================================================
+  // 7) Cooldowns y niebla
+  // ============================================================
+  fountainCooldown[0] = 0.0f;
+  fountainCooldown[1] = 0.0f;
+
+  maze.markExplored(players[0].pos.x, players[0].pos.z, C::FOG_RADIUS);
+  if (twoPlayers)
+    maze.markExplored(players[1].pos.x, players[1].pos.z, C::FOG_RADIUS);
 }

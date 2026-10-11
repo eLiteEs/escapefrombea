@@ -3,6 +3,14 @@
 #include <cstdint>
 #include <vector>
 
+struct LevelExtras {
+  std::vector<Vector3> spawns;  // celdas 's'
+  std::vector<Vector3> items;   // celdas 'i'
+  std::vector<Vector3> enemies; // celdas 'e'
+  bool hasExit = false;         // celdas 'f'
+  Vector3 exit = {0, 0, 0};
+};
+
 class Maze {
 public:
   int w = 0, h = 0;
@@ -41,4 +49,6 @@ public:
 
   bool findPath(Vector2 fromCell, Vector2 toCell,
                 std::vector<Vector2> &out) const;
+
+  bool loadFromFile(const char *path, LevelExtras &extras);
 };

@@ -1,9 +1,11 @@
 #include "maze.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <queue>
 #include <random>
 #include <stack>
+#include <string>
 #include <utility>
 
 void Maze::generate(int mw, int mh, uint32_t seed) {
@@ -256,5 +258,114 @@ bool Maze::findPath(Vector2 fromCell, Vector2 toCell,
     cy = p / w;
   }
   std::reverse(out.begin(), out.end());
+  return true;
+}
+
+bool Maze::loadFromFile(const char *path, LevelExtras &extras) {
+  FILE *f = fopen(path, "rb");
+  if (!f)
+    return false;
+
+  std::vector<std::string> lines;
+  char buf[4096];
+  while (fgets(buf, sizeof(buf), f)) {
+    std::string line = buf;
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+      line.pop_back();
+    if (!line.empty())
+      lines.push_back(line);
+  }
+  fclose(f);
+
+  if (lines.empty())
+    return false;
+
+  int nw = (int)lines[0].size();
+  int nh = (int)lines.size();
+  if (nw < 3 || nh < 3)
+    return false; // mapa demasiado pequeño
+  for (auto &l : lines)
+    if ((int)l.size() != nw)
+      return false; // filas de longitud desigual
+
+  w = nw;
+  h = nh;
+
+  g.assign(h, std::vector<int>(w, 0));
+  explored.assign(h, std::vector<bool>(w, false));
+  wallVariant.assign(h, std::vector<unsigned char>(w, 0));
+  fountains.assign(h, std::vector<bool>(w, false));
+  tents.assign(h, std::vector<bool>(w, false));
+
+  extras.spawns.clear();
+  extras.items.clear();
+  extras.enemies.clear();
+  extras.hasExit = false;
+  extras.exit = {0, 0, 0};
+
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      char c = lines[y][x];
+      Vector3 center = cellCenter(x, y);
+
+      switch (c) {
+      case '#':
+        g[y][x] = 1;
+        wallVariant[y][x] = 0;
+        break;
+      case 'L':
+        g[y][x] = 1;
+        wallVariant[y][x] = 1; // taquilla
+        break;
+      case '.':
+      case ' ':
+        g[y][x] = 0;
+        break;
+      case 's':
+        g[y][x] = 0;
+        extras.spawns.push_back(center);
+        break;
+      case 'i':
+        g[y][x] = 0;
+        extras.items.push_back(center);
+        break;
+      case 'e':
+        g[y][x] = 0;
+        extras.enemies.push_back(center);
+        break;
+      case 'f':
+        g[y][x] = 0;
+        extras.hasExit = true;
+        extras.exit = center;
+        break;
+      case 'F':
+        g[y][x] = 0;
+        fountains[y][x] = true;
+        break;
+      default:
+        // Cualquier otra cosa -> suelo (permite decorar con letras libres)
+        g[y][x] = 0;
+        break;
+      }
+    }
+  }
+
+  // Si no hay salida, colocar una por defecto en la esquina inferior derecha
+  if (!extras.hasExit) {
+    int ex = w - 2, ey = h - 2;
+    while (ex > 0 && wallAt(ex, ey))
+      --ex;
+    extras.exit = cellCenter(ex, ey);
+    extras.hasExit = true;
+  }
+
+  // Si no hay spawns, colocar uno por defecto en la primera celda libre
+  if (extras.spawns.empty()) {
+    for (int y = 1; y < h - 1 && extras.spawns.empty(); ++y)
+      for (int x = 1; x < w - 1 && extras.spawns.empty(); ++x)
+        if (!wallAt(x, y))
+          extras.spawns.push_back(cellCenter(x, y));
+  }
+
   return true;
 }

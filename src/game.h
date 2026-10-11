@@ -1,169 +1,175 @@
 #pragma once
 
-#include "raylib.h"
-#include "debug.h"
-#include "attract.h"
-#include "common.h"
-#include "inventory.h"
-#include "config.h"
-#include "maze.h"
 #include "assets.h"
+#include "attract.h"
 #include "cinematic.h"
+#include "common.h"
+#include "config.h"
 #include "credits.h"
-#include "world_mesh.h"
+#include "debug.h"
+#include "inventory.h"
+#include "maze.h"
+#include "raylib.h"
 #include "save.h"
-#include <vector>
+#include "world_mesh.h"
 #include <string>
+#include <vector>
 
 struct Game {
-    Config cfg;
-    Maze   maze;
-    AttractMode attract;
-    Assets assets;
-    SaveManager saves;
+  Config cfg;
+  Maze maze;
+  AttractMode attract;
+  Assets assets;
+  SaveManager saves;
 
-    Player players[2];
-    std::vector<Enemy> enemies;
-    Vector3 exitPos = { 0, 0, 0 };
-    std::vector<Projectile> projectiles;
+  Player players[2];
+  std::vector<Enemy> enemies;
+  Vector3 exitPos = {0, 0, 0};
+  std::vector<Projectile> projectiles;
 
-    std::vector<WorldPickup>  worldItems;
-    float fountainCooldown[2] = { 0.0f, 0.0f };
+  std::vector<WorldPickup> worldItems;
+  float fountainCooldown[2] = {0.0f, 0.0f};
 
-    int     level = 1;
-    float   levelTime = 0.0f;
-    float   totalPlaytime = 0.0f;
-    bool    twoPlayers = false;
-    bool    shouldQuit = false;
-    GameMode mode = MODE_STORY;
-    AppState state = ST_MENU;
+  int level = 1;
+  float levelTime = 0.0f;
+  float totalPlaytime = 0.0f;
+  bool twoPlayers = false;
+  bool shouldQuit = false;
+  GameMode mode = MODE_STORY;
+  AppState state = ST_MENU;
 
-    // Cinemática
-    Cinematic   cinematic;
-    std::string nextAfterCinematic;
+  // Cinemática
+  Cinematic cinematic;
+  std::string nextAfterCinematic;
 
-    // Flujo de menús
-    GameMode pendingMode = MODE_STORY;
-    bool     pendingTwoPlayers = false;
-    int      slotPurpose = SLOT_NEW;
-    int      navMenu = 0;
-    int      navSlot = 0;
-    AppState configReturn = ST_MENU;
+  // Flujo de menús
+  GameMode pendingMode = MODE_STORY;
+  bool pendingTwoPlayers = false;
+  int slotPurpose = SLOT_NEW;
+  int navMenu = 0;
+  int navSlot = 0;
+  AppState configReturn = ST_MENU;
 
-    // Partida actual
-    int  currentSlot = -1;
+  // Partida actual
+  int currentSlot = -1;
 
-    // Toast (mensajito de "Guardado")
-    char  toastMsg[128] = { 0 };
-    float toastTimer = 0.0f;
+  // Toast (mensajito de "Guardado")
+  char toastMsg[128] = {0};
+  float toastTimer = 0.0f;
 
-    // Remapeo
-    int remapAction = -1;
-    int remapPlayer = 0;
+  // Remapeo
+  int remapAction = -1;
+  int remapPlayer = 0;
 
-    // Navegación de configs
-    int navIndex    = 0;
-    int navIndexCfg = 0;
+  // Navegación de configs
+  int navIndex = 0;
+  int navIndexCfg = 0;
 
-    // Split-screen RTs
-    RenderTexture2D rtLeft  = {};
-    RenderTexture2D rtRight = {};
-    int rtW = 0, rtH = 0;
+  // Split-screen RTs
+  RenderTexture2D rtLeft = {};
+  RenderTexture2D rtRight = {};
+  int rtW = 0, rtH = 0;
 
-    uint32_t currentSeed = 0;   // guardado para el overlay
+  uint32_t currentSeed = 0; // guardado para el overlay
 
-    // Audio
-    bool  musicMenuPlaying  = false;
-    bool  musicLevelPlaying = false;
-    float heartbeatCd = 0.0f;
+  // Audio
+  bool musicMenuPlaying = false;
+  bool musicLevelPlaying = false;
+  float heartbeatCd = 0.0f;
 
-    // Ciclo de vida
-    void init();
-    void shutdown();
-    void run();
-    void tick();
+  // Ciclo de vida
+  void init();
+  void shutdown();
+  void run();
+  void tick();
 
-    // Estado
-    void toMenu();
-    void beginPlay(bool two, GameMode m);
-    void startLevel(int lvl);
-    void assignGamepads();
-    void ensureRenderTargets();
+  // Estado
+  void toMenu();
+  void beginPlay(bool two, GameMode m);
+  void startLevel(int lvl);
+  void assignGamepads();
+  void ensureRenderTargets();
 
-    // Save system
-    void startNewGame(int slot, GameMode m, bool two);
-    void loadGameFromSlot(int slot);
-    void saveCurrentGame();
-    void autoSaveProgress();
-    void showToast(const char* msg);
+  // Save system
+  void startNewGame(int slot, GameMode m, bool two);
+  void loadGameFromSlot(int slot);
+  void saveCurrentGame();
+  void autoSaveProgress();
+  void showToast(const char *msg);
 
-    // Update / Draw
-    void update(float dt);
-    void draw();
-    void drawMenus();
-    void drawModeSelect();
-    void drawPlayerSelect();
-    void drawSlotSelect();
-    void drawConfigHub();
-    void drawConfigVideo();
-    void drawConfigAudio();
-    void drawConfigGameplay();
-    void drawConfigControls();
-    void drawGameplayView(const Player& pl, int vw, int vh, int playerNum);
-    void drawMinimap(const Player& pl, int vw);
-    void drawStaminaBar(const Player& pl, int vw, int vh);
-    void drawSplitScreen();
-    void drawCinematic();
-    void drawPauseMenu();
-    void drawToast();
-    void drawConfigAccess();
+  // Update / Draw
+  void update(float dt);
+  void draw();
+  void drawMenus();
+  void drawModeSelect();
+  void drawPlayerSelect();
+  void drawSlotSelect();
+  void drawConfigHub();
+  void drawConfigVideo();
+  void drawConfigAudio();
+  void drawConfigGameplay();
+  void drawConfigControls();
+  void drawGameplayView(const Player &pl, int vw, int vh, int playerNum);
+  void drawMinimap(const Player &pl, int vw);
+  void drawStaminaBar(const Player &pl, int vw, int vh);
+  void drawSplitScreen();
+  void drawCinematic();
+  void drawPauseMenu();
+  void drawToast();
+  void drawConfigAccess();
 
-    // Cinemáticas
-    void playCinematic(const char* name, const char* nextAction);
-    bool hasStory(const char* name) const;
+  // Cinemáticas
+  void playCinematic(const char *name, const char *nextAction);
+  bool hasStory(const char *name) const;
 
-    // Helpers
-    float nearestEnemyDist(Vector3 p) const;
-    void  handleGamepadMenuNav(int count);
-    int   gamepadLeftRight();
-    bool  consumeConfirm();
-    bool  consumeCancel();
-    Color playerColor(int idx) const;
-    static const char* formatDate(std::time_t t);
+  // Helpers
+  float nearestEnemyDist(Vector3 p) const;
+  void handleGamepadMenuNav(int count);
+  int gamepadLeftRight();
+  bool consumeConfirm();
+  bool consumeCancel();
+  Color playerColor(int idx) const;
+  static const char *formatDate(std::time_t t);
 
-    // Vídeo / accesibilidad
-    void applyVideoSettings();
-    void applyRenderDistance();
-    float renderDist() const;
+  // Vídeo / accesibilidad
+  void applyVideoSettings();
+  void applyRenderDistance();
+  float renderDist() const;
 
-    void handleDebugHotkeys();
-    void drawDebugOverlay(int vw, int vh, int playerNum);
-    void drawDebugWorld3D(const Player& pl);
+  void handleDebugHotkeys();
+  void drawDebugOverlay(int vw, int vh, int playerNum);
+  void drawDebugWorld3D(const Player &pl);
 
-    // Cheats
-    void debugSpawnEnemy();
-    void debugKillAll();
-    void debugTeleportToExit();
-    void debugRevealMap();
+  // Cheats
+  void debugSpawnEnemy();
+  void debugKillAll();
+  void debugTeleportToExit();
+  void debugRevealMap();
 
-    void startJumpscare(int enemyIdx);
-    void drawJumpscare();
-    float jumpscareTimer = 0.0f;
-    int   jumpscareEnemy = -1;
+  void startJumpscare(int enemyIdx);
+  void drawJumpscare();
+  float jumpscareTimer = 0.0f;
+  int jumpscareEnemy = -1;
 
-    WorldMeshes world;
+  WorldMeshes world;
 
-    CreditsScreen credits;
+  CreditsScreen credits;
 
-    void spawnWorldItems(int lvl, int size, std::mt19937& rng);
-    void updateWorldItems(float dt);
-    void drawWorldItems(const Player& pl);
+  void spawnWorldItems(int lvl, int size, std::mt19937 &rng);
+  void updateWorldItems(float dt);
+  void drawWorldItems(const Player &pl);
 
-    void handleInteraction(int playerIdx);
-    void handleItemInput(int playerIdx);
-    int  findInteractable(const Player& pl, int& outCx, int& outCy, bool& isLocker) const;
-    void drawInventory(const Player& pl, int vw, int vh);
+  void handleInteraction(int playerIdx);
+  void handleItemInput(int playerIdx);
+  int findInteractable(const Player &pl, int &outCx, int &outCy,
+                       bool &isLocker) const;
+  void drawInventory(const Player &pl, int vw, int vh);
 
-    void drawHandItem3D(const Player& pl, const Camera3D& cam);
+  void drawHandItem3D(const Player &pl, const Camera3D &cam);
+
+  bool tryLoadCustomLevel(int lvl, LevelExtras &extras);
+  void spawnEnemiesFromPositions(const std::vector<Vector3> &positions, int lvl,
+                                 std::mt19937 &rng);
+  void spawnItemsFromPositions(const std::vector<Vector3> &positions,
+                               std::mt19937 &rng);
 };
-

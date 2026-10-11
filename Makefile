@@ -323,3 +323,9 @@ dist-web: web
 	@echo "Sube $(WEB_ZIP) a itch.io:"
 	@echo "  - Kind of project: HTML"
 	@echo "  - 'This file will be played in the browser'"
+
+editor: tools/level_designer.cpp
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -o tools/level_designer tools/level_designer.cpp
+
+run-editor: editor
+	./tools/level_designer
