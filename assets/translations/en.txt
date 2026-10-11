@@ -127,3 +127,4 @@ toast.item.dropped=Dropped item
 item=item
 item.rock=rock
 item.box=box
+item.wall=tent
