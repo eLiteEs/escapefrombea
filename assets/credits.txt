@@ -1,5 +1,5 @@
 # Escape From Marisa 3: Escape From Bea
-- modo serio
+- modo serio chat
 
 - Programación y diseño
 * Blas Fernández 
