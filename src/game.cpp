@@ -13,6 +13,7 @@
 #include <cstring>
 #include <ctime>
 #include <random>
+#include <raylib.h>
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #endif
@@ -24,73 +25,178 @@ void Game::init() {
   cfg.load();
   Lang::load(cfg.language.c_str());
 
-  // ---------- 1) Ventana pequeña, sin bordes, centrada ----------
+  // ---------- 1) Ventana final desde el principio, según config ----------
   SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
-  SetConfigFlags(FLAG_WINDOW_UNDECORATED);
-  InitWindow(800, 600, "Cargando...");
 
   int monW = GetMonitorWidth(0);
   int monH = GetMonitorHeight(0);
-  SetWindowPosition((monW - 640) / 2, (monH - 400) / 2);
+
+  int winW, winH;
+
+  if (cfg.fullscreen) {
+    winW = monW;
+    winH = monH;
+  } else {
+    winW = std::min(cfg.windowW, monW);
+    winH = std::min(cfg.windowH, monH);
+  }
+
+  InitWindow(winW, winH, C::GAME_TITLE);
+
+  if (cfg.fullscreen) {
+    SetWindowState(FLAG_FULLSCREEN_MODE);
+    SetWindowPosition(0, 0);
+  } else {
+    SetWindowPosition((monW - winW) / 2, (monH - winH) / 2);
+  }
 
   SetTargetFPS(60);
   SetMouseCursor(MOUSE_CURSOR_ARROW);
   SetExitKey(KEY_NULL);
 
-  // ---------- 2) Carga y dibuja el splash ----------
+  // ---------- 2) Splash ----------
   Texture2D splash = LoadTexture(Paths::sprite("splash.png").c_str());
   if (splash.id != 0)
     SetTextureFilter(splash, TEXTURE_FILTER_BILINEAR);
 
-  BeginDrawing();
-  ClearBackground(BLACK);
-  if (splash.id != 0) {
-    float scale = std::min(640.0f / splash.width, 400.0f / splash.height);
-    float tw = splash.width * scale;
-    float th = splash.height * scale;
-    DrawTexturePro(splash, {0, 0, (float)splash.width, (float)splash.height},
-                   {320.0f - tw / 2, 200.0f - th / 2, tw, th}, {0, 0}, 0.0f,
-                   WHITE);
-  } else {
-    const char *t = "ESCAPE FROM BEA";
-    DrawText(t, 320 - MeasureText(t, 36) / 2, 180, 36, RED);
-  }
-  EndDrawing();
+  // ---------- 3) Helper de dibujo ----------
+  auto drawSplash = [&](float progress, const char *stage) {
+    BeginDrawing();
+    ClearBackground(WHITE);
 
-  // ---------- 3) Carga pesada (audio + assets + resto) ----------
+    int W = GetScreenWidth();
+    int H = GetScreenHeight();
+
+    // Reservamos la franja inferior para la barra
+    float barArea = 110.0f;
+    float imgAreaH = (float)H - barArea;
+    if (imgAreaH < 10.0f)
+      imgAreaH = (float)H * 0.7f;
+
+    // Logo: escala "contain" (cabe entero dentro del área de imagen)
+    if (splash.id != 0) {
+      float scaleX = (float)W / (float)splash.width;
+      float scaleY = imgAreaH / (float)splash.height;
+      float s = std::min(scaleX, scaleY);
+
+      float tw = splash.width * s;
+      float th = splash.height * s;
+      float tx = ((float)W - tw) / 2.0f;
+      float ty = (imgAreaH - th) / 2.0f;
+
+      DrawTexturePro(splash, {0, 0, (float)splash.width, (float)splash.height},
+                     {tx, ty, tw, th}, {0, 0}, 0.0f, WHITE);
+    } else {
+      const char *t = "Escape from Marisa 3";
+      int fs = 42;
+      UI::T(t, W / 2 - UI::M(t, fs) / 2, (int)(imgAreaH / 2), fs, RED);
+    }
+
+    // Barra
+    float barW = (float)W * 0.65f;
+    if (barW > 900.0f)
+      barW = 900.0f;
+    float barH = 20.0f;
+    float barX = (float)W / 2.0f - barW / 2.0f;
+    float barY = (float)H - barArea + 30.0f;
+
+    DrawRectangle((int)barX - 2, (int)barY - 2, (int)barW + 4, (int)barH + 4,
+                  (Color){0, 0, 0, 200});
+    DrawRectangle((int)barX, (int)barY, (int)barW, (int)barH,
+                  (Color){30, 32, 45, 255});
+
+    float p = std::clamp(progress, 0.0f, 1.0f);
+    DrawRectangle((int)barX, (int)barY, (int)(barW * p), (int)barH,
+                  (Color){80, 200, 120, 255});
+    DrawRectangleLines((int)barX, (int)barY, (int)barW, (int)barH, RAYWHITE);
+
+    // Etiqueta de etapa encima de la barra
+    if (stage && stage[0]) {
+      int fs = 18;
+      UI::T(stage, W / 2 - UI::M(stage, fs) / 2, (int)barY - fs - 6, fs, BLACK);
+    }
+
+    // Porcentaje debajo
+    char pctBuf[16];
+    snprintf(pctBuf, sizeof(pctBuf), "%d%%", (int)(p * 100.0f));
+    int fs2 = 16;
+    UI::T(pctBuf, W / 2 - UI::M(pctBuf, fs2) / 2, (int)barY + (int)barH + 6,
+          fs2, BLACK);
+
+    EndDrawing();
+  };
+
+  // ---------- 4) Primer frame ----------
+  drawSplash(0.0f, L("load.starting", "Iniciando..."));
+
+  // ---------- 5) Audio ----------
   InitAudioDevice();
-  assets.load();
   assets.applyVolumes(cfg.masterVol, cfg.musicVol, cfg.sfxVol);
 
-  saves.refresh();
-  credits.load("assets/credits.txt");
-  attract.init(15, (uint32_t)time(nullptr) + 12345u, assets);
+  // ---------- 6) Carga por etapas ----------
+  auto stepLabel = [&](int i) -> const char * {
+    switch (i) {
+    case 0:
+      return L("load.textures", "Cargando enemigos...");
+    case 1:
+      return L("load.walls", "Cargando paredes...");
+    case 2:
+      return L("load.items", "Cargando items...");
+    case 3:
+      return L("load.music", "Cargando música...");
+    case 4:
+      return L("load.sounds", "Cargando sonidos...");
+    case 5:
+      return L("load.world", "Preparando mundo...");
+    }
+    return "";
+  };
+  auto doStep = [&](int i) {
+    switch (i) {
+    case 0:
+      assets.loadEnemyTextures();
+      break;
+    case 1:
+      assets.loadWallTextures();
+      break;
+    case 2:
+      assets.loadItemTextures();
+      break;
+    case 3:
+      assets.loadMusic();
+      break;
+    case 4:
+      assets.loadSounds();
+      break;
+    case 5:
+      saves.refresh();
+      credits.load("assets/credits.txt");
+      attract.init(15, (uint32_t)time(nullptr) + 12345u, assets);
+      break;
+    }
+  };
 
-  WaitTime(1);
+  const int N = 6;
+  for (int i = 0; i < N; ++i) {
+    drawSplash((float)i / (float)N, stepLabel(i));
+    doStep(i);
+    drawSplash((float)(i + 1) / (float)N, stepLabel(i));
+  }
 
-  // ---------- 4) Pasar a la ventana real ----------
+  // ---------- 7) Breve pausa al 100% ----------
+  float waitStart = (float)GetTime();
+  while ((float)GetTime() - waitStart < 0.20f) {
+    drawSplash(1.0f, L("load.done", "Listo"));
+  }
+
+  // ---------- 8) Limpieza ----------
   if (splash.id != 0)
     UnloadTexture(splash);
 
-  ClearWindowState(FLAG_WINDOW_UNDECORATED);
-
-  if (cfg.fullscreen) {
-    SetWindowSize(monW, monH);
-    SetWindowState(FLAG_FULLSCREEN_MODE);
-    SetWindowPosition(0, 0);
-  } else {
-    SetWindowSize(cfg.windowW, cfg.windowH);
-    SetWindowPosition((monW - cfg.windowW) / 2, (monH - cfg.windowH) / 2);
-  }
-
-  // Ahora sí, con la ventana definitiva
-  applyVideoSettings();
+  // ---------- 9) Render targets ----------
   ensureRenderTargets();
 
-  runConfig.seed = (uint32_t)time(nullptr) ^
-                   (uint32_t)((rand() * 2654435761u) & 0xFFFFFFFFu);
-  if (runConfig.seed == 0)
-    runConfig.seed = 1;
+  WaitTime(1);
 
   state = ST_MENU;
 }

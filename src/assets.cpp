@@ -65,7 +65,7 @@ static Music loadMusicSmart(const char *name) {
   return LoadMusicStream(np.c_str());
 }
 
-void Assets::load() {
+void Assets::loadEnemyTextures() {
   std::string p;
 
   p = Paths::sprite("enemy_bea.png");
@@ -98,7 +98,10 @@ void Assets::load() {
 
   p = Paths::sprite("crosshair.png");
   crosshair = loadTextureOrProcedural(p.c_str(), (Color){160, 40, 200, 255});
+  hasCrosshair = crosshair.id != 0;
+}
 
+void Assets::loadWallTextures() {
   wallTile = loadTileable(Paths::sprite("wall_tile.png").c_str(), hasWallTile);
   wallLocker =
       loadTileable(Paths::sprite("wall_locker.png").c_str(), hasWallLocker);
@@ -106,33 +109,45 @@ void Assets::load() {
       loadTileable(Paths::sprite("wall_brick.png").c_str(), hasWallBrick);
   floorTile =
       loadTileable(Paths::sprite("floor_tile.png").c_str(), hasFloorTile);
+}
 
-  {
-    struct {
-      ItemKind kind;
-      const char *file;
-    } defs[] = {
-        {ITEM_ROCK, "item_rock.png"},       {ITEM_BOX, "item_box.png"},
-        {ITEM_LIME, "item_lime.png"},       {ITEM_BICIMAD, "item_bicimad.png"},
-        {ITEM_MONSTER, "item_monster.png"}, {ITEM_WALL, "item_wall.png"}};
-    for (auto &d : defs) {
-      std::string path = Paths::sprite(d.file);
-      itemTex[d.kind] = LoadTexture(path.c_str());
-      hasItemTex[d.kind] = (itemTex[d.kind].id != 0);
-      if (hasItemTex[d.kind])
-        SetTextureFilter(itemTex[d.kind], TEXTURE_FILTER_BILINEAR);
-    }
+void Assets::loadItemTextures() {
+  struct {
+    ItemKind kind;
+    const char *file;
+  } defs[] = {
+      {ITEM_ROCK, "item_rock.png"},       {ITEM_BOX, "item_box.png"},
+      {ITEM_LIME, "item_lime.png"},       {ITEM_BICIMAD, "item_bicimad.png"},
+      {ITEM_MONSTER, "item_monster.png"}, {ITEM_WALL, "item_wall.png"}};
+  for (auto &d : defs) {
+    std::string path = Paths::sprite(d.file);
+    itemTex[d.kind] = LoadTexture(path.c_str());
+    hasItemTex[d.kind] = (itemTex[d.kind].id != 0);
+    if (hasItemTex[d.kind])
+      SetTextureFilter(itemTex[d.kind], TEXTURE_FILTER_BILINEAR);
   }
+}
 
+void Assets::loadMusic() {
   musicMenu = loadMusicSmart("music_menu.ogg");
   musicLevel = loadMusicSmart("music_level.ogg");
+}
 
+void Assets::loadSounds() {
   sfxEscape = loadSoundSmart("sfx_escape.ogg");
   sfxCaught = loadSoundSmart("sfx_caught.ogg");
   sfxPickup = loadSoundSmart("sfx_pickup.ogg");
   sfxThrow = loadSoundSmart("sfx_throw.ogg");
   sfxFootstep = loadSoundSmart("sfx_footstep.ogg");
   sfxHeartbeat = loadSoundSmart("sfx_heartbeat.ogg");
+}
+
+void Assets::load() {
+  loadEnemyTextures();
+  loadWallTextures();
+  loadItemTextures();
+  loadMusic();
+  loadSounds();
 }
 
 void Assets::unload() {
