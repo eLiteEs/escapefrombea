@@ -18,6 +18,10 @@ struct SaveSlot {
   };
   InvSlotSaved inventory[2][C::INV_SLOTS] = {};
   int selectedSlot[2] = {0, 0};
+
+  uint32_t runSeed = 0;
+  int enemyMult = 2;
+  int itemMult = 2;
 };
 
 class SaveManager {

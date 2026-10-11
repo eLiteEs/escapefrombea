@@ -1,6 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include "raymath.h"
+#include <cstdint>
 
 namespace C {
 // Mundo
@@ -91,12 +92,16 @@ constexpr float ROCK_PICKUP_BOB = 0.18f;
 constexpr float STAM_WATER_MAX = 2.0f;
 constexpr float WATER_COOLDOWN = 0.5f;
 constexpr float DROP_DIST = 0.9f;
+
+constexpr float ENDLESS_MULT[] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+constexpr int ENDLESS_MULT_COUNT = 6;
 } // namespace C
 
 enum AppState {
   ST_MENU,
   ST_MODE_SELECT,
   ST_PLAYER_SELECT,
+  ST_ENDLESS_CONFIG,
   ST_SLOT_SELECT,
   ST_CONFIG,
   ST_CONFIG_VIDEO,
@@ -204,6 +209,12 @@ struct Enemy {
   float rageT = 0.0f;
   float rageMult = 1.0f;
   float hitFlash = 0.0f;
+};
+
+struct EndlessRunConfig {
+  uint32_t seed = 0; // 0 = aún sin asignar (se aleatoriza al empezar)
+  int enemyMult = 2; // índice en C::ENDLESS_MULT
+  int itemMult = 2;
 };
 
 enum ColorblindMode {

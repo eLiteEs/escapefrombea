@@ -87,6 +87,11 @@ void Game::init() {
   applyVideoSettings();
   ensureRenderTargets();
 
+  runConfig.seed = (uint32_t)time(nullptr) ^
+                   (uint32_t)((rand() * 2654435761u) & 0xFFFFFFFFu);
+  if (runConfig.seed == 0)
+    runConfig.seed = 1;
+
   state = ST_MENU;
 }
 
@@ -991,6 +996,177 @@ void Game::drawCinematic() {
   EndDrawing();
 }
 
+void Game::drawEndlessConfig() {
+  drawConfigHeader(L("endless.title", "Modo infinito — configuración"));
+
+  const int items = 6;
+  handleGamepadMenuNav(items);
+
+  // Teclado: flechas para navegar
+  if (IsKeyPressed(KEY_DOWN))
+    navIndex = (navIndex + 1) % items;
+  if (IsKeyPressed(KEY_UP))
+    navIndex = (navIndex + items - 1) % items;
+
+  int lr = gamepadLeftRight();
+  if (IsKeyPressed(KEY_LEFT))
+    lr = -1;
+  if (IsKeyPressed(KEY_RIGHT))
+    lr = +1;
+
+  bool confirm = consumeConfirm();
+
+  // ================================================================
+  // Fila 0 — Seed (editable con el teclado, clicable con el ratón)
+  // ================================================================
+  {
+    const int w = 680, h = 58, gap = 18;
+    const int totalH = items * (h + gap) - gap;
+    const int x = GetScreenWidth() / 2 - w / 2;
+    const int y = GetScreenHeight() / 2 - totalH / 2 + 20 + 0 * (h + gap);
+
+    Rectangle r = {(float)x, (float)y, (float)w, (float)h};
+    Vector2 mp = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mp, r);
+    Vector2 md = GetMouseDelta();
+    bool mouseMoved = (fabsf(md.x) > 0.1f || fabsf(md.y) > 0.1f);
+    if (hover && mouseMoved)
+      navIndex = 0;
+    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+      navIndex = 0;
+
+    bool selected = (navIndex == 0);
+
+    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                   : (Color){35, 40, 58, 255};
+    Color border = (hover || selected) ? SKYBLUE : (Color){80, 90, 125, 255};
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 2, border);
+
+    UI::T(L("endless.seed", "Seed"), x + 22, y + (h - 24) / 2, 24, RAYWHITE);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%u", runConfig.seed);
+    int vw = UI::M(buf, 24);
+    int vx = x + w - vw - 22;
+    int vy = y + (h - 24) / 2;
+    UI::T(buf, vx, vy, 24, GOLD);
+
+    // Cursor parpadeante cuando la fila está activa
+    if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f) {
+      UI::T("_", vx + vw, vy, 24, GOLD);
+    }
+
+    // Input de teclado (solo si está seleccionada)
+    // Importante: drenar SIEMPRE la cola para no acumular chars
+    int k = GetCharPressed();
+    while (k > 0) {
+      if (selected && k >= '0' && k <= '9') {
+        uint64_t v = (uint64_t)runConfig.seed * 10ull + (uint64_t)(k - '0');
+        if (v <= 0xFFFFFFFFull)
+          runConfig.seed = (uint32_t)v;
+      }
+      k = GetCharPressed();
+    }
+    if (selected && IsKeyPressed(KEY_BACKSPACE)) {
+      runConfig.seed /= 10;
+    }
+
+    // ENTER sobre la seed → saltar a la siguiente fila
+    if (selected && confirm) {
+      confirm = false;
+      navIndex = 1;
+    }
+  }
+
+  // ================================================================
+  // Fila 1 — Aleatorizar seed
+  // ================================================================
+  if (uiButton(1, items, 20, L("endless.randomize", "Aleatorizar seed"),
+               &navIndex, &confirm)) {
+    uint32_t s = (uint32_t)time(nullptr) ^
+                 (uint32_t)(GetRandomValue(1, 0x7FFFFFFF) * 2654435761u);
+    if (s == 0)
+      s = 1;
+    runConfig.seed = s;
+  }
+
+  // ================================================================
+  // Fila 2 — Multiplicador enemigos
+  // ================================================================
+  {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%gx",
+             (double)C::ENDLESS_MULT[runConfig.enemyMult]);
+    UIAction a = uiOptionEx(2, items, 20,
+                            L("endless.enemyMult", "Multiplicador enemigos"),
+                            buf, &navIndex, &confirm, navIndex == 2 ? lr : 0);
+    if (a == UI_LEFT)
+      runConfig.enemyMult = (runConfig.enemyMult - 1 + C::ENDLESS_MULT_COUNT) %
+                            C::ENDLESS_MULT_COUNT;
+    if (a == UI_RIGHT)
+      runConfig.enemyMult = (runConfig.enemyMult + 1) % C::ENDLESS_MULT_COUNT;
+  }
+
+  // ================================================================
+  // Fila 3 — Multiplicador items
+  // ================================================================
+  {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%gx",
+             (double)C::ENDLESS_MULT[runConfig.itemMult]);
+    UIAction a =
+        uiOptionEx(3, items, 20, L("endless.itemMult", "Multiplicador items"),
+                   buf, &navIndex, &confirm, navIndex == 3 ? lr : 0);
+    if (a == UI_LEFT)
+      runConfig.itemMult = (runConfig.itemMult - 1 + C::ENDLESS_MULT_COUNT) %
+                           C::ENDLESS_MULT_COUNT;
+    if (a == UI_RIGHT)
+      runConfig.itemMult = (runConfig.itemMult + 1) % C::ENDLESS_MULT_COUNT;
+  }
+
+  // ================================================================
+  // Fila 4 — Siguiente
+  // ================================================================
+  if (uiButton(4, items, 20, L("endless.continue", "Siguiente"), &navIndex,
+               &confirm)) {
+    if (runConfig.seed == 0) {
+      uint32_t s = (uint32_t)time(nullptr) ^
+                   (uint32_t)(GetRandomValue(1, 0x7FFFFFFF) * 2654435761u);
+      if (s == 0)
+        s = 1;
+      runConfig.seed = s;
+    }
+    state = ST_PLAYER_SELECT;
+    navMenu = 0;
+    return;
+  }
+
+  // ================================================================
+  // Fila 5 — Volver
+  // ================================================================
+  if (uiButton(5, items, 20, L("common.back", "Volver"), &navIndex, &confirm)) {
+    state = ST_MODE_SELECT;
+    navMenu = 0;
+    return;
+  }
+
+  // ESC / B del mando → volver
+  if (IsKeyPressed(KEY_ESCAPE) || consumeCancel()) {
+    state = ST_MODE_SELECT;
+    navMenu = 0;
+    return;
+  }
+
+  // Hint inferior
+  const char *hint =
+      L("endless.hint",
+        "Misma seed = mismos niveles. "
+        "Teclea números en la seed o usa < > para cambiar multiplicadores.");
+  int W = GetScreenWidth();
+  UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 40, 18, GRAY);
+}
+
 // ---------- Menús de config ----------
 static const char *yesNo(bool b) {
   return b ? L("common.yes", "Sí") : L("common.no", "No");
@@ -1461,6 +1637,9 @@ void Game::saveCurrentGame() {
   s.mode = mode;
   s.twoPlayers = twoPlayers;
   s.playtime = totalPlaytime;
+  s.runSeed = runConfig.seed;
+  s.enemyMult = runConfig.enemyMult;
+  s.itemMult = runConfig.itemMult;
   fillSaveFromPlayers(s, players, twoPlayers ? 2 : 1);
 
   saves.saveSlot(currentSlot, s);
@@ -1492,8 +1671,23 @@ void Game::startNewGame(int slot, GameMode m, bool two) {
   s.mode = m;
   s.twoPlayers = two;
   s.playtime = 0.0f;
-  saves.saveSlot(slot, s);
+  s.runSeed = runConfig.seed;
+  s.enemyMult = runConfig.enemyMult;
+  s.itemMult = runConfig.itemMult;
 
+  if (m == MODE_ENDLESS) {
+    if (runConfig.seed == 0) {
+      runConfig.seed = (uint32_t)time(nullptr) ^
+                       (uint32_t)((rand() * 2654435761u) & 0xFFFFFFFFu);
+      if (runConfig.seed == 0)
+        runConfig.seed = 1;
+    }
+    s.runSeed = runConfig.seed;
+    s.enemyMult = runConfig.enemyMult;
+    s.itemMult = runConfig.itemMult;
+  }
+
+  saves.saveSlot(slot, s);
   beginPlay(two, m);
 }
 
@@ -1507,6 +1701,12 @@ void Game::loadGameFromSlot(int slot) {
   level = s.level;
   mode = (GameMode)s.mode;
   twoPlayers = s.twoPlayers;
+
+  if (mode == MODE_ENDLESS) {
+    runConfig.seed = s.runSeed;
+    runConfig.enemyMult = s.enemyMult;
+    runConfig.itemMult = s.itemMult;
+  }
 
   // Sin cinemática al cargar
   startLevel(level);
@@ -1561,7 +1761,7 @@ void Game::drawModeSelect() {
                nullptr) ||
       (navMenu == 1 && consumeConfirm())) {
     pendingMode = MODE_ENDLESS;
-    state = ST_PLAYER_SELECT;
+    state = ST_ENDLESS_CONFIG;
     navMenu = 0;
   }
   if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
@@ -1606,8 +1806,13 @@ void Game::drawPlayerSelect() {
   }
   if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
       (navMenu == 2 && consumeConfirm()) || consumeCancel()) {
-    state = ST_MODE_SELECT;
-    navMenu = 0;
+    if (pendingMode == MODE_ENDLESS) {
+      state = ST_ENDLESS_CONFIG;
+      navIndex = 0;
+    } else {
+      state = ST_MODE_SELECT;
+      navMenu = 0;
+    }
   }
 }
 
@@ -1831,6 +2036,9 @@ void Game::drawMenus() {
     break;
   case ST_PLAYER_SELECT:
     drawPlayerSelect();
+    break;
+  case ST_ENDLESS_CONFIG:
+    drawEndlessConfig();
     break;
   case ST_SLOT_SELECT:
     drawSlotSelect();
@@ -2500,7 +2708,11 @@ void Game::drawJumpscare() {
 }
 
 void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
-  int count = std::min(6 + lvl / 2, 8);
+  float mult =
+      (mode == MODE_ENDLESS) ? C::ENDLESS_MULT[runConfig.itemMult] : 1.0f;
+  int count = std::max(0, (int)((float)std::min(6 + lvl / 2, 8) * mult));
+  if (count == 0)
+    return;
 
   float minDistFromSpawn = size * C::CELL * 0.20f;
 
@@ -3040,9 +3252,15 @@ void Game::startLevel(int lvl) {
     if (mode == MODE_ENDLESS && size > C::ENDLESS_MAX_SIZE)
       size = C::ENDLESS_MAX_SIZE;
 
-    uint32_t seed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
-    currentSeed = seed;
-    maze.generate(size, size, seed);
+    uint32_t baseSeed;
+    if (mode == MODE_ENDLESS && runConfig.seed != 0) {
+      // Misma seed = mismos niveles, siempre en el mismo orden
+      baseSeed = runConfig.seed ^ (uint32_t)(lvl * 7919);
+    } else {
+      baseSeed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
+    }
+    currentSeed = baseSeed;
+    maze.generate(size, size, baseSeed);
   }
 
   // ============================================================
@@ -3099,10 +3317,13 @@ void Game::startLevel(int lvl) {
   } else {
     // ----- Enemigos: código original -----
     int count;
-    if (mode == MODE_ENDLESS)
-      count = std::min(2 + lvl / 2, 12);
-    else
+    if (mode == MODE_ENDLESS) {
+      int base = std::min(2 + lvl / 2, 12);
+      float mult = C::ENDLESS_MULT[runConfig.enemyMult];
+      count = std::max(0, (int)((float)base * mult));
+    } else {
       count = lvl + 1;
+    }
 
     float spd =
         C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();

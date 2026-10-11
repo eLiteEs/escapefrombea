@@ -37,6 +37,7 @@ struct Game {
   bool shouldQuit = false;
   GameMode mode = MODE_STORY;
   AppState state = ST_MENU;
+  EndlessRunConfig runConfig;
 
   // Cinemática
   Cinematic cinematic;
@@ -102,6 +103,7 @@ struct Game {
   void draw();
   void drawMenus();
   void drawModeSelect();
+  void drawEndlessConfig();
   void drawPlayerSelect();
   void drawSlotSelect();
   void drawConfigHub();

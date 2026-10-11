@@ -71,13 +71,15 @@ static void parseSlotKey(SaveSlot &slot, const char *key, const char *val) {
     slot.playtime = (float)atof(val);
   else if (!strcmp(key, "timestamp"))
     slot.timestamp = (std::time_t)atoll(val);
+  else if (!strcmp(key, "runSeed"))
+    slot.runSeed = (uint32_t)strtoul(val, nullptr, 10);
+  else if (!strcmp(key, "enemyMult"))
+    slot.enemyMult = atoi(val);
+  else if (!strcmp(key, "itemMult"))
+    slot.itemMult = atoi(val);
   else {
     int p = 0, s = 0, consumed = 0;
     int klen = (int)strlen(key);
-
-    // OJO: comprobar primero los formatos MÁS específicos.
-    // "p1_slot0_kind" haría match parcial con "p%d_sel", por eso
-    // exigimos con %n que se consuma TODA la clave.
 
     // pN_slotM_kind
     if (sscanf(key, "p%d_slot%d_kind%n", &p, &s, &consumed) == 2 &&
@@ -114,6 +116,9 @@ bool SaveManager::saveSlot(int i, const SaveSlot &data) {
                "2f\ntimestamp=%lld\n",
                data.level, data.maxLevel, data.mode, data.twoPlayers ? 1 : 0,
                (double)data.playtime, (long long)std::time(nullptr));
+  n += snprintf(buf + n, sizeof(buf) - n,
+                "runSeed=%u\nenemyMult=%d\nitemMult=%d\n", data.runSeed,
+                data.enemyMult, data.itemMult);
 
   for (int p = 0; p < 2; ++p) {
     n += snprintf(buf + n, sizeof(buf) - n, "p%d_sel=%d\n", p + 1,
@@ -141,6 +146,9 @@ bool SaveManager::saveSlot(int i, const SaveSlot &data) {
   fprintf(f, "twoPlayers=%d\n", data.twoPlayers ? 1 : 0);
   fprintf(f, "playtime=%.2f\n", (double)data.playtime);
   fprintf(f, "timestamp=%lld\n", (long long)std::time(nullptr));
+  fprintf(f, "runSeed=%u\n", data.runSeed);
+  fprintf(f, "enemyMult=%d\n", data.enemyMult);
+  fprintf(f, "itemMult=%d\n", data.itemMult);
 
   for (int p = 0; p < 2; ++p) {
     fprintf(f, "p%d_sel=%d\n", p + 1, data.selectedSlot[p]);

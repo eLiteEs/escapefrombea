@@ -128,3 +128,12 @@ item=item
 item.rock=rock
 item.box=box
 item.wall=tent
+
+endless.title=Endless mode — configuration
+endless.seed=Seed (type digits)
+endless.randomize=Randomize seed
+endless.pressEnter=ENTER
+endless.enemyMult=Enemy multiplier
+endless.itemMult=Item multiplier
+endless.continue=Continue
+endless.hint=Same seed = same levels. Change values with < > or arrow keys.
