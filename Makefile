@@ -85,7 +85,7 @@ MINGW_LDFLAGS  := -L$(MINGW_RAYLIB_LIB) \
 	          -Wl,-Bstatic -lraylib -Wl,-Bdynamic \
 	          -static-libgcc -static-libstdc++ \
 	          -lwinmm -lgdi32 -lopengl32 -luser32 -lkernel32 \
-	          -lshell32 -lole32 -lcomdlg32 -lcomctl32
+	          -lshell32 -lole32 -lcomdlg32 -lcomctl32 -mwindows
 
 # ---------------------------------------------------------------------------
 # Distribucion
