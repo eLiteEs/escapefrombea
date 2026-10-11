@@ -1,0 +1,20 @@
+# Introduccion nivel 1
+# Formato: "Hablante|Texto" o "narracion libre". Directivas: @music, @wait, @speed.
+# Valores de @music: none, menu, level
+
+@music level
+@wait 1.0
+@speed 40
+
+Bea|¿Te parece bien lo que hiciste hoy en clase?
+Tu|...
+*Bea se acerca a ti peligrosamente*
+@wait 0.4
+Bea|Contestame cuando te hablo
+@speed 0
+Tu|Aiba la ostia
+*sales corriendo de la clase*
+@wait 0.4
+Tu|Modo serio chat
+@music none
+@wait 0.6
