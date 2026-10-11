@@ -3,8 +3,14 @@
 #endif
 
 #include "game.h"
+
 #if defined(_WIN32) && !defined(NDEBUG)
+#define WIN32_LEAN_AND_MEAN // excluye winsock2, shellapi, etc.
+#define NOGDI               // excluye wingdi.h (Rectangle, etc.)
+#define NOUSER              // excluye winuser.h (CloseWindow, ShowCursor, etc.)
 #include <windows.h>
+#undef near
+#undef far
 #endif
 
 #if defined(__EMSCRIPTEN__)
