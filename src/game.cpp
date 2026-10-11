@@ -149,25 +149,7 @@ void Game::beginPlay(bool two, GameMode m) {
     musicMenuPlaying = false;
   }
 
-  level = 1;
-
-  if (mode == MODE_STORY && cfg.playCinematics) {
-    char name[64];
-    snprintf(name, sizeof(name), "level_%02d_intro.txt", level);
-    if (hasStory(name)) {
-      playCinematic(name, "playing");
-      return;
-    }
-  }
-
-  startLevel(level);
-  assignGamepads();
-  DisableCursor();
-  state = ST_PLAYING;
-  if (assets.musicLevel.stream.buffer != nullptr && !musicLevelPlaying) {
-    PlayMusicStream(assets.musicLevel);
-    musicLevelPlaying = true;
-  }
+  requestEnterLevel(1);
 }
 
 void Game::assignGamepads() {
@@ -515,6 +497,23 @@ void Game::update(float dt) {
         toMenu();
       }
     }
+  } else if (state == ST_LEVEL_INTRO) {
+    introTimer += dt;
+
+    // Fade-in de 0.8 s; acepta input después
+    if (introTimer >= 0.8f) {
+      bool advance = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) ||
+                     IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+      for (int p = 0; p < 2 && !advance; ++p) {
+        if (players[p].gamepadId >= 0 &&
+            IsGamepadButtonPressed(players[p].gamepadId,
+                                   GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+          advance = true;
+      }
+      if (advance) {
+        enterLevel(level);
+      }
+    }
   } else if (state == ST_JUMPSCARE) {
     jumpscareTimer -= dt;
 
@@ -528,35 +527,40 @@ void Game::update(float dt) {
     if (consumeConfirm()) {
       ++level;
 
-      if (mode == MODE_STORY && cfg.playCinematics) {
-        // ¿Existe intro del siguiente nivel?
-        char introName[64];
+      if (mode == MODE_STORY) {
+        // ¿Existe contenido para el siguiente nivel?
+        char introName[64], outroName[64];
+        char detailsName[64], mapName[64];
         snprintf(introName, sizeof(introName), "level_%02d_intro.txt", level);
-        if (hasStory(introName)) {
-          playCinematic(introName, "playing");
-          return;
-        }
-
-        // Si no existe intro del siguiente nivel, ¿existe el nivel
-        // propiamente? Lo definimos como "existe intro O outro del
-        // nivel actual+1". Si no existe ninguno de los dos, fin de
-        // la historia.
-        char outroName[64];
         snprintf(outroName, sizeof(outroName), "level_%02d_outro.txt", level);
-        bool nextLevelExists = hasStory(introName) || hasStory(outroName);
+        snprintf(detailsName, sizeof(detailsName), "level_%02d_details.dgn",
+                 level);
+        snprintf(mapName, sizeof(mapName), "level_%02d_map.dgn", level);
+
+        auto exists = [](const std::string &p) {
+          FILE *fp = fopen(p.c_str(), "rb");
+          if (!fp)
+            return false;
+          fclose(fp);
+          return true;
+        };
+
+        bool hasIntro = hasStory(introName);
+        bool hasOutro = hasStory(outroName);
+        bool hasDetails = exists(Paths::level(detailsName));
+        bool hasMap = exists(Paths::level(mapName));
+
+        bool nextLevelExists = hasIntro || hasOutro || hasDetails || hasMap;
 
         if (!nextLevelExists) {
-          // Fin de la historia -> creditos
+          // Fin de la historia
           credits.start();
           state = ST_CREDITS;
           return;
         }
       }
 
-      startLevel(level);
-      assignGamepads();
-      DisableCursor();
-      state = ST_PLAYING;
+      requestEnterLevel(level);
     } else if (IsKeyPressed(KEY_ESCAPE)) {
       if (mode == MODE_STORY && cfg.playCinematics) {
         char outroName[64];
@@ -2043,6 +2047,9 @@ void Game::drawMenus() {
   case ST_SLOT_SELECT:
     drawSlotSelect();
     break;
+  case ST_LEVEL_INTRO:
+    drawLevelIntro();
+    break;
   case ST_CONFIG:
     drawConfigHub();
     break;
@@ -2212,6 +2219,31 @@ static const char *cbLabel(int idx) {
     return L("access.cb.protanopia", "Protanopía");
   default:
     return L("access.cb.tritanopia", "Tritanopía");
+  }
+}
+
+static void drawDifficultyStar(float cx, float cy, float radius, Color color,
+                               bool filled) {
+  const int points = 10;
+  Vector2 verts[10];
+  for (int i = 0; i < points; ++i) {
+    float angle = -PI / 2.0f + i * (2.0f * PI / points);
+    float r = (i % 2 == 0) ? radius : radius * 0.42f;
+    verts[i] = {cx + cosf(angle) * r, cy + sinf(angle) * r};
+  }
+  if (filled) {
+    Vector2 c = {cx, cy};
+    for (int i = 0; i < points; ++i) {
+      int j = (i + 1) % points;
+      // Doble winding para sobrevivir a cualquier estado de culling
+      DrawTriangle(c, verts[i], verts[j], color);
+      DrawTriangle(c, verts[j], verts[i], color);
+    }
+  } else {
+    for (int i = 0; i < points; ++i) {
+      int j = (i + 1) % points;
+      DrawLineEx(verts[i], verts[j], 2.0f, color);
+    }
   }
 }
 
@@ -3380,4 +3412,160 @@ void Game::startLevel(int lvl) {
   maze.markExplored(players[0].pos.x, players[0].pos.z, C::FOG_RADIUS);
   if (twoPlayers)
     maze.markExplored(players[1].pos.x, players[1].pos.z, C::FOG_RADIUS);
+}
+
+bool Game::loadLevelDetails(int lvl) {
+  levelDetails = {}; // reset por si acaso
+
+  char fname[64];
+  snprintf(fname, sizeof(fname), "level_%02d_details.dgn", lvl);
+  std::string path = Paths::level(fname);
+
+  FILE *f = fopen(path.c_str(), "r");
+  if (!f)
+    return false;
+
+  levelDetails.loaded = true;
+  levelDetails.difficulty = 1;
+
+  char line[512];
+  while (fgets(line, sizeof(line), f)) {
+    for (char *p = line; *p; ++p)
+      if (*p == '\r' || *p == '\n') {
+        *p = 0;
+        break;
+      }
+    if (line[0] == '#' || line[0] == 0)
+      continue;
+
+    char *eq = strchr(line, '=');
+    if (!eq)
+      continue;
+    *eq = 0;
+    const char *key = line;
+    const char *val = eq + 1;
+
+    if (!strcmp(key, "name"))
+      levelDetails.name = val;
+    else if (!strcmp(key, "subtitle"))
+      levelDetails.subtitle = val;
+    else if (!strcmp(key, "difficulty"))
+      levelDetails.difficulty = atoi(val);
+  }
+  fclose(f);
+
+  levelDetails.difficulty = std::clamp(levelDetails.difficulty, 1, 5);
+  return true;
+}
+
+// Llamado cuando toca entrar en `lvl`. Si hay details, muestra la pantalla
+// y espera input. Si no, entra directamente (cinemática o arranque).
+void Game::requestEnterLevel(int lvl) {
+  level = lvl;
+  assignGamepads(); // el intro necesita gamepadId para leer el mando
+
+  if (mode == MODE_STORY && loadLevelDetails(lvl)) {
+    state = ST_LEVEL_INTRO;
+    introTimer = 0.0f;
+    return;
+  }
+  enterLevel(lvl);
+}
+
+// Realmente entra: reproduce cinemática si toca, o arranca el nivel.
+void Game::enterLevel(int lvl) {
+  if (mode == MODE_STORY && cfg.playCinematics) {
+    char name[64];
+    snprintf(name, sizeof(name), "level_%02d_intro.txt", lvl);
+    if (hasStory(name)) {
+      playCinematic(name, "playing");
+      return;
+    }
+  }
+  startLevel(lvl);
+  assignGamepads();
+  DisableCursor();
+  state = ST_PLAYING;
+  if (assets.musicLevel.stream.buffer != nullptr && !musicLevelPlaying) {
+    PlayMusicStream(assets.musicLevel);
+    musicLevelPlaying = true;
+  }
+}
+
+void Game::drawLevelIntro() {
+  int W = GetScreenWidth();
+  int H = GetScreenHeight();
+
+  ClearBackground((Color){8, 8, 12, 255});
+  drawBackground2D();
+  DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 170});
+
+  // Fade-in
+  float t = std::min(1.0f, introTimer / 0.8f);
+  unsigned char a = (unsigned char)(t * 255.0f);
+
+  // --- "Capitulo N" ---
+  char cap[64];
+  snprintf(cap, sizeof(cap), L("intro.chapter", "Capítulo %d"), level);
+  int capSize = 22;
+  int capW = UI::M(cap, capSize);
+  UI::T(cap, W / 2 - capW / 2, H / 3 - 70, capSize, (Color){200, 200, 200, a});
+
+  // --- Línea decorativa ---
+  int lineW = 260;
+  DrawRectangle(W / 2 - lineW / 2, H / 3 - 36, lineW, 2,
+                (Color){180, 140, 60, a});
+
+  // --- Título ---
+  const char *title = levelDetails.name.empty()
+                          ? L("intro.untitled", "Sin título")
+                          : levelDetails.name.c_str();
+  int titleSize = 60;
+  int tw = UI::M(title, titleSize);
+  if (tw > W - 80) {
+    titleSize = 42;
+    tw = UI::M(title, titleSize);
+  }
+  UI::T(title, W / 2 - tw / 2, H / 3, titleSize, (Color){255, 240, 200, a});
+
+  // --- Subtítulo ---
+  if (!levelDetails.subtitle.empty()) {
+    int subSize = 24;
+    int sw = UI::M(levelDetails.subtitle.c_str(), subSize);
+    UI::T(levelDetails.subtitle.c_str(), W / 2 - sw / 2, H / 3 + titleSize + 16,
+          subSize, (Color){180, 180, 190, a});
+  }
+
+  // --- Estrellas de dificultad ---
+  int stars = std::clamp(levelDetails.difficulty, 1, 5);
+  float starR = 16.0f;
+  float starGap = 12.0f;
+  float totalW = 5 * (starR * 2) + 4 * starGap;
+  float sx = W / 2.0f - totalW / 2.0f + starR;
+  float sy = H * 2.0f / 3.0f;
+  for (int i = 0; i < 5; ++i) {
+    float cx = sx + i * (starR * 2 + starGap);
+    if (i < stars) {
+      drawDifficultyStar(cx, sy, starR, (Color){255, 200, 70, a}, true);
+    } else {
+      drawDifficultyStar(cx, sy, starR, (Color){70, 70, 85, a}, false);
+    }
+  }
+
+  // Etiqueta "Dificultad"
+  const char *diffLbl = L("intro.difficulty", "Dificultad");
+  int dlSize = 16;
+  int dlW = UI::M(diffLbl, dlSize);
+  UI::T(diffLbl, W / 2 - dlW / 2, (int)sy - starR - 32, dlSize,
+        (Color){150, 150, 160, a});
+
+  // --- Hint "pulsa ENTER" ---
+  if (t >= 1.0f) {
+    float pulse = 0.55f + 0.45f * sinf((float)GetTime() * 3.0f);
+    unsigned char ha = (unsigned char)(pulse * 220);
+    const char *hint = L("intro.continue", "Pulsa ENTER para continuar");
+    int hs = 18;
+    int hw = UI::M(hint, hs);
+    UI::T(hint, W / 2 - hw / 2, H - 60, hs, (Color){200, 200, 200, ha});
+  }
 }

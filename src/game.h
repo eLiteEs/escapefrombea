@@ -15,6 +15,13 @@
 #include <string>
 #include <vector>
 
+struct LevelDetails {
+  bool loaded = false;
+  std::string name;
+  std::string subtitle;
+  int difficulty = 1; // 1..5
+};
+
 struct Game {
   Config cfg;
   Maze maze;
@@ -174,4 +181,13 @@ struct Game {
                                  std::mt19937 &rng);
   void spawnItemsFromPositions(const std::vector<Vector3> &positions,
                                std::mt19937 &rng);
+
+  bool loadLevelDetails(int lvl);
+  void requestEnterLevel(int lvl); // muestra intro si existe, si no entra
+  void enterLevel(int lvl);        // cinemática o arranque directo
+  void drawLevelIntro();
+
+  // Detalles del nivel (para la pantalla previa)
+  LevelDetails levelDetails;
+  float introTimer = 0.0f;
 };
