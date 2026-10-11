@@ -27,7 +27,7 @@ void Game::init() {
   // ---------- 1) Ventana pequeña, sin bordes, centrada ----------
   SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
   SetConfigFlags(FLAG_WINDOW_UNDECORATED);
-  InitWindow(640, 400, "Cargando...");
+  InitWindow(800, 600, "Cargando...");
 
   int monW = GetMonitorWidth(0);
   int monH = GetMonitorHeight(0);
@@ -191,6 +191,7 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   if (p.caught) {
     for (int i = 0; i < C::INV_SLOTS; ++i)
       p.inventory[i] = {};
+    p.selectedSlot = 0;
   }
 
   p.pos = spawn;
@@ -203,14 +204,11 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.sprinting = false;
   p.escapeTime = 0.0f;
   p.caughtBy = -1;
-
-  // NUEVO
   p.hidden = false;
   p.hiddenExitPos = spawn;
   p.hiddenExitYaw = 0.0f;
   p.hiddenCellX = -1;
   p.hiddenCellY = -1;
-  p.selectedSlot = 0;
   p.throwCooldown = 0.0f;
   p.attackFlash = 0.0f;
 }
@@ -868,6 +866,7 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
       size = 1.00f;
       break;
     default:
+      size = 0.70f;
       break;
     }
 
@@ -910,6 +909,34 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
                (Color){120, 210, 240, 200});
     }
 
+  for (int y = 0; y < maze.h; ++y)
+    for (int x = 0; x < maze.w; ++x) {
+      if (!maze.hasTent(x, y))
+        continue;
+
+      Vector3 tp = {x * C::CELL + C::CELL * 0.5f, 0.0f,
+                    y * C::CELL + C::CELL * 0.5f};
+      float dx = tp.x - pl.pos.x, dz = tp.z - pl.pos.z;
+      if (dx * dx + dz * dz > 40.0f * 40.0f)
+        continue;
+
+      float s = C::CELL * 0.85f;
+
+      // Cuerpo de la tienda
+      DrawCube({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){90, 120, 80, 255});
+      DrawCubeWires({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){40, 60, 35, 255});
+
+      // Tejadillo a dos aguas (aproximación con cubo achatado)
+      DrawCube({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
+               (Color){150, 90, 50, 255});
+      DrawCubeWires({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
+                    (Color){80, 50, 30, 255});
+
+      // Entrada oscura (el "hueco" por el que pasa el jugador)
+      DrawCube({tp.x, 0.4f, tp.z - s * 0.5f - 0.02f}, 0.55f, 0.7f, 0.02f,
+               (Color){20, 20, 15, 255});
+    }
+
   for (auto &pr : projectiles) {
     float size = 0.25f;
     switch (pr.kind) {
@@ -925,7 +952,11 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     case ITEM_BICIMAD:
       size = 1.25;
       break;
+    case ITEM_WALL:
+      size = 0.9f;
+      break;
     default:
+      size = 0.8f;
       break;
     }
     if (assets.hasItemTex[pr.kind]) {
@@ -2502,7 +2533,7 @@ void Game::drawJumpscare() {
 }
 
 void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
-  int count = std::min(3 + lvl / 2, 8);
+  int count = std::min(6 + lvl / 2, 8);
 
   float minDistFromSpawn = size * C::CELL * 0.20f;
 
@@ -2510,12 +2541,9 @@ void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
     ItemKind kind;
     int weight;
   };
-  const Weighted pool[] = {
-      {ITEM_ROCK, 50},
-      {ITEM_BOX, 20},
-      {ITEM_LIME, 20},
-      {ITEM_BICIMAD, 10},
-  };
+  const Weighted pool[] = {{ITEM_ROCK, 30},    {ITEM_BOX, 20},
+                           {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
+                           {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
   const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
 
   int totalWeight = 0;

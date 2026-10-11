@@ -133,6 +133,8 @@ enum ItemKind {
   ITEM_BOX,
   ITEM_LIME,
   ITEM_BICIMAD,
+  ITEM_MONSTER,
+  ITEM_WALL,
   ITEM_KIND_COUNT
 };
 

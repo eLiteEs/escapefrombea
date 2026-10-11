@@ -112,11 +112,9 @@ void Assets::load() {
       ItemKind kind;
       const char *file;
     } defs[] = {
-        {ITEM_ROCK, "rock.png"},
-        {ITEM_BOX, "box.png"},
-        {ITEM_LIME, "lime.png"},
-        {ITEM_BICIMAD, "bicimad.png"},
-    };
+        {ITEM_ROCK, "item_rock.png"},       {ITEM_BOX, "item_box.png"},
+        {ITEM_LIME, "item_lime.png"},       {ITEM_BICIMAD, "item_bicimad.png"},
+        {ITEM_MONSTER, "item_monster.png"}, {ITEM_WALL, "item_wall.png"}};
     for (auto &d : defs) {
       std::string path = Paths::sprite(d.file);
       itemTex[d.kind] = LoadTexture(path.c_str());
