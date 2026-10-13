@@ -79,8 +79,8 @@ void Game::init() {
       float scaleY = imgAreaH / (float)splash.height;
       float s = std::min(scaleX, scaleY);
 
-      float tw = splash.width * s;
-      float th = splash.height * s;
+      float tw = 600;
+      float th = 450;
       float tx = ((float)W - tw) / 2.0f;
       float ty = (imgAreaH - th) / 2.0f;
 
