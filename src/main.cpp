@@ -38,7 +38,6 @@ int main() {
 #endif
 
   Game game;
-  g_game = &game;
   game.init();
 
 #if defined(__EMSCRIPTEN__)
