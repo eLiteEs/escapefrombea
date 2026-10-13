@@ -283,8 +283,7 @@ static Vector3 findFreeSpawnNear(const Maze &maze, int cx, int cy,
 static void resetPlayerState(Player &p, Vector3 spawn) {
   if (p.caught) {
     for (int i = 0; i < C::INV_SLOTS; ++i)
-      p.inventory[i] = {};
-    p.selectedSlot = 0;
+      p.inventory[i].count = p.inventory[i].count / 2;
   }
 
   p.pos = spawn;
