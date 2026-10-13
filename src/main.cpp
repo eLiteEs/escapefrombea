@@ -17,8 +17,6 @@
 #include <emscripten.h>
 #endif
 
-static Game *g_game = nullptr;
-
 #if defined(__EMSCRIPTEN__)
 static void web_frame() {
   if (g_game)
