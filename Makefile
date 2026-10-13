@@ -316,8 +316,8 @@ dist-web: web
 	@echo "Sube este zip a itch.io con 'Kind of project: HTML'" >> $(WEB_DIST_DIR)/README.txt
 	@echo "No es necesario ningun servidor: itch.io lo sirve todo." >> $(WEB_DIST_DIR)/README.txt
 	@[ -f README.md ] && cp README.md $(WEB_DIST_DIR)/ || true
-	@cd dist && rm -f escape_from_bea-web.zip && \
-		zip -qr escape_from_bea-web.zip escape_from_bea-web
+	@cd $(WEB_DIST_DIR) && rm -f escape_from_bea-web.zip && \
+		zip -qr ../escape_from_bea-web.zip .
 	@echo "   -> $(WEB_ZIP)"
 	@echo ""
 	@echo "Sube $(WEB_ZIP) a itch.io:"
