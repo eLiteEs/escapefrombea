@@ -141,6 +141,7 @@ enum ItemKind {
   ITEM_BICIMAD,
   ITEM_MONSTER,
   ITEM_WALL,
+  ITEM_KEY,
   ITEM_KIND_COUNT
 };
 
@@ -178,6 +179,7 @@ struct Player {
   bool exhausted = false;
   float escapeTime = 0.0f;
   int caughtBy = -1;
+  bool hasKey = false;
 
   // Inventario
   InvItem inventory[C::INV_SLOTS];

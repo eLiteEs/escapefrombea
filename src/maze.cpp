@@ -297,6 +297,7 @@ bool Maze::loadFromFile(const char *path, LevelExtras &extras) {
   fountains.assign(h, std::vector<bool>(w, false));
   tents.assign(h, std::vector<bool>(w, false));
 
+  extras.keys.clear();
   extras.spawns.clear();
   extras.items.clear();
   extras.enemies.clear();
@@ -341,6 +342,10 @@ bool Maze::loadFromFile(const char *path, LevelExtras &extras) {
       case 'F':
         g[y][x] = 0;
         fountains[y][x] = true;
+        break;
+      case 'k':
+        g[y][x] = 0;
+        extras.keys.push_back(center);
         break;
       default:
         // Cualquier otra cosa -> suelo (permite decorar con letras libres)

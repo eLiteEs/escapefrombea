@@ -181,6 +181,7 @@ struct Game {
                                  std::mt19937 &rng);
   void spawnItemsFromPositions(const std::vector<Vector3> &positions,
                                std::mt19937 &rng);
+  void spawnKeysFromPositions(const std::vector<Vector3> &positions);
 
   bool loadLevelDetails(int lvl);
   void requestEnterLevel(int lvl); // muestra intro si existe, si no entra

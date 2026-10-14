@@ -7,6 +7,7 @@ struct LevelExtras {
   std::vector<Vector3> spawns;  // celdas 's'
   std::vector<Vector3> items;   // celdas 'i'
   std::vector<Vector3> enemies; // celdas 'e'
+  std::vector<Vector3> keys;    // celdas 'k'
   bool hasExit = false;         // celdas 'f'
   Vector3 exit = {0, 0, 0};
 };

@@ -350,6 +350,7 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.hiddenCellY = -1;
   p.throwCooldown = 0.0f;
   p.attackFlash = 0.0f;
+  p.hasKey = false;
 }
 
 // ---------- Cinemáticas ----------
@@ -500,10 +501,26 @@ void Game::update(float dt) {
       }
     }
 
+    // ¿Hay llaves en este nivel? ¿Ya la tiene alguien?
+    bool levelHasKey = false;
+    for (auto &w : worldItems)
+      if (w.kind == ITEM_KEY) {
+        levelHasKey = true;
+        break;
+      }
+
+    bool keySatisfied = !levelHasKey || players[0].hasKey || players[1].hasKey;
+
     for (int p = 0; p < numPlayers; ++p) {
       if (players[p].caught || players[p].escaped)
         continue;
       if (Vector3Distance(players[p].pos, exitPos) < 1.7f) {
+        if (!keySatisfied) {
+          // Aviso cada vez que toca la salida sin llave
+          if (p == 0 && toastTimer <= 0.0f)
+            showToast(L("toast.exit.locked", "Necesitas la llave"));
+          continue;
+        }
         players[p].escaped = true;
         players[p].escapeTime = levelTime;
       }
@@ -836,6 +853,16 @@ void Game::drawMinimap(const Player &pl, int vw) {
   DrawRectangle(px - 2, pz - 2, 5, 5, GOLD);
   Vector2 fwd = {px + sinf(pl.yaw) * 10, pz - cosf(pl.yaw) * 10};
   DrawLine(px, pz, (int)fwd.x, (int)fwd.y, GOLD);
+
+  // Llaves en el minimapa
+  for (auto &w : worldItems) {
+    if (w.kind != ITEM_KEY)
+      continue;
+    int kx = ox + (int)((w.pos.x / C::CELL) * scale);
+    int kz = oy + (int)((w.pos.z / C::CELL) * scale);
+    DrawRectangle(kx - 3, kz - 3, 6, 6, GOLD);
+    DrawRectangleLines(kx - 3, kz - 3, 6, 6, (Color){120, 80, 20, 255});
+  }
 }
 
 void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
@@ -910,15 +937,36 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
            (Color){18, 18, 26, 255});
 
   // Portal
+  bool levelHasKey = false;
+  for (auto &w : worldItems)
+    if (w.kind == ITEM_KEY) {
+      levelHasKey = true;
+      break;
+    }
+  bool locked = levelHasKey && !(players[0].hasKey || players[1].hasKey);
+
   float pulse = 1.0f + 0.15f * sinf((float)GetTime() * 4.0f);
+  Color exitBody =
+      locked ? (Color){180, 40, 40, 255} : (Color){70, 220, 130, 255};
+  Color exitWire = locked ? (Color){255, 80, 80, 255} : LIME;
+
   DrawCube({exitPos.x, 1.2f, exitPos.z}, 1.6f * pulse, 2.4f, 1.6f * pulse,
-           (Color){70, 220, 130, 255});
+           exitBody);
   DrawCubeWires({exitPos.x, 1.2f, exitPos.z}, 1.8f * pulse, 2.6f, 1.8f * pulse,
-                LIME);
-  if (assets.hasPortalTex)
+                exitWire);
+
+  if (assets.hasPortalTex && !locked)
     DrawBillboard(cam, assets.portalTex, {exitPos.x, 3.0f, exitPos.z},
                   1.6f * pulse, WHITE);
 
+  if (locked) {
+    DrawCube({exitPos.x, 3.2f, exitPos.z}, 0.5f, 0.5f, 0.5f,
+             (Color){255, 200, 60, 255});
+    DrawCubeWires({exitPos.x, 3.2f, exitPos.z}, 0.6f, 0.6f, 0.6f,
+                  (Color){120, 80, 20, 255});
+  }
+
+  // Items
   for (auto &w : worldItems) {
     float dx = w.pos.x - pl.pos.x, dz = w.pos.z - pl.pos.z;
     if (dx * dx + dz * dz > 35.0f * 35.0f)
@@ -941,6 +989,9 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     case ITEM_BICIMAD:
       size = 1.00f;
       break;
+    case ITEM_KEY:
+      size = 0.55f;
+      break;
     default:
       size = 0.70f;
       break;
@@ -960,6 +1011,16 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
       float p2 = 0.35f + 0.10f * sinf((float)GetTime() * 5.0f);
       DrawCubeWires(dp, size * 0.7f + p2, size * 0.7f + p2, size * 0.7f + p2,
                     (Color){255, 240, 120, 200});
+    }
+
+    if (w.kind == ITEM_KEY) {
+      float gold = 0.7f + 0.3f * sinf((float)GetTime() * 5.0f);
+      // Halo dorado alrededor
+      DrawCubeWires(dp, size * 1.1f + gold * 0.2f, size * 1.1f + gold * 0.2f,
+                    size * 1.1f + gold * 0.2f, (Color){255, 215, 0, 200});
+      // Rayo vertical tenue
+      DrawCube({w.pos.x, w.pos.y + 1.0f, w.pos.z}, 0.05f, 2.0f, 0.05f,
+               (Color){255, 240, 120, 120});
     }
   }
 
@@ -3015,6 +3076,23 @@ void Game::handleInteraction(int p) {
   int idx = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
   if (idx >= 0) {
     ItemKind kind = worldItems[idx].kind;
+
+    if (kind == ITEM_KEY) {
+      worldItems.erase(worldItems.begin() + idx);
+
+      players[0].hasKey = true;
+      players[1].hasKey = true;
+
+      if (assets.sfxPickup.frameCount > 0) {
+        SetSoundPitch(assets.sfxPickup, 1.4f);
+        PlaySound(assets.sfxPickup);
+        SetSoundPitch(assets.sfxPickup, 1.0f);
+      }
+      if (p == 0)
+        showToast(L("toast.key.acquired", "¡Llave conseguida!"));
+      return;
+    }
+
     if (Inventory::collectPickup(pl, worldItems, idx)) {
       if (assets.sfxPickup.frameCount > 0)
         PlaySound(assets.sfxPickup);
@@ -3237,6 +3315,9 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
   case ITEM_BICIMAD:
     size = 0.60f;
     break;
+  case ITEM_KEY:
+    size = 0.55;
+    break;
   default:
     break;
   }
@@ -3409,6 +3490,19 @@ void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
   }
 }
 
+void Game::spawnKeysFromPositions(const std::vector<Vector3> &positions) {
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+
+    WorldPickup wp;
+    wp.kind = ITEM_KEY;
+    wp.pos = {p.x, 0.55f, p.z}; // un pelín más alto, brilla
+    wp.bobT = 0.0f;
+    worldItems.push_back(wp);
+  }
+}
+
 void Game::startLevel(int lvl) {
   // ============================================================
   // 1) Intentar cargar un mapa custom (solo modo historia)
@@ -3418,6 +3512,8 @@ void Game::startLevel(int lvl) {
 
   if (tryLoadCustomLevel(lvl, extras)) {
     usedCustom = true;
+    for (Player &p : players)
+      p.hasKey = false;
     currentSeed = 0; // los mapas custom no tienen semilla procedural
   } else {
     // ========================================================
@@ -3489,6 +3585,7 @@ void Game::startLevel(int lvl) {
   if (usedCustom) {
     spawnEnemiesFromPositions(extras.enemies, lvl, rng);
     spawnItemsFromPositions(extras.items, rng);
+    spawnKeysFromPositions(extras.keys);
   } else {
     // ----- Enemigos: código original -----
     int count;

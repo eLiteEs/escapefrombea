@@ -113,7 +113,7 @@ static const TileDef TILES[] = {
     {'s', 16, 40, "spawn"},    {'i', 16, 178, "item"},
     {'e', 15, 124, "enemigo"}, {'f', 16, 44, "finish"},
     {'L', 15, 25, "taquilla"}, {'F', 16, 45, "fuente"},
-};
+    {'k', 220, 94, "llave"}};
 static const int NTILES = (int)(sizeof(TILES) / sizeof(TILES[0]));
 
 static const TileDef *tileFor(char c) {
@@ -1059,7 +1059,7 @@ int main(int argc, char **argv) {
         ed.cursorY++;
 
       // --- Brush por número ---
-      else if (c >= '1' && c <= '8') {
+      else if (c >= '1' && c <= '9') {
         int idx = c - '1';
         if (idx < NTILES) {
           ed.brush = TILES[idx].ch;

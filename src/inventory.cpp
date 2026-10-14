@@ -354,6 +354,8 @@ const char *itemName(ItemKind kind) {
     return "monster";
   case ITEM_WALL:
     return L("item.wall", "muro");
+  case ITEM_KEY:
+    return L("item.key", "llave");
   default:
     return L("item", "item");
   }
