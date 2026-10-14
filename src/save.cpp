@@ -1,11 +1,12 @@
 #include "save.h"
+#include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
-#define WEB_BUILD 1
 #else
 #ifdef _WIN32
 #include <direct.h>
@@ -16,36 +17,71 @@
 #endif
 #endif
 
-#if defined(__EMSCRIPTEN__)
-#include <emscripten.h>
-#include <string>
+// =========================================================================
+//  IO helpers
+//  Nativo: ficheros en disco.
+//  Web:    localStorage (clave derivada del path).
+// =========================================================================
+static std::string keyFromPath(const std::string &p) {
+  std::string k = p;
+  for (auto &c : k)
+    if (c == '/' || c == '\\')
+      c = '_';
+  return "efb_" + k;
+}
 
-static bool ls_save(const char *key, const std::string &data) {
+static bool writeFile(const std::string &path, const std::string &content) {
+#if defined(__EMSCRIPTEN__)
+  std::string k = keyFromPath(path);
   EM_ASM(
       {
         try {
           localStorage.setItem(UTF8ToString($0), UTF8ToString($1));
         } catch (e) {
-          console.error('localStorage setItem failed', e);
         }
       },
-      key, data.c_str());
+      k.c_str(), content.c_str());
   return true;
+#else
+  MKDIR_SAVES();
+  FILE *f = fopen(path.c_str(), "w");
+  if (!f)
+    return false;
+  fwrite(content.data(), 1, content.size(), f);
+  fclose(f);
+  return true;
+#endif
 }
 
-static std::string ls_load(const char *key) {
-  char buf[8192] = {0};
+static std::string readFile(const std::string &path) {
+#if defined(__EMSCRIPTEN__)
+  std::string k = keyFromPath(path);
+  char buf[32768] = {0};
   EM_ASM(
       {
         var v = localStorage.getItem(UTF8ToString($0));
         if (v)
           stringToUTF8(v, $1, $2);
       },
-      key, buf, (int)sizeof(buf));
+      k.c_str(), buf, (int)sizeof(buf));
   return std::string(buf);
+#else
+  FILE *f = fopen(path.c_str(), "r");
+  if (!f)
+    return "";
+  std::string out;
+  char buf[4096];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+    out.append(buf, n);
+  fclose(f);
+  return out;
+#endif
 }
 
-static void ls_remove(const char *key) {
+static bool deleteFile(const std::string &path) {
+#if defined(__EMSCRIPTEN__)
+  std::string k = keyFromPath(path);
   EM_ASM(
       {
         try {
@@ -53,32 +89,47 @@ static void ls_remove(const char *key) {
         } catch (e) {
         }
       },
-      key);
-}
+      k.c_str());
+  return true;
+#else
+  return remove(path.c_str()) == 0;
 #endif
+}
 
-static void parseSlotKey(SaveSlot &slot, const char *key, const char *val) {
-  // Claves simples
-  if (!strcmp(key, "level"))
-    slot.level = atoi(val);
-  else if (!strcmp(key, "maxLevel"))
-    slot.maxLevel = atoi(val);
+// =========================================================================
+//  Parser de SaveEntry
+// =========================================================================
+static void parseEntryKey(SaveEntry &e, const char *key, const char *val) {
+  if (!strcmp(key, "id"))
+    e.id = val;
+  else if (!strcmp(key, "name"))
+    e.name = val;
   else if (!strcmp(key, "mode"))
-    slot.mode = atoi(val);
+    e.mode = atoi(val);
+  else if (!strcmp(key, "difficulty"))
+    e.difficulty = atoi(val);
+  else if (!strcmp(key, "speedrun"))
+    e.speedrun = atoi(val) != 0;
   else if (!strcmp(key, "twoPlayers"))
-    slot.twoPlayers = atoi(val) != 0;
+    e.twoPlayers = atoi(val) != 0;
+  else if (!strcmp(key, "level"))
+    e.level = atoi(val);
+  else if (!strcmp(key, "maxLevel"))
+    e.maxLevel = atoi(val);
   else if (!strcmp(key, "playtime"))
-    slot.playtime = (float)atof(val);
+    e.playtime = (float)atof(val);
   else if (!strcmp(key, "timestamp"))
-    slot.timestamp = (std::time_t)atoll(val);
+    e.timestamp = (std::time_t)atoll(val);
+  else if (!strcmp(key, "created"))
+    e.created = (std::time_t)atoll(val);
   else if (!strcmp(key, "runSeed"))
-    slot.runSeed = (uint32_t)strtoul(val, nullptr, 10);
+    e.runSeed = (uint32_t)strtoul(val, nullptr, 10);
   else if (!strcmp(key, "enemyMult"))
-    slot.enemyMult = atoi(val);
+    e.enemyMult = atoi(val);
   else if (!strcmp(key, "itemMult"))
-    slot.itemMult = atoi(val);
+    e.itemMult = atoi(val);
   else if (!strcmp(key, "speedrunSplits")) {
-    slot.speedrunSplits.clear();
+    e.speedrunSplits.clear();
     if (val[0] == 0)
       return;
     const char *p = val;
@@ -87,313 +138,381 @@ static void parseSlotKey(SaveSlot &slot, const char *key, const char *val) {
       float v = strtof(p, &end);
       if (end == p)
         break;
-      slot.speedrunSplits.push_back(v);
+      e.speedrunSplits.push_back(v);
       p = end;
       if (*p == ',')
         ++p;
     }
   } else {
+    // Claves de inventario: pN_slotM_kind, pN_slotM_count, pN_sel
     int p = 0, s = 0, consumed = 0;
     int klen = (int)strlen(key);
 
-    // pN_slotM_kind
+    // El %n + comparación con klen evita que "p1_slot0_kind" matchee "p%d_sel".
     if (sscanf(key, "p%d_slot%d_kind%n", &p, &s, &consumed) == 2 &&
         consumed == klen && p >= 1 && p <= 2 && s >= 0 && s < C::INV_SLOTS) {
-      slot.inventory[p - 1][s].kind = atoi(val);
+      e.inventory[p - 1][s].kind = atoi(val);
       return;
     }
-
-    // pN_slotM_count
     if (sscanf(key, "p%d_slot%d_count%n", &p, &s, &consumed) == 2 &&
         consumed == klen && p >= 1 && p <= 2 && s >= 0 && s < C::INV_SLOTS) {
-      slot.inventory[p - 1][s].count = atoi(val);
+      e.inventory[p - 1][s].count = atoi(val);
       return;
     }
-
-    // pN_sel   (al final: es el más "laxo")
     if (sscanf(key, "p%d_sel%n", &p, &consumed) == 1 && consumed == klen &&
         p >= 1 && p <= 2) {
-      slot.selectedSlot[p - 1] = atoi(val);
+      e.selectedSlot[p - 1] = atoi(val);
       return;
     }
   }
 }
 
-bool SaveManager::saveSlot(int i, const SaveSlot &data) {
-  if (i < 0 || i >= NUM_SLOTS)
-    return false;
+static void parseEntryContent(SaveEntry &e, const std::string &content) {
+  size_t i = 0;
+  while (i < content.size()) {
+    size_t nl = content.find('\n', i);
+    if (nl == std::string::npos)
+      nl = content.size();
+    std::string line = content.substr(i, nl - i);
+    i = nl + 1;
 
-#if defined(__EMSCRIPTEN__)
-  char buf[4096];
-  int n =
-      snprintf(buf, sizeof(buf),
-               "level=%d\nmaxLevel=%d\nmode=%d\ntwoPlayers=%d\nplaytime=%."
-               "2f\ntimestamp=%lld\n",
-               data.level, data.maxLevel, data.mode, data.twoPlayers ? 1 : 0,
-               (double)data.playtime, (long long)std::time(nullptr));
+    while (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line.empty() || line[0] == '#')
+      continue;
 
-  char splitsBuf[512] = {0};
-  for (size_t i = 0; i < data.speedrunSplits.size(); ++i) {
-    char tmp[32];
-    snprintf(tmp, sizeof(tmp), "%s%.3f", i ? "," : "",
-             (double)data.speedrunSplits[i]);
-    strncat(splitsBuf, tmp, sizeof(splitsBuf) - strlen(splitsBuf) - 1);
+    size_t eq = line.find('=');
+    if (eq == std::string::npos)
+      continue;
+
+    std::string key = line.substr(0, eq);
+    std::string val = line.substr(eq + 1);
+    parseEntryKey(e, key.c_str(), val.c_str());
   }
-  n += snprintf(buf + n, sizeof(buf) - n,
-                "runSeed=%u\nenemyMult=%d\nitemMult=%d\nspeedrunSplits=%s\n",
-                data.runSeed, data.enemyMult, data.itemMult, splitsBuf);
-
-  for (int p = 0; p < 2; ++p) {
-    n += snprintf(buf + n, sizeof(buf) - n, "p%d_sel=%d\n", p + 1,
-                  data.selectedSlot[p]);
-    for (int s = 0; s < C::INV_SLOTS; ++s) {
-      n += snprintf(buf + n, sizeof(buf) - n, "p%d_slot%d_kind=%d\n", p + 1, s,
-                    data.inventory[p][s].kind);
-      n += snprintf(buf + n, sizeof(buf) - n, "p%d_slot%d_count=%d\n", p + 1, s,
-                    data.inventory[p][s].count);
-    }
-  }
-
-  char key[32];
-  snprintf(key, sizeof(key), "efb_slot%d", i + 1);
-  ls_save(key, buf);
-#else
-  MKDIR_SAVES();
-  FILE *f = fopen(slotPath(i).c_str(), "w");
-  if (!f)
-    return false;
-
-  fprintf(f, "level=%d\n", data.level);
-  fprintf(f, "maxLevel=%d\n", data.maxLevel);
-  fprintf(f, "mode=%d\n", data.mode);
-  fprintf(f, "twoPlayers=%d\n", data.twoPlayers ? 1 : 0);
-  fprintf(f, "playtime=%.2f\n", (double)data.playtime);
-  fprintf(f, "timestamp=%lld\n", (long long)std::time(nullptr));
-  fprintf(f, "runSeed=%u\n", data.runSeed);
-  fprintf(f, "enemyMult=%d\n", data.enemyMult);
-  fprintf(f, "itemMult=%d\n", data.itemMult);
-
-  fprintf(f, "speedrunSplits=");
-  for (size_t i = 0; i < data.speedrunSplits.size(); ++i)
-    fprintf(f, "%s%.3f", i ? "," : "", (double)data.speedrunSplits[i]);
-  fprintf(f, "\n");
-
-  for (int p = 0; p < 2; ++p) {
-    fprintf(f, "p%d_sel=%d\n", p + 1, data.selectedSlot[p]);
-    for (int s = 0; s < C::INV_SLOTS; ++s) {
-      fprintf(f, "p%d_slot%d_kind=%d\n", p + 1, s, data.inventory[p][s].kind);
-      fprintf(f, "p%d_slot%d_count=%d\n", p + 1, s, data.inventory[p][s].count);
-    }
-  }
-  fclose(f);
-#endif
-
-  slots_[i] = data;
-  slots_[i].used = true;
-  slots_[i].timestamp = std::time(nullptr);
-  return true;
 }
 
-std::string SaveManager::slotPath(int i) const {
-  char buf[80];
+static std::string serializeEntry(const SaveEntry &e) {
+  std::string s;
+  char buf[512];
+
+  auto line = [&](const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    s += buf;
+    s += '\n';
+  };
+
+  line("id=%s", e.id.c_str());
+  line("name=%s", e.name.c_str());
+  line("mode=%d", e.mode);
+  line("difficulty=%d", e.difficulty);
+  line("speedrun=%d", e.speedrun ? 1 : 0);
+  line("twoPlayers=%d", e.twoPlayers ? 1 : 0);
+  line("level=%d", e.level);
+  line("maxLevel=%d", e.maxLevel);
+  line("playtime=%.3f", (double)e.playtime);
+  line("timestamp=%lld", (long long)e.timestamp);
+  line("created=%lld", (long long)e.created);
+  line("runSeed=%u", e.runSeed);
+  line("enemyMult=%d", e.enemyMult);
+  line("itemMult=%d", e.itemMult);
+
+  for (int p = 0; p < 2; ++p) {
+    line("p%d_sel=%d", p + 1, e.selectedSlot[p]);
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      line("p%d_slot%d_kind=%d", p + 1, i, e.inventory[p][i].kind);
+      line("p%d_slot%d_count=%d", p + 1, i, e.inventory[p][i].count);
+    }
+  }
+
+  s += "speedrunSplits=";
+  for (size_t i = 0; i < e.speedrunSplits.size(); ++i) {
+    if (i)
+      s += ',';
+    snprintf(buf, sizeof(buf), "%.3f", (double)e.speedrunSplits[i]);
+    s += buf;
+  }
+  s += '\n';
+
+  return s;
+}
+
+// =========================================================================
+//  Paths
+// =========================================================================
+std::string SaveManager::savePath(const std::string &id) const {
 #if defined(__EMSCRIPTEN__)
-  snprintf(buf, sizeof(buf), "/saves/slot%d.cfg", i + 1);
+  return "/saves/" + id + ".sav";
 #else
-  snprintf(buf, sizeof(buf), "saves/slot%d.cfg", i + 1);
+  return "saves/" + id + ".sav";
 #endif
+}
+
+std::string SaveManager::indexPath() const {
+#if defined(__EMSCRIPTEN__)
+  return "/saves/index.cfg";
+#else
+  return "saves/index.cfg";
+#endif
+}
+
+std::string SaveManager::newId() const {
+  // Timestamp + sufijo aleatorio → colisión imposible incluso creando
+  // varios saves en el mismo segundo.
+  char buf[64];
+  uint32_t r = (uint32_t)(rand() & 0xFFFF);
+  snprintf(buf, sizeof(buf), "save_%lld_%04X", (long long)std::time(nullptr),
+           r);
   return buf;
 }
 
-void SaveManager::refresh() {
-  for (int i = 0; i < NUM_SLOTS; ++i) {
-    slots_[i] = SaveSlot{};
+// =========================================================================
+//  Index (lista de ids)
+// =========================================================================
+void SaveManager::loadIndex(std::vector<std::string> &out) const {
+  out.clear();
+  std::string content = readFile(indexPath());
+  size_t i = 0;
+  while (i < content.size()) {
+    size_t nl = content.find('\n', i);
+    if (nl == std::string::npos)
+      nl = content.size();
+    std::string line = content.substr(i, nl - i);
+    i = nl + 1;
+    while (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line.empty() || line[0] == '#')
+      continue;
+    out.push_back(line);
+  }
+}
 
-#if defined(__EMSCRIPTEN__)
-    char key[32];
-    snprintf(key, sizeof(key), "efb_slot%d", i + 1);
-    std::string content = ls_load(key);
+void SaveManager::saveIndex(const std::vector<std::string> &ids) const {
+  std::string s = "# saves index\n";
+  for (auto &id : ids) {
+    s += id;
+    s += '\n';
+  }
+  writeFile(indexPath(), s);
+}
+
+// =========================================================================
+//  Refresh
+// =========================================================================
+void SaveManager::refresh() {
+  entries_.clear();
+
+  std::vector<std::string> ids;
+  loadIndex(ids);
+
+  for (auto &id : ids) {
+    std::string content = readFile(savePath(id));
     if (content.empty())
       continue;
 
-    const char *p = content.c_str();
-    char line[256];
-    while (sscanf(p, "%255[^\n]\n", line) == 1) {
-      const char *nl = strchr(p, '\n');
-      if (!nl)
-        break;
-      p = nl + 1;
-      char *eq = strchr(line, '=');
-      if (!eq)
-        continue;
-      *eq = 0;
-      parseSlotKey(slots_[i], line, eq + 1);
-    }
-    slots_[i].used = true;
-#else
-    MKDIR_SAVES();
-    FILE *f = fopen(slotPath(i).c_str(), "r");
-    if (!f)
-      continue;
-    char line[256];
-    while (fgets(line, sizeof(line), f)) {
-      for (char *p = line; *p; ++p)
-        if (*p == '\r' || *p == '\n') {
-          *p = 0;
-          break;
-        }
-      char *eq = strchr(line, '=');
-      if (!eq)
-        continue;
-      *eq = 0;
-      parseSlotKey(slots_[i], line, eq + 1);
-    }
-    fclose(f);
-    slots_[i].used = true;
-#endif
+    SaveEntry e;
+    e.id = id;
+    parseEntryContent(e, content);
+    entries_.push_back(std::move(e));
   }
+
+  // Orden: más recientes primero
+  std::sort(entries_.begin(), entries_.end(),
+            [](const SaveEntry &a, const SaveEntry &b) {
+              return a.timestamp > b.timestamp;
+            });
 
   loadSpeedruns();
 }
 
-bool SaveManager::loadSlot(int i, SaveSlot &out) const {
-  if (i < 0 || i >= NUM_SLOTS)
+// =========================================================================
+//  CRUD
+// =========================================================================
+std::string SaveManager::create(const SaveEntry &proto) {
+  SaveEntry e = proto;
+  if (e.id.empty())
+    e.id = newId();
+  e.created = std::time(nullptr);
+  e.timestamp = e.created;
+
+  if (!writeFile(savePath(e.id), serializeEntry(e)))
+    return "";
+
+  std::vector<std::string> ids;
+  loadIndex(ids);
+  if (std::find(ids.begin(), ids.end(), e.id) == ids.end())
+    ids.push_back(e.id);
+  saveIndex(ids);
+
+  entries_.insert(entries_.begin(), std::move(e));
+  return entries_.front().id;
+}
+
+std::string SaveManager::duplicate(const std::string &id) {
+  const SaveEntry *src = find(id);
+  if (!src)
+    return "";
+
+  SaveEntry e = *src;
+  e.id = newId();
+  e.name = src->name + " (copy)";
+  e.created = std::time(nullptr);
+  e.timestamp = e.created;
+
+  if (!writeFile(savePath(e.id), serializeEntry(e)))
+    return "";
+
+  std::vector<std::string> ids;
+  loadIndex(ids);
+  ids.push_back(e.id);
+  saveIndex(ids);
+
+  entries_.insert(entries_.begin(), std::move(e));
+  return entries_.front().id;
+}
+
+std::string SaveManager::recreate(const std::string &id) {
+  SaveEntry *src = find(id);
+  if (!src)
+    return "";
+
+  src->level = 1;
+  src->maxLevel = 1;
+  src->playtime = 0.0f;
+  src->timestamp = std::time(nullptr);
+  src->created = src->timestamp;
+  src->speedrunSplits.clear();
+
+  for (int p = 0; p < 2; ++p) {
+    src->selectedSlot[p] = 0;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      src->inventory[p][i].kind = 0;
+      src->inventory[p][i].count = 0;
+    }
+  }
+
+  writeFile(savePath(src->id), serializeEntry(*src));
+  return src->id;
+}
+
+bool SaveManager::remove(const std::string &id) {
+  auto it = std::find_if(entries_.begin(), entries_.end(),
+                         [&](const SaveEntry &e) { return e.id == id; });
+  if (it == entries_.end())
     return false;
-  if (!slots_[i].used)
-    return false;
-  out = slots_[i];
+
+  deleteFile(savePath(id));
+
+  std::vector<std::string> ids;
+  loadIndex(ids);
+  ids.erase(std::remove(ids.begin(), ids.end(), id), ids.end());
+  saveIndex(ids);
+
+  entries_.erase(it);
   return true;
 }
 
-int SaveManager::firstFreeSlot() const {
-  for (int i = 0; i < NUM_SLOTS; ++i)
-    if (!slots_[i].used)
-      return i;
-  return -1;
+bool SaveManager::save(const SaveEntry &e) {
+  SaveEntry *cur = find(e.id);
+  if (cur)
+    *cur = e;
+  else
+    entries_.push_back(e);
+
+  return writeFile(savePath(e.id), serializeEntry(e));
 }
 
-bool SaveManager::anyUsed() const {
-  for (int i = 0; i < NUM_SLOTS; ++i)
-    if (slots_[i].used)
-      return true;
-  return false;
+const SaveEntry *SaveManager::find(const std::string &id) const {
+  for (auto &e : entries_)
+    if (e.id == id)
+      return &e;
+  return nullptr;
 }
 
+SaveEntry *SaveManager::find(const std::string &id) {
+  for (auto &e : entries_)
+    if (e.id == id)
+      return &e;
+  return nullptr;
+}
+
+// =========================================================================
+//  Speedruns (historial global)
+// =========================================================================
 static std::string speedrunsPath() {
 #if defined(__EMSCRIPTEN__)
   return "/saves/speedruns.cfg";
 #else
-  MKDIR_SAVES();
   return "saves/speedruns.cfg";
 #endif
 }
 
 void SaveManager::loadSpeedruns() {
   speedruns_.clear();
-
-#if defined(__EMSCRIPTEN__)
-  std::string content = ls_load("efb_speedruns");
+  std::string content = readFile(speedrunsPath());
   if (content.empty())
     return;
-  const char *p = content.c_str();
-  char line[1024];
-  while (sscanf(p, "%1023[^\n]\n", line) == 1) {
-    const char *nl = strchr(p, '\n');
-    if (!nl)
-      break;
-    p = nl + 1;
 
-    if (line[0] == '#' || line[0] == 0)
+  size_t i = 0;
+  while (i < content.size()) {
+    size_t nl = content.find('\n', i);
+    if (nl == std::string::npos)
+      nl = content.size();
+    std::string line = content.substr(i, nl - i);
+    i = nl + 1;
+    while (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line.empty() || line[0] == '#')
       continue;
-    // Formato: seed,mode,date,total,s1,s2,s3,...
+
     SpeedrunEntry e;
-    char *tok = strtok(line, ",");
+    // strtok necesita mutable, así que copiamos a un buffer.
+    std::vector<char> tmp(line.begin(), line.end());
+    tmp.push_back('\0');
+
+    char *tok = strtok(tmp.data(), ",");
     if (!tok)
       continue;
     e.seed = (uint32_t)strtoul(tok, nullptr, 10);
+
     tok = strtok(nullptr, ",");
     if (!tok)
       continue;
     e.mode = atoi(tok);
-    tok = strtok(nullptr, ",");
-    if (!tok)
-      continue;
-    e.date = (std::time_t)atoll(tok);
-    tok = strtok(nullptr, ",");
-    if (!tok)
-      continue;
-    e.total = strtof(tok, nullptr);
-    while ((tok = strtok(nullptr, ",")) != nullptr)
-      e.splits.push_back(strtof(tok, nullptr));
-    speedruns_.push_back(std::move(e));
-  }
-#else
-  FILE *f = fopen(speedrunsPath().c_str(), "r");
-  if (!f)
-    return;
-  char line[1024];
-  while (fgets(line, sizeof(line), f)) {
-    for (char *q = line; *q; ++q)
-      if (*q == '\r' || *q == '\n') {
-        *q = 0;
-        break;
-      }
-    if (line[0] == '#' || line[0] == 0)
-      continue;
 
-    SpeedrunEntry e;
-    char *tok = strtok(line, ",");
-    if (!tok)
-      continue;
-    e.seed = (uint32_t)strtoul(tok, nullptr, 10);
-    tok = strtok(nullptr, ",");
-    if (!tok)
-      continue;
-    e.mode = atoi(tok);
     tok = strtok(nullptr, ",");
     if (!tok)
       continue;
     e.date = (std::time_t)atoll(tok);
+
     tok = strtok(nullptr, ",");
     if (!tok)
       continue;
     e.total = strtof(tok, nullptr);
+
     while ((tok = strtok(nullptr, ",")) != nullptr)
       e.splits.push_back(strtof(tok, nullptr));
+
     speedruns_.push_back(std::move(e));
   }
-  fclose(f);
-#endif
 }
 
 void SaveManager::saveSpeedruns() {
-#if defined(__EMSCRIPTEN__)
-  std::string content = "# speedruns.cfg\n";
+  std::string s = "# speedruns.cfg\n";
+  char buf[512];
   for (auto &e : speedruns_) {
-    char buf[512];
-    int n = snprintf(buf, sizeof(buf), "%u,%d,%lld,%.3f", e.seed, e.mode,
-                     (long long)e.date, (double)e.total);
-    content += buf;
-    for (float s : e.splits) {
-      snprintf(buf, sizeof(buf), ",%.3f", (double)s);
-      content += buf;
+    snprintf(buf, sizeof(buf), "%u,%d,%lld,%.3f", e.seed, e.mode,
+             (long long)e.date, (double)e.total);
+    s += buf;
+    for (float sp : e.splits) {
+      snprintf(buf, sizeof(buf), ",%.3f", (double)sp);
+      s += buf;
     }
-    content += "\n";
+    s += '\n';
   }
-  ls_save("efb_speedruns", content);
-#else
-  FILE *f = fopen(speedrunsPath().c_str(), "w");
-  if (!f)
-    return;
-  fprintf(f, "# speedruns.cfg\n");
-  for (auto &e : speedruns_) {
-    fprintf(f, "%u,%d,%lld,%.3f", e.seed, e.mode, (long long)e.date,
-            (double)e.total);
-    for (float s : e.splits)
-      fprintf(f, ",%.3f", (double)s);
-    fprintf(f, "\n");
-  }
-  fclose(f);
-#endif
+  writeFile(speedrunsPath(), s);
 }
 
 void SaveManager::addSpeedrun(const SpeedrunEntry &e) {
@@ -402,20 +521,22 @@ void SaveManager::addSpeedrun(const SpeedrunEntry &e) {
 }
 
 void SaveManager::bestSplitsFor(uint32_t seed, int mode,
-                                std::vector<float> &outBest) const {
-  outBest.clear();
+                                std::vector<float> &out) const {
+  out.clear();
   const float INF = 1e9f;
+
   for (auto &e : speedruns_) {
     if (e.seed != seed || e.mode != mode)
       continue;
     for (size_t i = 0; i < e.splits.size(); ++i) {
-      if (i >= outBest.size())
-        outBest.resize(i + 1, INF);
+      if (i >= out.size())
+        out.resize(i + 1, INF);
       if (e.splits[i] > 0.0f)
-        outBest[i] = std::min(outBest[i], e.splits[i]);
+        out[i] = std::min(out[i], e.splits[i]);
     }
   }
-  for (auto &v : outBest)
+
+  for (auto &v : out)
     if (v >= INF)
       v = 0.0f;
 }

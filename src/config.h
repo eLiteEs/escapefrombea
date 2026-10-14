@@ -21,7 +21,6 @@ struct Config {
   float sfxVol = 0.90f;
 
   // Gameplay
-  int difficulty = DIFF_NORMAL;
   bool invertY = false;
   float mouseSens = 1.0f;
   float stickSens = 1.0f;
@@ -66,7 +65,4 @@ struct Config {
   bool bigSubtitles = false;
   bool holdToSprint = true;
   bool noJumpscares = false;
-
-  // Speedrun
-  bool speedrunMode = false;
 };

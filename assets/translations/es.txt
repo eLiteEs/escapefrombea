@@ -117,3 +117,21 @@ slot.hint=Elige un slot. Al empezar una partida nueva se sobrescribe el slot.
 
 toast.noslot=Sin slot asignado
 toast.saved=Partida guardada
+
+menu.single=Un jugador
+saves.title=Partidas guardadas
+saves.empty=No hay partidas. Crea una con el botón de abajo.
+saves.new=+ Nueva partida
+saves.play=Jugar
+saves.dup=Duplicar
+saves.rec=Recrear
+saves.del=Eliminar
+saves.tag.sr=Speedrun
+saves.delete.confirm=¿Eliminar esta partida?
+create.title=Nueva partida
+create.name=Nombre
+create.mode=Modo
+create.difficulty=Dificultad
+create.players=Jugadores
+create.speedrun=Modo speedrun
+create.confirm=Crear partida

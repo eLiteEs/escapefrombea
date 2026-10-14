@@ -6,7 +6,6 @@
 #include "paths.h"
 #include "player.h"
 #include "rlgl.h"
-#include "save.h"
 #include "ui.h"
 
 #include <algorithm>
@@ -15,13 +14,50 @@
 #include <cstring>
 #include <ctime>
 #include <random>
-#include <raylib.h>
+
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #endif
 
-static void formatSplitTime(float sec, char *out, size_t sz);
-static void formatDelta(float sec, char *out, size_t sz);
+// =========================================================================
+//  Helpers estáticos
+// =========================================================================
+static void formatSplitTime(float sec, char *out, size_t sz) {
+  if (sec < 0)
+    sec = 0;
+  int ms = (int)(sec * 1000.0f + 0.5f);
+  int totalS = ms / 1000;
+  ms %= 1000;
+  int m = totalS / 60, s = totalS % 60;
+  if (m > 0)
+    snprintf(out, sz, "%d:%02d.%03d", m, s, ms);
+  else
+    snprintf(out, sz, "%02d.%03d", s, ms);
+}
+
+static void formatDelta(float sec, char *out, size_t sz) {
+  const char *sign = (sec >= 0) ? "+" : "-";
+  float a = fabsf(sec);
+  int ms = (int)(a * 1000.0f + 0.5f);
+  int totalS = ms / 1000;
+  ms %= 1000;
+  int m = totalS / 60, s = totalS % 60;
+  if (m > 0)
+    snprintf(out, sz, "%s%d:%02d.%03d", sign, m, s, ms);
+  else
+    snprintf(out, sz, "%s%02d.%03d", sign, s, ms);
+}
+
+static float diffMultFor(int diff) {
+  switch (diff) {
+  case DIFF_EXPERT:
+    return 1.3f;
+  case DIFF_NIGHTMARE:
+    return 1.7f;
+  default:
+    return 1.0f;
+  }
+}
 
 static std::string resolveStoryPath(const char *fname) {
   auto exists = [](const std::string &p) {
@@ -31,11 +67,9 @@ static std::string resolveStoryPath(const char *fname) {
     fclose(f);
     return true;
   };
-
   std::string p = Paths::storyIn(Lang::currentLang(), fname);
   if (exists(p))
     return p;
-
   if (strcmp(Lang::currentLang(), "es") != 0) {
     p = Paths::storyIn("es", fname);
     if (exists(p))
@@ -47,7 +81,6 @@ static std::string resolveStoryPath(const char *fname) {
 static std::string resolveLevelDetailsPath(int lvl) {
   char fname[64];
   snprintf(fname, sizeof(fname), "level_%02d_details.dgn", lvl);
-
   auto exists = [](const std::string &p) {
     FILE *f = fopen(p.c_str(), "rb");
     if (!f)
@@ -55,11 +88,9 @@ static std::string resolveLevelDetailsPath(int lvl) {
     fclose(f);
     return true;
   };
-
   std::string p = Paths::levelDetailsIn(Lang::currentLang(), fname);
   if (exists(p))
     return p;
-
   if (strcmp(Lang::currentLang(), "es") != 0) {
     p = Paths::levelDetailsIn("es", fname);
     if (exists(p))
@@ -68,21 +99,91 @@ static std::string resolveLevelDetailsPath(int lvl) {
   return "";
 }
 
-// ---------- Util ----------
+static const char *yesNo(bool b) {
+  return b ? L("common.yes", "Sí") : L("common.no", "No");
+}
+
+static const char *pctStr(float v) {
+  static char buf[8];
+  snprintf(buf, sizeof(buf), "%d%%", (int)(v * 100 + 0.5f));
+  return buf;
+}
+
+static const char *fpsLabel(int idx) {
+  int v = C::FPS_OPTIONS[idx];
+  static char buf[16];
+  if (v == 0)
+    return L("video.fps.unlimited", "Sin límite");
+  snprintf(buf, sizeof(buf), "%d", v);
+  return buf;
+}
+
+static const char *rdLabel(int idx) {
+  switch (idx) {
+  case 0:
+    return L("video.renderdist.near", "Cerca (40m)");
+  case 1:
+    return L("video.renderdist.medium", "Media (60m)");
+  default:
+    return L("video.renderdist.far", "Lejos (100m)");
+  }
+}
+
+static const char *cbLabel(int idx) {
+  switch (idx) {
+  case 0:
+    return L("access.cb.none", "Ninguno");
+  case 1:
+    return L("access.cb.deuteranopia", "Deuteranopía");
+  case 2:
+    return L("access.cb.protanopia", "Protanopía");
+  default:
+    return L("access.cb.tritanopia", "Tritanopía");
+  }
+}
+
+static void drawDifficultyStar(float cx, float cy, float radius, Color color,
+                               bool filled) {
+  const int points = 10;
+  Vector2 verts[10];
+  for (int i = 0; i < points; ++i) {
+    float angle = -PI / 2.0f + i * (2.0f * PI / points);
+    float r = (i % 2 == 0) ? radius : radius * 0.42f;
+    verts[i] = {cx + cosf(angle) * r, cy + sinf(angle) * r};
+  }
+  if (filled) {
+    Vector2 c = {cx, cy};
+    for (int i = 0; i < points; ++i) {
+      int j = (i + 1) % points;
+      DrawTriangle(c, verts[i], verts[j], color);
+      DrawTriangle(c, verts[j], verts[i], color);
+    }
+  } else {
+    for (int i = 0; i < points; ++i) {
+      int j = (i + 1) % points;
+      DrawLineEx(verts[i], verts[j], 2.0f, color);
+    }
+  }
+}
+
+// =========================================================================
+//  Util
+// =========================================================================
 Color Game::playerColor(int idx) const { return UI::PlayerColor(idx); }
 
+// =========================================================================
+//  init / shutdown / render targets
+// =========================================================================
 void Game::init() {
   cfg.load();
   Lang::load(cfg.language.c_str());
 
-  // ---------- 1) Ventana final desde el principio, según config ----------
   SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
 
   int monW = GetMonitorWidth(0);
   int monH = GetMonitorHeight(0);
 
   int winW, winH;
-
   if (cfg.fullscreen) {
     winW = monW;
     winH = monH;
@@ -104,36 +205,25 @@ void Game::init() {
   SetMouseCursor(MOUSE_CURSOR_ARROW);
   SetExitKey(KEY_NULL);
 
-  // ---------- 2) Splash ----------
   Texture2D splash = LoadTexture(Paths::sprite("splash.png").c_str());
   if (splash.id != 0)
     SetTextureFilter(splash, TEXTURE_FILTER_BILINEAR);
 
-  // ---------- 3) Helper de dibujo ----------
   auto drawSplash = [&](float progress, const char *stage) {
     BeginDrawing();
     ClearBackground(WHITE);
-
     int W = GetScreenWidth();
     int H = GetScreenHeight();
-
-    // Reservamos la franja inferior para la barra
     float barArea = 110.0f;
     float imgAreaH = (float)H - barArea;
     if (imgAreaH < 10.0f)
       imgAreaH = (float)H * 0.7f;
 
-    // Logo: escala "contain" (cabe entero dentro del área de imagen)
     if (splash.id != 0) {
-      float scaleX = (float)W / (float)splash.width;
-      float scaleY = imgAreaH / (float)splash.height;
-      float s = std::min(scaleX, scaleY);
-
       float tw = 600;
       float th = 450;
       float tx = ((float)W - tw) / 2.0f;
       float ty = (imgAreaH - th) / 2.0f;
-
       DrawTexturePro(splash, {0, 0, (float)splash.width, (float)splash.height},
                      {tx, ty, tw, th}, {0, 0}, 0.0f, WHITE);
     } else {
@@ -142,7 +232,6 @@ void Game::init() {
       UI::T(t, W / 2 - UI::M(t, fs) / 2, (int)(imgAreaH / 2), fs, RED);
     }
 
-    // Barra
     float barW = (float)W * 0.65f;
     if (barW > 900.0f)
       barW = 900.0f;
@@ -160,30 +249,23 @@ void Game::init() {
                   (Color){80, 200, 120, 255});
     DrawRectangleLines((int)barX, (int)barY, (int)barW, (int)barH, RAYWHITE);
 
-    // Etiqueta de etapa encima de la barra
     if (stage && stage[0]) {
       int fs = 18;
       UI::T(stage, W / 2 - UI::M(stage, fs) / 2, (int)barY - fs - 6, fs, BLACK);
     }
-
-    // Porcentaje debajo
     char pctBuf[16];
     snprintf(pctBuf, sizeof(pctBuf), "%d%%", (int)(p * 100.0f));
     int fs2 = 16;
     UI::T(pctBuf, W / 2 - UI::M(pctBuf, fs2) / 2, (int)barY + (int)barH + 6,
           fs2, BLACK);
-
     EndDrawing();
   };
 
-  // ---------- 4) Primer frame ----------
   drawSplash(0.0f, L("load.starting", "Iniciando..."));
 
-  // ---------- 5) Audio ----------
   InitAudioDevice();
   assets.applyVolumes(cfg.masterVol, cfg.musicVol, cfg.sfxVol);
 
-  // ---------- 6) Carga por etapas ----------
   auto stepLabel = [&](int i) -> const char * {
     switch (i) {
     case 0:
@@ -233,21 +315,15 @@ void Game::init() {
     drawSplash((float)(i + 1) / (float)N, stepLabel(i));
   }
 
-  // ---------- 7) Breve pausa al 100% ----------
   float waitStart = (float)GetTime();
   while ((float)GetTime() - waitStart < 0.20f) {
     drawSplash(1.0f, L("load.done", "Listo"));
   }
 
-  // ---------- 8) Limpieza ----------
   if (splash.id != 0)
     UnloadTexture(splash);
-
-  // ---------- 9) Render targets ----------
   ensureRenderTargets();
-
   WaitTime(1);
-
   state = ST_MENU;
 }
 
@@ -281,7 +357,9 @@ void Game::ensureRenderTargets() {
   rtRight = LoadRenderTexture(rtW - halfW, rtH);
 }
 
-// ---------- Estado ----------
+// =========================================================================
+//  Estado
+// =========================================================================
 void Game::toMenu() {
   state = ST_MENU;
   navIndex = 0;
@@ -299,12 +377,10 @@ void Game::toMenu() {
 void Game::beginPlay(bool two, GameMode m) {
   twoPlayers = two;
   mode = m;
-
   if (assets.musicMenu.stream.buffer != nullptr && musicMenuPlaying) {
     StopMusicStream(assets.musicMenu);
     musicMenuPlaying = false;
   }
-
   requestEnterLevel(1);
 }
 
@@ -315,6 +391,9 @@ void Game::assignGamepads() {
   players[1].gamepadId = (twoPlayers && IsGamepadAvailable(p2Pad)) ? p2Pad : -1;
 }
 
+// =========================================================================
+//  Helpers de spawn
+// =========================================================================
 static Vector3 findFreeSpawnNear(const Maze &maze, int cx, int cy,
                                  Vector3 fallback) {
   for (int r = 1; r < std::max(maze.w, maze.h); ++r) {
@@ -335,7 +414,6 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
     for (int i = 0; i < C::INV_SLOTS; ++i)
       p.inventory[i].count = p.inventory[i].count / 2;
   }
-
   p.pos = spawn;
   p.yaw = p.pitch = 0;
   p.caught = p.escaped = false;
@@ -356,7 +434,9 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.hasKey = false;
 }
 
-// ---------- Cinemáticas ----------
+// =========================================================================
+//  Cinemáticas
+// =========================================================================
 bool Game::hasStory(const char *name) const {
   return !resolveStoryPath(name).empty();
 }
@@ -382,11 +462,12 @@ void Game::playCinematic(const char *name, const char *nextAction) {
   cinematic.start();
   state = ST_CINEMATIC;
   EnableCursor();
-
   Debug::resetCheats();
 }
 
-// ---------- Update ----------
+// =========================================================================
+//  Input helpers
+// =========================================================================
 bool Game::consumeConfirm() {
   if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     return true;
@@ -394,6 +475,17 @@ bool Game::consumeConfirm() {
     if (players[p].gamepadId >= 0 &&
         IsGamepadButtonPressed(players[p].gamepadId,
                                GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+      return true;
+  return false;
+}
+
+bool Game::consumeCancel() {
+  if (IsKeyPressed(KEY_ESCAPE))
+    return true;
+  for (int p = 0; p < 2; ++p)
+    if (players[p].gamepadId >= 0 &&
+        IsGamepadButtonPressed(players[p].gamepadId,
+                               GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))
       return true;
   return false;
 }
@@ -422,13 +514,16 @@ int Game::gamepadLeftRight() {
   }
   return 0;
 }
+
+// =========================================================================
+//  update
+// =========================================================================
 void Game::update(float dt) {
   UI::scale = cfg.guiScale;
   UI::colorblind = cfg.colorblindMode;
 
-  if (state == ST_MENU) {
+  if (state == ST_MENU)
     attract.update(dt);
-  }
 
   if (assets.musicMenu.stream.buffer != nullptr)
     UpdateMusicStream(assets.musicMenu);
@@ -443,7 +538,6 @@ void Game::update(float dt) {
 
   if (state == ST_PLAYING) {
     float gdt = dt * Debug::timeScale;
-
     levelTime += gdt;
     totalPlaytime += gdt;
     int numPlayers = twoPlayers ? 2 : 1;
@@ -471,7 +565,6 @@ void Game::update(float dt) {
         continue;
       handleInteraction(p);
       handleItemInput(p);
-
       if (fountainCooldown[p] > 0.0f)
         fountainCooldown[p] -= gdt;
       if (players[p].throwCooldown > 0.0f)
@@ -480,7 +573,6 @@ void Game::update(float dt) {
         players[p].attackFlash -= gdt;
     }
 
-    // Enemigos y proyectiles
     updateEnemies(enemies, maze, players, numPlayers, gdt, C::SEE_DIST,
                   C::MEMORY_T);
     Inventory::updateProjectiles(projectiles, maze, enemies, gdt);
@@ -504,14 +596,12 @@ void Game::update(float dt) {
       }
     }
 
-    // ¿Hay llaves en este nivel? ¿Ya la tiene alguien?
     bool levelHasKey = false;
     for (auto &w : worldItems)
       if (w.kind == ITEM_KEY) {
         levelHasKey = true;
         break;
       }
-
     bool keySatisfied = !levelHasKey || players[0].hasKey || players[1].hasKey;
 
     for (int p = 0; p < numPlayers; ++p) {
@@ -519,7 +609,6 @@ void Game::update(float dt) {
         continue;
       if (Vector3Distance(players[p].pos, exitPos) < 1.7f) {
         if (!keySatisfied) {
-          // Aviso cada vez que toca la salida sin llave
           if (p == 0 && toastTimer <= 0.0f)
             showToast(L("toast.exit.locked", "Necesitas la llave"));
           continue;
@@ -537,7 +626,6 @@ void Game::update(float dt) {
       allDone = (players[0].caught || players[0].escaped) &&
                 (players[1].caught || players[1].escaped);
 
-    // ESC -> pausa
     bool pausePressed = IsKeyPressed(KEY_ESCAPE);
     for (int p = 0; p < 2 && !pausePressed; ++p) {
       if (players[p].gamepadId >= 0 &&
@@ -561,9 +649,7 @@ void Game::update(float dt) {
           speedrunFinishRun();
 
         int caughtPlayer = players[0].caught ? 0 : 1;
-
         if (!cfg.noJumpscares && players[caughtPlayer].caughtBy >= 0) {
-          // Jumpscare
           startJumpscare(players[caughtPlayer].caughtBy);
         } else {
           EnableCursor();
@@ -585,22 +671,8 @@ void Game::update(float dt) {
         }
 
         if (sr.active)
-          speedrunRecordSplit(); // <-- NUEVO
-
-        if (currentSlot >= 0 && cfg.speedrunMode) {
-          SaveSlot s;
-          s.level = level;
-          s.maxLevel =
-              (mode == MODE_STORY) ? cfg.maxLevel : cfg.maxEndlessLevel;
-          s.mode = mode;
-          s.twoPlayers = twoPlayers;
-          s.playtime = totalPlaytime;
-          s.runSeed = runSeed;
-          s.speedrunSplits = sr.splits;
-          saves.saveSlot(currentSlot, s);
-        }
+          speedrunRecordSplit();
         autoSaveProgress();
-
         state = ST_LEVEL_CLEAR;
       }
     } else if (pausePressed) {
@@ -609,7 +681,6 @@ void Game::update(float dt) {
       state = ST_PAUSED;
     }
   } else if (state == ST_PAUSED) {
-    // Resumir con ESC o START
     bool resumePressed = IsKeyPressed(KEY_ESCAPE);
     for (int p = 0; p < 2 && !resumePressed; ++p) {
       if (players[p].gamepadId >= 0 &&
@@ -626,7 +697,6 @@ void Game::update(float dt) {
                    IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool back = IsKeyPressed(KEY_ESCAPE) || consumeCancel();
     credits.update(dt, advance, back);
-
     if (credits.isFinished()) {
       credits.stop();
       state = ST_MENU;
@@ -686,8 +756,6 @@ void Game::update(float dt) {
     }
   } else if (state == ST_LEVEL_INTRO) {
     introTimer += dt;
-
-    // Fade-in de 0.8 s; acepta input después
     if (introTimer >= 0.8f) {
       bool advance = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) ||
                      IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -697,13 +765,11 @@ void Game::update(float dt) {
                                    GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
           advance = true;
       }
-      if (advance) {
+      if (advance)
         enterLevel(level);
-      }
     }
   } else if (state == ST_JUMPSCARE) {
     jumpscareTimer -= dt;
-
     if (jumpscareTimer <= 0.0f) {
       jumpscareTimer = 0.0f;
       jumpscareEnemy = -1;
@@ -713,9 +779,7 @@ void Game::update(float dt) {
   } else if (state == ST_LEVEL_CLEAR) {
     if (consumeConfirm()) {
       ++level;
-
       if (mode == MODE_STORY) {
-        // ¿Existe contenido para el siguiente nivel?
         char introName[64], outroName[64], mapName[64];
         snprintf(introName, sizeof(introName), "level_%02d_intro.txt", level);
         snprintf(outroName, sizeof(outroName), "level_%02d_outro.txt", level);
@@ -729,16 +793,13 @@ void Game::update(float dt) {
           return true;
         };
 
-        bool hasIntro = hasStory(introName); // ya resuelve por idioma
-        bool hasOutro = hasStory(outroName); // ya resuelve por idioma
-        bool hasDetails = !resolveLevelDetailsPath(level)
-                               .empty(); // busca en currentLang + es
-        bool hasMap = existsAt(Paths::level(mapName)); // mapa sin idioma
+        bool hasIntro = hasStory(introName);
+        bool hasOutro = hasStory(outroName);
+        bool hasDetails = !resolveLevelDetailsPath(level).empty();
+        bool hasMap = existsAt(Paths::level(mapName));
 
         bool nextLevelExists = hasIntro || hasOutro || hasDetails || hasMap;
-
         if (!nextLevelExists) {
-          // Fin de la historia
           if (sr.active)
             speedrunFinishRun();
           credits.start();
@@ -746,7 +807,6 @@ void Game::update(float dt) {
           return;
         }
       }
-
       requestEnterLevel(level);
     } else if (IsKeyPressed(KEY_ESCAPE)) {
       if (mode == MODE_STORY && cfg.playCinematics) {
@@ -801,19 +861,19 @@ void Game::update(float dt) {
     }
   }
 
-  // Save screenshot
   if (IsKeyPressed(KEY_F2)) {
     time_t now = time(nullptr);
     tm *t = localtime(&now);
-
     char nombre[64];
     strftime(nombre, sizeof(nombre), "Escape-Screenshot-%Y-%m-%d_%H-%M-%S.png",
              t);
-
     TakeScreenshot(nombre);
   }
 }
 
+// =========================================================================
+//  Utilidades HUD
+// =========================================================================
 float Game::nearestEnemyDist(Vector3 p) const {
   float best = 1e9f;
   for (auto &e : enemies)
@@ -821,20 +881,16 @@ float Game::nearestEnemyDist(Vector3 p) const {
   return best;
 }
 
-// ---------- HUD ----------
 void Game::drawStaminaBar(const Player &pl, int vw, int vh) {
   int barW = std::max(120, vw / 3);
   int barH = 14;
   int bx = vw / 2 - barW / 2;
   int by = vh - 60;
-
   DrawRectangle(bx - 2, by - 2, barW + 4, barH + 4, (Color){0, 0, 0, 160});
   DrawRectangle(bx, by, barW, barH, (Color){40, 40, 55, 255});
-
   Color c = pl.exhausted ? RED : (pl.stamina < 0.3f ? ORANGE : GREEN);
   DrawRectangle(bx, by, (int)(barW * pl.stamina), barH, c);
   DrawRectangleLines(bx, by, barW, barH, RAYWHITE);
-
   const char *label = pl.exhausted ? L("hud.stamina.exhausted", "Sin aliento")
                                    : L("hud.stamina", "Energía");
   int lw = UI::M(label, 14);
@@ -879,7 +935,6 @@ void Game::drawMinimap(const Player &pl, int vw) {
   Vector2 fwd = {px + sinf(pl.yaw) * 10, pz - cosf(pl.yaw) * 10};
   DrawLine(px, pz, (int)fwd.x, (int)fwd.y, GOLD);
 
-  // Llaves en el minimapa
   for (auto &w : worldItems) {
     if (w.kind != ITEM_KEY)
       continue;
@@ -903,39 +958,32 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
   float mw = maze.w * C::CELL, mh = maze.h * C::CELL;
 
   BeginMode3D(cam);
-  // Suelo
   if (world.floorModel.meshCount > 0) {
     DrawModel(world.floorModel, {mw * 0.5f, 0.0f, mh * 0.5f}, 1.0f, WHITE);
   } else {
     DrawPlane({mw / 2, 0, mh / 2}, {mw, mh}, (Color){32, 32, 42, 255});
   }
 
-  // Paredes: 1 DrawModelEx por celda
   for (int y = 0; y < maze.h; ++y)
     for (int x = 0; x < maze.w; ++x) {
       if (maze.g[y][x] != 1)
         continue;
-
       float wx = x * C::CELL + C::CELL * 0.5f;
       float wz = y * C::CELL + C::CELL * 0.5f;
       float dx = wx - pl.pos.x, dz = wz - pl.pos.z;
       float rd = renderDist();
       if (dx * dx + dz * dz > rd * rd)
         continue;
-
-      // Tinte por distancia y paridad (anti-mareo)
       float dist = sqrtf(dx * dx + dz * dz);
       float distTint = 1.0f - (dist / rd) * 0.30f;
       if (distTint < 0.35f)
         distTint = 0.35f;
       float parity = ((x + y) & 1) ? 0.93f : 1.0f;
       float tint = distTint * parity;
-
       Color wallTint = {(unsigned char)(255 * tint),
                         (unsigned char)(255 * tint),
                         (unsigned char)(255 * tint), 255};
 
-      // Elegir modelo segun variante
       int variant = 0;
       if (y < (int)maze.wallVariant.size() &&
           x < (int)maze.wallVariant[y].size())
@@ -951,13 +999,11 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
         DrawModelEx(*model, {wx, C::WALL_H * 0.5f, wz}, {0, 1, 0}, 0.0f,
                     {1.0f, 1.0f, 1.0f}, wallTint);
       } else {
-        // Fallback sin texturas
         DrawCube({wx, C::WALL_H * 0.5f, wz}, C::CELL, C::WALL_H, C::CELL,
                  wallTint);
       }
     }
 
-  // Techo
   DrawCube({mw / 2, C::WALL_H + 0.05f, mh / 2}, mw, 0.1f, mh,
            (Color){18, 18, 26, 255});
 
@@ -974,16 +1020,13 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
   Color exitBody =
       locked ? (Color){180, 40, 40, 255} : (Color){70, 220, 130, 255};
   Color exitWire = locked ? (Color){255, 80, 80, 255} : LIME;
-
   DrawCube({exitPos.x, 1.2f, exitPos.z}, 1.6f * pulse, 2.4f, 1.6f * pulse,
            exitBody);
   DrawCubeWires({exitPos.x, 1.2f, exitPos.z}, 1.8f * pulse, 2.6f, 1.8f * pulse,
                 exitWire);
-
   if (assets.hasPortalTex && !locked)
     DrawBillboard(cam, assets.portalTex, {exitPos.x, 3.0f, exitPos.z},
                   1.6f * pulse, WHITE);
-
   if (locked) {
     DrawCube({exitPos.x, 3.2f, exitPos.z}, 0.5f, 0.5f, 0.5f,
              (Color){255, 200, 60, 255});
@@ -999,7 +1042,6 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
 
     float bob = sinf(w.bobT) * C::ROCK_PICKUP_BOB;
     Vector3 dp = {w.pos.x, w.pos.y + bob, w.pos.z};
-
     float size = 0.55f;
     switch (w.kind) {
     case ITEM_ROCK:
@@ -1021,7 +1063,6 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
       size = 0.70f;
       break;
     }
-
     if (assets.hasItemTex[w.kind]) {
       DrawBillboard(cam, assets.itemTex[w.kind],
                     {dp.x, dp.y + size * 0.5f, dp.z}, size, WHITE);
@@ -1031,24 +1072,21 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
       DrawCubeWires(dp, size * 0.6f, size * 0.6f, size * 0.6f,
                     (Color){40, 40, 50, 255});
     }
-
     if (dx * dx + dz * dz < C::PICKUP_RANGE * C::PICKUP_RANGE * 1.5f) {
       float p2 = 0.35f + 0.10f * sinf((float)GetTime() * 5.0f);
       DrawCubeWires(dp, size * 0.7f + p2, size * 0.7f + p2, size * 0.7f + p2,
                     (Color){255, 240, 120, 200});
     }
-
     if (w.kind == ITEM_KEY) {
       float gold = 0.7f + 0.3f * sinf((float)GetTime() * 5.0f);
-      // Halo dorado alrededor
       DrawCubeWires(dp, size * 1.1f + gold * 0.2f, size * 1.1f + gold * 0.2f,
                     size * 1.1f + gold * 0.2f, (Color){255, 215, 0, 200});
-      // Rayo vertical tenue
       DrawCube({w.pos.x, w.pos.y + 1.0f, w.pos.z}, 0.05f, 2.0f, 0.05f,
                (Color){255, 240, 120, 120});
     }
   }
 
+  // Fuentes
   for (int y = 0; y < maze.h; ++y)
     for (int x = 0; x < maze.w; ++x) {
       if (!maze.hasFountain(x, y))
@@ -1058,12 +1096,10 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
       float dx = fp.x - pl.pos.x, dz = fp.z - pl.pos.z;
       if (dx * dx + dz * dz > 40.0f * 40.0f)
         continue;
-
       DrawCylinder({fp.x, 0.0f, fp.z}, 0.55f, 0.65f, 0.9f, 12,
                    (Color){90, 95, 115, 255});
       DrawCylinderWires({fp.x, 0.0f, fp.z}, 0.55f, 0.65f, 0.9f, 12,
                         (Color){40, 45, 60, 255});
-
       float ripple = 0.03f * sinf((float)GetTime() * 3.0f + x + y);
       DrawCylinder({fp.x, 0.9f + ripple, fp.z}, 0.55f, 0.55f, 0.05f, 16,
                    (Color){60, 180, 220, 220});
@@ -1071,34 +1107,28 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
                (Color){120, 210, 240, 200});
     }
 
+  // Tiendas
   for (int y = 0; y < maze.h; ++y)
     for (int x = 0; x < maze.w; ++x) {
       if (!maze.hasTent(x, y))
         continue;
-
       Vector3 tp = {x * C::CELL + C::CELL * 0.5f, 0.0f,
                     y * C::CELL + C::CELL * 0.5f};
       float dx = tp.x - pl.pos.x, dz = tp.z - pl.pos.z;
       if (dx * dx + dz * dz > 40.0f * 40.0f)
         continue;
-
       float s = C::CELL * 0.85f;
-
-      // Cuerpo de la tienda
       DrawCube({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){90, 120, 80, 255});
       DrawCubeWires({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){40, 60, 35, 255});
-
-      // Tejadillo a dos aguas (aproximación con cubo achatado)
       DrawCube({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
                (Color){150, 90, 50, 255});
       DrawCubeWires({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
                     (Color){80, 50, 30, 255});
-
-      // Entrada oscura (el "hueco" por el que pasa el jugador)
       DrawCube({tp.x, 0.4f, tp.z - s * 0.5f - 0.02f}, 0.55f, 0.7f, 0.02f,
                (Color){20, 20, 15, 255});
     }
 
+  // Proyectiles
   for (auto &pr : projectiles) {
     float size = 0.25f;
     switch (pr.kind) {
@@ -1145,7 +1175,6 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
                  (Color){0, 0, 0, 90});
   }
 
-  // Otro jugador
   if (twoPlayers) {
     const Player &other = (playerNum == 0) ? players[1] : players[0];
     if (!other.escaped && !other.caught)
@@ -1155,12 +1184,10 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
 
   if (playerNum == 0)
     drawDebugWorld3D(pl);
-
   drawHandItem3D(pl, cam);
   EndMode3D();
 
   DrawRectangle(0, 0, vw, vh, (Color){0, 0, 0, 70});
-
   DrawRectangleGradientV(0, 0, vw, vh / 6, (Color){0, 0, 0, 140},
                          (Color){0, 0, 0, 0});
 
@@ -1184,13 +1211,10 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
   drawInventory(pl, vw, vh);
 
   if (assets.crosshair.id != 0) {
-    float scale = 1.0f; // ajusta si la quieres mas grande/pequena
-    float cw = (float)assets.crosshair.width * scale;
-    float ch = (float)assets.crosshair.height * scale;
+    float cw = (float)assets.crosshair.width;
+    float ch = (float)assets.crosshair.height;
     float cx = vw * 0.5f - cw * 0.5f;
     float cy = vh * 0.5f - ch * 0.5f;
-
-    // Solo lo dibujamos si el jugador no esta atrapado/escapado/hidden
     if (!pl.caught && !pl.escaped && !pl.hidden) {
       DrawTexturePro(
           assets.crosshair,
@@ -1223,7 +1247,6 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   const int bx = vw - boxW - pad;
   const int by = pad;
 
-  // Fondo
   DrawRectangle(bx, by, boxW, boxH, (Color){0, 0, 0, 170});
   DrawRectangleLines(bx, by, boxW, boxH,
                      sr.pbFlashTimer > 0.0f ? GOLD
@@ -1231,22 +1254,18 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
   int tx = bx + 12;
   int ty = by + 8;
-
-  // Nivel actual
   char hdr[64];
   snprintf(hdr, sizeof(hdr), "Nivel %d", level);
   UI::T(hdr, tx, ty, 18, RAYWHITE);
   ty += 24;
 
-  // Tiempo del nivel actual
   float cur = totalPlaytime - sr.lastLevelStart;
   char curT[32];
   formatSplitTime(cur, curT, sizeof(curT));
   UI::T(curT, tx, ty, 26, RAYWHITE);
   ty += 30;
 
-  // Delta contra el mejor split de este nivel
-  int idx = (int)sr.splits.size(); // índice del nivel actual
+  int idx = (int)sr.splits.size();
   if (idx < (int)sr.bestSplits.size() && sr.bestSplits[idx] > 0.0f) {
     float delta = cur - sr.bestSplits[idx];
     char dT[32];
@@ -1259,7 +1278,6 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   }
   ty += 26;
 
-  // Predicción de tiempo total
   float elapsed = 0.0f;
   for (float s : sr.splits)
     elapsed += s;
@@ -1278,7 +1296,6 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
     UI::T(line, tx, ty, 16, (Color){200, 200, 120, 255});
   }
 
-  // Flash "PB!" cuando bates un split
   if (sr.pbFlashTimer > 0.0f) {
     float pulse = 0.5f + 0.5f * sinf(sr.pbFlashTimer * 12.0f);
     unsigned char a = (unsigned char)(pulse * 255);
@@ -1310,188 +1327,9 @@ void Game::drawCinematic() {
   EndDrawing();
 }
 
-void Game::drawEndlessConfig() {
-  drawConfigHeader(L("endless.title", "Modo infinito — configuración"));
-
-  const int items = 6;
-  handleGamepadMenuNav(items);
-
-  // Teclado: flechas para navegar
-  if (IsKeyPressed(KEY_DOWN))
-    navIndex = (navIndex + 1) % items;
-  if (IsKeyPressed(KEY_UP))
-    navIndex = (navIndex + items - 1) % items;
-
-  int lr = gamepadLeftRight();
-  if (IsKeyPressed(KEY_LEFT))
-    lr = -1;
-  if (IsKeyPressed(KEY_RIGHT))
-    lr = +1;
-
-  bool confirm = consumeConfirm();
-
-  // ================================================================
-  // Fila 0 — Seed (editable con el teclado, clicable con el ratón)
-  // ================================================================
-  {
-    const int w = 680, h = 58, gap = 18;
-    const int totalH = items * (h + gap) - gap;
-    const int x = GetScreenWidth() / 2 - w / 2;
-    const int y = GetScreenHeight() / 2 - totalH / 2 + 20 + 0 * (h + gap);
-
-    Rectangle r = {(float)x, (float)y, (float)w, (float)h};
-    Vector2 mp = GetMousePosition();
-    bool hover = CheckCollisionPointRec(mp, r);
-    Vector2 md = GetMouseDelta();
-    bool mouseMoved = (fabsf(md.x) > 0.1f || fabsf(md.y) > 0.1f);
-    if (hover && mouseMoved)
-      navIndex = 0;
-    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      navIndex = 0;
-
-    bool selected = (navIndex == 0);
-
-    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                   : (Color){35, 40, 58, 255};
-    Color border = (hover || selected) ? SKYBLUE : (Color){80, 90, 125, 255};
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 2, border);
-
-    UI::T(L("endless.seed", "Seed"), x + 22, y + (h - 24) / 2, 24, RAYWHITE);
-
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%u", runConfig.seed);
-    int vw = UI::M(buf, 24);
-    int vx = x + w - vw - 22;
-    int vy = y + (h - 24) / 2;
-    UI::T(buf, vx, vy, 24, GOLD);
-
-    // Cursor parpadeante cuando la fila está activa
-    if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f) {
-      UI::T("_", vx + vw, vy, 24, GOLD);
-    }
-
-    // Input de teclado (solo si está seleccionada)
-    // Importante: drenar SIEMPRE la cola para no acumular chars
-    int k = GetCharPressed();
-    while (k > 0) {
-      if (selected && k >= '0' && k <= '9') {
-        uint64_t v = (uint64_t)runConfig.seed * 10ull + (uint64_t)(k - '0');
-        if (v <= 0xFFFFFFFFull)
-          runConfig.seed = (uint32_t)v;
-      }
-      k = GetCharPressed();
-    }
-    if (selected && IsKeyPressed(KEY_BACKSPACE)) {
-      runConfig.seed /= 10;
-    }
-
-    // ENTER sobre la seed → saltar a la siguiente fila
-    if (selected && confirm) {
-      confirm = false;
-      navIndex = 1;
-    }
-  }
-
-  // ================================================================
-  // Fila 1 — Aleatorizar seed
-  // ================================================================
-  if (uiButton(1, items, 20, L("endless.randomize", "Aleatorizar seed"),
-               &navIndex, &confirm)) {
-    uint32_t s = (uint32_t)time(nullptr) ^
-                 (uint32_t)(GetRandomValue(1, 0x7FFFFFFF) * 2654435761u);
-    if (s == 0)
-      s = 1;
-    runConfig.seed = s;
-  }
-
-  // ================================================================
-  // Fila 2 — Multiplicador enemigos
-  // ================================================================
-  {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%gx",
-             (double)C::ENDLESS_MULT[runConfig.enemyMult]);
-    UIAction a = uiOptionEx(2, items, 20,
-                            L("endless.enemyMult", "Multiplicador enemigos"),
-                            buf, &navIndex, &confirm, navIndex == 2 ? lr : 0);
-    if (a == UI_LEFT)
-      runConfig.enemyMult = (runConfig.enemyMult - 1 + C::ENDLESS_MULT_COUNT) %
-                            C::ENDLESS_MULT_COUNT;
-    if (a == UI_RIGHT)
-      runConfig.enemyMult = (runConfig.enemyMult + 1) % C::ENDLESS_MULT_COUNT;
-  }
-
-  // ================================================================
-  // Fila 3 — Multiplicador items
-  // ================================================================
-  {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%gx",
-             (double)C::ENDLESS_MULT[runConfig.itemMult]);
-    UIAction a =
-        uiOptionEx(3, items, 20, L("endless.itemMult", "Multiplicador items"),
-                   buf, &navIndex, &confirm, navIndex == 3 ? lr : 0);
-    if (a == UI_LEFT)
-      runConfig.itemMult = (runConfig.itemMult - 1 + C::ENDLESS_MULT_COUNT) %
-                           C::ENDLESS_MULT_COUNT;
-    if (a == UI_RIGHT)
-      runConfig.itemMult = (runConfig.itemMult + 1) % C::ENDLESS_MULT_COUNT;
-  }
-
-  // ================================================================
-  // Fila 4 — Siguiente
-  // ================================================================
-  if (uiButton(4, items, 20, L("endless.continue", "Siguiente"), &navIndex,
-               &confirm)) {
-    if (runConfig.seed == 0) {
-      uint32_t s = (uint32_t)time(nullptr) ^
-                   (uint32_t)(GetRandomValue(1, 0x7FFFFFFF) * 2654435761u);
-      if (s == 0)
-        s = 1;
-      runConfig.seed = s;
-    }
-    state = ST_PLAYER_SELECT;
-    navMenu = 0;
-    return;
-  }
-
-  // ================================================================
-  // Fila 5 — Volver
-  // ================================================================
-  if (uiButton(5, items, 20, L("common.back", "Volver"), &navIndex, &confirm)) {
-    state = ST_MODE_SELECT;
-    navMenu = 0;
-    return;
-  }
-
-  // ESC / B del mando → volver
-  if (IsKeyPressed(KEY_ESCAPE) || consumeCancel()) {
-    state = ST_MODE_SELECT;
-    navMenu = 0;
-    return;
-  }
-
-  // Hint inferior
-  const char *hint =
-      L("endless.hint",
-        "Misma seed = mismos niveles. "
-        "Teclea números en la seed o usa < > para cambiar multiplicadores.");
-  int W = GetScreenWidth();
-  UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 40, 18, GRAY);
-}
-
-// ---------- Menús de config ----------
-static const char *yesNo(bool b) {
-  return b ? L("common.yes", "Sí") : L("common.no", "No");
-}
-
-static const char *pctStr(float v) {
-  static char buf[8];
-  snprintf(buf, sizeof(buf), "%d%%", (int)(v * 100 + 0.5f));
-  return buf;
-}
-
+// =========================================================================
+//  Config: hub y submenús
+// =========================================================================
 void Game::drawConfigHub() {
   drawConfigHeader(L("menu.config", "Configuración"));
   int items = 7;
@@ -1550,24 +1388,6 @@ void Game::drawConfigHub() {
   UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 40, 18, GRAY);
 }
 
-static const char *fpsLabel(int idx) {
-  int v = C::FPS_OPTIONS[idx];
-  static char buf[16];
-  if (v == 0)
-    return L("video.fps.unlimited", "Sin límite");
-  snprintf(buf, sizeof(buf), "%d", v);
-  return buf;
-}
-static const char *rdLabel(int idx) {
-  switch (idx) {
-  case 0:
-    return L("video.renderdist.near", "Cerca (40m)");
-  case 1:
-    return L("video.renderdist.medium", "Media (60m)");
-  default:
-    return L("video.renderdist.far", "Lejos (100m)");
-  }
-}
 void Game::drawConfigVideo() {
   drawConfigHeader("VIDEO");
   int items = 7;
@@ -1611,7 +1431,7 @@ void Game::drawConfigVideo() {
     if (a == UI_RIGHT)
       cfg.fpsLimit = std::min(C::FPS_COUNT - 1, cfg.fpsLimit + 1);
     if (a == UI_CONFIRM)
-      cfg.fpsLimit = 2; // 60
+      cfg.fpsLimit = 2;
     if (a != UI_NONE) {
       applyVideoSettings();
       save();
@@ -1717,29 +1537,23 @@ void Game::drawConfigAudio() {
 
 void Game::drawConfigGameplay() {
   drawConfigHeader(L("config.gameplay", "Jugabilidad"));
-  int items = 9;
+  int items = 8;
   handleGamepadMenuNav(items);
   int lr = gamepadLeftRight();
   auto save = [&]() { cfg.save(); };
 
-  if (uiOptionEx(0, items, 40, L("gameplay.difficulty", "Dificultad"),
-                 cfg.diffName(), &navIndex, nullptr,
-                 navIndex == 0 ? lr : 0) != UI_NONE) {
-    cfg.difficulty = (cfg.difficulty + 1) % DIFF_COUNT;
-    save();
-  }
-  if (uiOptionEx(1, items, 40, L("gameplay.inverty", "Invertir eje Y"),
+  if (uiOptionEx(0, items, 40, L("gameplay.inverty", "Invertir eje Y"),
                  yesNo(cfg.invertY), &navIndex, nullptr,
-                 navIndex == 1 ? lr : 0) != UI_NONE) {
+                 navIndex == 0 ? lr : 0) != UI_NONE) {
     cfg.invertY = !cfg.invertY;
     save();
   }
   {
     char buf[16];
     snprintf(buf, sizeof(buf), "%.2f", cfg.mouseSens);
-    UIAction a = uiOptionEx(2, items, 40,
+    UIAction a = uiOptionEx(1, items, 40,
                             L("gameplay.mousesens", "Sensibilidad del ratón"),
-                            buf, &navIndex, nullptr, navIndex == 2 ? lr : 0);
+                            buf, &navIndex, nullptr, navIndex == 1 ? lr : 0);
     if (a == UI_LEFT)
       cfg.mouseSens = std::max(0.10f, cfg.mouseSens - 0.05f);
     if (a == UI_RIGHT)
@@ -1752,9 +1566,9 @@ void Game::drawConfigGameplay() {
   {
     char buf[16];
     snprintf(buf, sizeof(buf), "%.2f", cfg.stickSens);
-    UIAction a = uiOptionEx(3, items, 40,
+    UIAction a = uiOptionEx(2, items, 40,
                             L("gameplay.padsens", "Sensibilidad del mando"),
-                            buf, &navIndex, nullptr, navIndex == 3 ? lr : 0);
+                            buf, &navIndex, nullptr, navIndex == 2 ? lr : 0);
     if (a == UI_LEFT)
       cfg.stickSens = std::max(0.10f, cfg.stickSens - 0.05f);
     if (a == UI_RIGHT)
@@ -1764,9 +1578,9 @@ void Game::drawConfigGameplay() {
     if (a != UI_NONE)
       save();
   }
-  if (uiOptionEx(4, items, 40, L("gameplay.minimap", "Minimapa"),
+  if (uiOptionEx(3, items, 40, L("gameplay.minimap", "Minimapa"),
                  yesNo(cfg.showMinimap), &navIndex, nullptr,
-                 navIndex == 4 ? lr : 0) != UI_NONE) {
+                 navIndex == 3 ? lr : 0) != UI_NONE) {
     cfg.showMinimap = !cfg.showMinimap;
     save();
   }
@@ -1774,8 +1588,8 @@ void Game::drawConfigGameplay() {
     char buf[16];
     snprintf(buf, sizeof(buf), "%.2f", cfg.sprintDrain);
     UIAction a =
-        uiOptionEx(5, items, 40, L("gameplay.sprintdrain", "Consumo de sprint"),
-                   buf, &navIndex, nullptr, navIndex == 5 ? lr : 0);
+        uiOptionEx(4, items, 40, L("gameplay.sprintdrain", "Consumo de sprint"),
+                   buf, &navIndex, nullptr, navIndex == 4 ? lr : 0);
     if (a == UI_LEFT)
       cfg.sprintDrain = std::max(0.10f, cfg.sprintDrain - 0.05f);
     if (a == UI_RIGHT)
@@ -1788,9 +1602,9 @@ void Game::drawConfigGameplay() {
   {
     char buf[16];
     snprintf(buf, sizeof(buf), "%.2f", cfg.sprintRegen);
-    UIAction a = uiOptionEx(6, items, 40,
+    UIAction a = uiOptionEx(5, items, 40,
                             L("gameplay.sprintregen", "Regeneración de sprint"),
-                            buf, &navIndex, nullptr, navIndex == 6 ? lr : 0);
+                            buf, &navIndex, nullptr, navIndex == 5 ? lr : 0);
     if (a == UI_LEFT)
       cfg.sprintRegen = std::max(0.05f, cfg.sprintRegen - 0.05f);
     if (a == UI_RIGHT)
@@ -1800,21 +1614,13 @@ void Game::drawConfigGameplay() {
     if (a != UI_NONE)
       save();
   }
-  if (uiOptionEx(7, items, 40, L("gameplay.cinematics", "Cinemáticas"),
+  if (uiOptionEx(6, items, 40, L("gameplay.cinematics", "Cinemáticas"),
                  yesNo(cfg.playCinematics), &navIndex, nullptr,
-                 navIndex == 7 ? lr : 0) != UI_NONE) {
+                 navIndex == 6 ? lr : 0) != UI_NONE) {
     cfg.playCinematics = !cfg.playCinematics;
     save();
   }
-
-  if (uiOptionEx(8, items, 40, L("gameplay.speedrun", "Modo speedrun"),
-                 yesNo(cfg.speedrunMode), &navIndex, nullptr,
-                 navIndex == 8 ? lr : 0) != UI_NONE) {
-    cfg.speedrunMode = !cfg.speedrunMode;
-    save();
-  }
-
-  if (uiOptionEx(9, items, 40, L("common.back", "Volver"), "", &navIndex,
+  if (uiOptionEx(7, items, 40, L("common.back", "Volver"), "", &navIndex,
                  nullptr, 0) != UI_NONE ||
       IsKeyPressed(KEY_ESCAPE))
     state = ST_CONFIG;
@@ -1902,6 +1708,61 @@ void Game::drawConfigControls() {
   UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 36, 18, GRAY);
 }
 
+void Game::drawConfigAccess() {
+  drawConfigHeader(L("config.access", "Accesibilidad"));
+  int items = 7;
+  handleGamepadMenuNav(items);
+  int lr = gamepadLeftRight();
+  auto save = [&]() { cfg.save(); };
+
+  if (uiOptionEx(0, items, 30, L("access.colorblind", "Modo daltonismo"),
+                 cbLabel(cfg.colorblindMode), &navIndex, nullptr,
+                 navIndex == 0 ? lr : 0) != UI_NONE) {
+    cfg.colorblindMode = (cfg.colorblindMode + 1) % CB_COUNT;
+    UI::colorblind = cfg.colorblindMode;
+    save();
+  }
+  if (uiOptionEx(1, items, 30, L("access.contrast", "Alto contraste"),
+                 yesNo(cfg.highContrast), &navIndex, nullptr,
+                 navIndex == 1 ? lr : 0) != UI_NONE) {
+    cfg.highContrast = !cfg.highContrast;
+    save();
+  }
+  if (uiOptionEx(2, items, 30, L("access.motion", "Reducir movimiento"),
+                 yesNo(cfg.reduceMotion), &navIndex, nullptr,
+                 navIndex == 2 ? lr : 0) != UI_NONE) {
+    cfg.reduceMotion = !cfg.reduceMotion;
+    save();
+  }
+  if (uiOptionEx(3, items, 30, L("access.subtitles", "Subtítulos grandes"),
+                 yesNo(cfg.bigSubtitles), &navIndex, nullptr,
+                 navIndex == 3 ? lr : 0) != UI_NONE) {
+    cfg.bigSubtitles = !cfg.bigSubtitles;
+    save();
+  }
+  if (uiOptionEx(4, items, 30, L("access.sprint", "Sprint (mantener/alternar)"),
+                 cfg.holdToSprint ? L("access.sprint.hold", "Mantener")
+                                  : L("access.sprint.toggle", "Alternar"),
+                 &navIndex, nullptr, navIndex == 4 ? lr : 0) != UI_NONE) {
+    cfg.holdToSprint = !cfg.holdToSprint;
+    save();
+  }
+  if (uiOptionEx(5, items, 30, L("access.jumpscares", "Sin sustos"),
+                 cfg.noJumpscares ? L("common.yes", "SI")
+                                  : L("common.no", "NO"),
+                 &navIndex, nullptr, navIndex == 5 ? lr : 0) != UI_NONE) {
+    cfg.noJumpscares = !cfg.noJumpscares;
+    save();
+  }
+  if (uiOptionEx(6, items, 30, L("common.back", "Volver"), "", &navIndex,
+                 nullptr, 0) != UI_NONE ||
+      IsKeyPressed(KEY_ESCAPE))
+    state = ST_CONFIG;
+}
+
+// =========================================================================
+//  Formato fecha
+// =========================================================================
 const char *Game::formatDate(std::time_t t) {
   if (t == 0)
     return "-";
@@ -1913,168 +1774,120 @@ const char *Game::formatDate(std::time_t t) {
   return buf;
 }
 
-bool Game::consumeCancel() {
-  if (IsKeyPressed(KEY_ESCAPE))
-    return true;
-  for (int p = 0; p < 2; ++p) {
-    if (players[p].gamepadId >= 0 &&
-        IsGamepadButtonPressed(players[p].gamepadId,
-                               GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))
-      return true;
-  }
-  return false;
-}
-
+// =========================================================================
+//  Toast
+// =========================================================================
 void Game::showToast(const char *msg) {
   snprintf(toastMsg, sizeof(toastMsg), "%s", msg);
   toastTimer = 1.8f;
 }
 
-static void fillSaveFromPlayers(SaveSlot &s, const Player *players,
-                                int numPlayers) {
-  // Limpia por si acaso
-  for (int p = 0; p < 2; ++p) {
-    s.selectedSlot[p] = 0;
-    for (int i = 0; i < C::INV_SLOTS; ++i) {
-      s.inventory[p][i].kind = 0;
-      s.inventory[p][i].count = 0;
-    }
-  }
-  for (int p = 0; p < numPlayers && p < 2; ++p) {
-    s.selectedSlot[p] = players[p].selectedSlot;
-    for (int i = 0; i < C::INV_SLOTS; ++i) {
-      s.inventory[p][i].kind = (int)players[p].inventory[i].kind;
-      s.inventory[p][i].count = players[p].inventory[i].count;
-    }
-  }
-}
+// =========================================================================
+//  Saves: guardado y carga
+// =========================================================================
 void Game::saveCurrentGame() {
-  if (currentSlot < 0) {
+  if (currentSaveId.empty()) {
     showToast(L("toast.noslot", "Sin slot asignado"));
     return;
   }
-  SaveSlot s;
-  s.level = level;
-  s.maxLevel = (mode == MODE_STORY) ? cfg.maxLevel : cfg.maxEndlessLevel;
-  s.mode = mode;
-  s.twoPlayers = twoPlayers;
-  s.playtime = totalPlaytime;
-  s.runSeed = runConfig.seed;
-  s.enemyMult = runConfig.enemyMult;
-  s.itemMult = runConfig.itemMult;
-  fillSaveFromPlayers(s, players, twoPlayers ? 2 : 1);
+  SaveEntry e = *saves.find(currentSaveId);
+  e.level = level;
+  e.maxLevel = std::max(e.maxLevel, level);
+  e.mode = (int)mode;
+  e.difficulty = currentDifficulty;
+  e.twoPlayers = twoPlayers;
+  e.playtime = totalPlaytime;
+  e.timestamp = std::time(nullptr);
+  e.speedrunSplits = sr.splits;
 
-  saves.saveSlot(currentSlot, s);
+  int numPlayers = twoPlayers ? 2 : 1;
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    e.selectedSlot[p] = players[p].selectedSlot;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
+      e.inventory[p][i].count = players[p].inventory[i].count;
+    }
+  }
+  saves.save(e);
   showToast(L("toast.saved", "Partida guardada"));
 }
 
 void Game::autoSaveProgress() {
-  if (currentSlot < 0)
+  if (currentSaveId.empty())
     return;
-  SaveSlot s;
-  s.level = level;
-  s.maxLevel = (mode == MODE_STORY) ? cfg.maxLevel : cfg.maxEndlessLevel;
-  s.mode = mode;
-  s.twoPlayers = twoPlayers;
-  s.playtime = totalPlaytime;
-  fillSaveFromPlayers(s, players, twoPlayers ? 2 : 1);
+  SaveEntry e = *saves.find(currentSaveId);
+  e.level = level;
+  e.maxLevel = std::max(e.maxLevel, level);
+  e.mode = (int)mode;
+  e.difficulty = currentDifficulty;
+  e.twoPlayers = twoPlayers;
+  e.playtime = totalPlaytime;
+  e.timestamp = std::time(nullptr);
+  e.speedrunSplits = sr.splits;
 
-  saves.saveSlot(currentSlot, s);
+  int numPlayers = twoPlayers ? 2 : 1;
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    e.selectedSlot[p] = players[p].selectedSlot;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
+      e.inventory[p][i].count = players[p].inventory[i].count;
+    }
+  }
+  saves.save(e);
 }
 
-void Game::startNewGame(int slot, GameMode m, bool two) {
-  currentSlot = slot;
+void Game::startNewGame(const SaveEntry &proto) {
+  std::string id = saves.create(proto);
+  if (id.empty()) {
+    showToast("Error creando la partida");
+    return;
+  }
+  currentSaveId = id;
+
+  const SaveEntry *e = saves.find(id);
+  if (!e)
+    return;
+
+  currentDifficulty = e->difficulty;
+  runSeed = e->runSeed;
+  mode = (GameMode)e->mode;
+  twoPlayers = e->twoPlayers;
+  level = 1;
   totalPlaytime = 0.0f;
 
-  // Guardado inicial
-  SaveSlot s;
-  s.level = 1;
-  s.maxLevel = 1;
-  s.mode = m;
-  s.twoPlayers = two;
-  s.playtime = 0.0f;
-  s.runSeed = runConfig.seed;
-  s.enemyMult = runConfig.enemyMult;
-  s.itemMult = runConfig.itemMult;
-
-  if (m == MODE_ENDLESS) {
-    if (runConfig.seed == 0) {
-      runConfig.seed = (uint32_t)time(nullptr) ^
-                       (uint32_t)((rand() * 2654435761u) & 0xFFFFFFFFu);
-      if (runConfig.seed == 0)
-        runConfig.seed = 1;
-    }
-    s.runSeed = runConfig.seed;
-    s.enemyMult = runConfig.enemyMult;
-    s.itemMult = runConfig.itemMult;
-  }
-
-  // Determinar runSeed
-  if (m == MODE_ENDLESS) {
-    runSeed = runConfig.seed ? runConfig.seed : 1;
-  } else if (m == MODE_STORY && cfg.speedrunMode) {
-    runSeed = 0xCAFE5EEDu; // seed fija para categoría historia
-  } else {
-    runSeed = (uint32_t)time(nullptr);
-  }
-  s.runSeed = runSeed;
-  s.speedrunSplits.clear();
-
-  // Arrancar speedrun
-  if (cfg.speedrunMode) {
-    speedrunStartRun(runSeed, (int)m);
-  } else {
+  if (e->speedrun)
+    speedrunStartRun(runSeed, (int)mode);
+  else
     sr.active = false;
-  }
 
-  saves.saveSlot(slot, s);
-  beginPlay(two, m);
+  beginPlay(twoPlayers, mode);
 }
 
-void Game::loadGameFromSlot(int slot) {
-  SaveSlot s;
-  if (!saves.loadSlot(slot, s))
+void Game::loadGame(const std::string &saveId) {
+  const SaveEntry *e = saves.find(saveId);
+  if (!e)
     return;
 
-  currentSlot = slot;
-  totalPlaytime = s.playtime;
-  level = s.level;
-  mode = (GameMode)s.mode;
-  twoPlayers = s.twoPlayers;
+  currentSaveId = saveId;
+  currentDifficulty = e->difficulty;
+  runSeed = e->runSeed;
+  mode = (GameMode)e->mode;
+  twoPlayers = e->twoPlayers;
+  level = e->level;
+  totalPlaytime = e->playtime;
 
-  if (mode == MODE_ENDLESS) {
-    runConfig.seed = s.runSeed;
-    runConfig.enemyMult = s.enemyMult;
-    runConfig.itemMult = s.itemMult;
-  }
-
-  runSeed = s.runSeed;
-  totalPlaytime = s.playtime;
-
-  if (cfg.speedrunMode) {
-    speedrunStartRun(runSeed, (int)mode);
-    sr.splits = s.speedrunSplits;
-    sr.lastLevelStart = totalPlaytime;
-  } else {
-    sr.active = false;
-  }
-
-  // Sin cinemática al cargar
   startLevel(level);
   assignGamepads();
 
-  // Restaurar inventario (startLevel ya ha reseteado el resto)
   int numPlayers = twoPlayers ? 2 : 1;
   for (int p = 0; p < numPlayers && p < 2; ++p) {
-    int sel = s.selectedSlot[p];
+    int sel = e->selectedSlot[p];
     if (sel < 0 || sel >= C::INV_SLOTS)
       sel = 0;
     players[p].selectedSlot = sel;
-
     for (int i = 0; i < C::INV_SLOTS; ++i) {
-      ItemKind k = (ItemKind)s.inventory[p][i].kind;
-      int c = s.inventory[p][i].count;
-
+      ItemKind k = (ItemKind)e->inventory[p][i].kind;
+      int c = e->inventory[p][i].count;
       if (k <= ITEM_NONE || k >= ITEM_KIND_COUNT || c <= 0) {
         players[p].inventory[i].kind = ITEM_NONE;
         players[p].inventory[i].count = 0;
@@ -2083,6 +1896,14 @@ void Game::loadGameFromSlot(int slot) {
         players[p].inventory[i].count = c;
       }
     }
+  }
+
+  if (e->speedrun) {
+    speedrunStartRun(runSeed, (int)mode);
+    sr.splits = e->speedrunSplits;
+    sr.lastLevelStart = totalPlaytime;
+  } else {
+    sr.active = false;
   }
 
   DisableCursor();
@@ -2097,132 +1918,15 @@ void Game::loadGameFromSlot(int slot) {
     musicLevelPlaying = true;
   }
 }
-void Game::drawModeSelect() {
-  drawConfigHeader(L("mode.title", "Elegir modo de juego"));
-  int items = 3;
-  handleGamepadMenuNav(items);
-  if (uiButton(0, items, 60, L("mode.story", "Modo historia"), &navMenu,
-               nullptr) ||
-      (navMenu == 0 && consumeConfirm())) {
-    pendingMode = MODE_STORY;
-    state = ST_PLAYER_SELECT;
-    navMenu = 0;
-  }
-  if (uiButton(1, items, 60, L("mode.endless", "Modo infinito"), &navMenu,
-               nullptr) ||
-      (navMenu == 1 && consumeConfirm())) {
-    pendingMode = MODE_ENDLESS;
-    state = ST_ENDLESS_CONFIG;
-    navMenu = 0;
-  }
-  if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
-      (navMenu == 2 && consumeConfirm()) || consumeCancel()) {
-    state = ST_MENU;
-    navMenu = 0;
-  }
-  const char *hint =
-      L("mode.hint", "Historia: con cinemáticas y progreso. Infinito: sin fin, "
-                     "con récord persistente.");
-  int W = GetScreenWidth();
-  UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 40, 18, GRAY);
-}
 
-void Game::drawPlayerSelect() {
-  const char *titulo =
-      (pendingMode == MODE_STORY)
-          ? L("players.title.story", "Modo historia - jugadores")
-          : L("players.title.endless", "Modo infinito - jugadores");
-  drawConfigHeader(titulo);
-  int items = 3;
-  handleGamepadMenuNav(items);
-  if (uiButton(0, items, 60, L("players.one", "1 jugador"), &navMenu,
-               nullptr) ||
-      (navMenu == 0 && consumeConfirm())) {
-    pendingTwoPlayers = false;
-    slotPurpose = SLOT_NEW;
-    state = ST_SLOT_SELECT;
-    navSlot = 0;
-    // refresca por si acaso
-    saves.refresh();
-  }
-  if (uiButton(1, items, 60,
-               L("menu.play2", "Dos jugadores (pantalla dividida)"), &navMenu,
-               nullptr) ||
-      (navMenu == 1 && consumeConfirm())) {
-    pendingTwoPlayers = true;
-    slotPurpose = SLOT_NEW;
-    state = ST_SLOT_SELECT;
-    navSlot = 0;
-    saves.refresh();
-  }
-  if (uiButton(2, items, 60, L("common.back", "Volver"), &navMenu, nullptr) ||
-      (navMenu == 2 && consumeConfirm()) || consumeCancel()) {
-    if (pendingMode == MODE_ENDLESS) {
-      state = ST_ENDLESS_CONFIG;
-      navIndex = 0;
-    } else {
-      state = ST_MODE_SELECT;
-      navMenu = 0;
-    }
-  }
-}
+// =========================================================================
+//  Lista de saves + creación
+//  (drawSaveList y drawSaveCreate van en la parte 2/2)
+// =========================================================================
 
-void Game::drawSlotSelect() {
-  const char *titulo = (slotPurpose == SLOT_NEW)
-                           ? L("slot.title.new", "Elegir slot (se sobrescribe)")
-                           : L("menu.load", "Cargar partida");
-  drawConfigHeader(titulo);
-
-  // Añadimos un boton extra para borrar con click derecho? Mejor no,
-  // para mantener simple. Reservamos la navegacion con D-pad.
-  int items = SaveManager::NUM_SLOTS + 1; // 3 slots + volver
-  handleGamepadMenuNav(items);
-
-  for (int i = 0; i < SaveManager::NUM_SLOTS; ++i) {
-    const SaveSlot &s = saves.slot(i);
-    char label[256];
-    if (s.used) {
-      const char *modeStr = (s.mode == MODE_STORY)
-                                ? L("slot.mode.story", "Historia")
-                                : L("slot.mode.endless", "Infinito");
-      snprintf(label, sizeof(label),
-               L("slot.used", "Slot %d  -  Nivel %d  -  %s  -  %s"), i + 1,
-               s.level, modeStr, formatDate(s.timestamp));
-    } else {
-      snprintf(label, sizeof(label), L("slot.empty", "Slot %d  -  Vacío"),
-               i + 1);
-    }
-
-    if (uiButton(i, items, 40, label, &navSlot, nullptr) ||
-        (navSlot == i && consumeConfirm())) {
-      if (slotPurpose == SLOT_NEW) {
-        startNewGame(i, pendingMode, pendingTwoPlayers);
-      } else {
-        loadGameFromSlot(i);
-      }
-      return;
-    }
-  }
-
-  if (uiButton(SaveManager::NUM_SLOTS, items, 40, L("common.back", "Volver"),
-               &navSlot, nullptr) ||
-      (navSlot == SaveManager::NUM_SLOTS && consumeConfirm()) ||
-      consumeCancel()) {
-    if (slotPurpose == SLOT_LOAD) {
-      state = ST_MENU;
-    } else {
-      state = ST_PLAYER_SELECT;
-    }
-    navMenu = 0;
-  }
-
-  const char *hint =
-      L("slot.hint",
-        "Elige un slot. Al empezar una partida nueva se sobrescribe el slot.");
-  int W = GetScreenWidth();
-  UI::T(hint, W / 2 - UI::M(hint, 18) / 2, GetScreenHeight() - 40, 18, GRAY);
-}
-
+// =========================================================================
+//  Pausa
+// =========================================================================
 void Game::drawPauseMenu() {
   int W = GetScreenWidth(), H = GetScreenHeight();
   DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 200});
@@ -2230,9 +1934,7 @@ void Game::drawPauseMenu() {
   const char *t = L("pause.title", "Pausa");
   UI::T(t, W / 2 - UI::M(t, 64) / 2, (int)(H * 0.12f), 64, RAYWHITE);
 
-  bool canSave = (mode == MODE_STORY && currentSlot >= 0);
-  // Guardar siempre permitido si tenemos slot (incluso en infinito)
-  canSave = (currentSlot >= 0);
+  bool canSave = !currentSaveId.empty();
 
   int items = 5;
   handleGamepadMenuNav(items);
@@ -2250,7 +1952,6 @@ void Game::drawPauseMenu() {
       saveCurrentGame();
     }
   } else {
-    // Dibuja un boton deshabilitado para que no se descoloque la lista
     uiButton(1, items, 40,
              L("pause.nosave", "(sin slot - no se puede guardar)"), nullptr,
              nullptr);
@@ -2277,11 +1978,9 @@ void Game::drawPauseMenu() {
     shouldQuit = true;
   }
 
-  // HUD mini abajo
   char info[128];
-  snprintf(info, sizeof(info),
-           L("pause.info", "Nivel %d  -  %.1fs  -  Slot %d"), level, levelTime,
-           currentSlot + 1);
+  snprintf(info, sizeof(info), L("pause.info", "Nivel %d  -  %.1fs"), level,
+           levelTime);
   UI::T(info, W / 2 - UI::M(info, 16) / 2, H - 60, 16, LIGHTGRAY);
 }
 
@@ -2299,7 +1998,10 @@ void Game::drawToast() {
   DrawRectangleLines(x, y, tw + pad * 2, 44, (Color){100, 220, 120, alpha});
   UI::T(toastMsg, W / 2 - tw / 2, y + 10, 24, (Color){200, 255, 200, alpha});
 }
-// ---------- Menús principales ----------
+
+// =========================================================================
+//  Menú principal + speedrun menu
+// =========================================================================
 void Game::drawMenus() {
   BeginDrawing();
   int W = GetScreenWidth();
@@ -2308,7 +2010,6 @@ void Game::drawMenus() {
   if (state == ST_MENU) {
     ClearBackground(BLACK);
     attract.draw(W, H);
-    // Overlay oscuro para que el texto se lea bien
     DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 130});
   } else {
     ClearBackground((Color){12, 12, 18, 255});
@@ -2321,7 +2022,6 @@ void Game::drawMenus() {
       PlayMusicStream(assets.musicMenu);
       musicMenuPlaying = true;
     }
-    int W = GetScreenWidth(), H = GetScreenHeight();
     int y = (int)(H * 0.10f);
     const char *t1 = "Escape from Marisa 3:";
     UI::T(t1, W / 2 - UI::M(t1, 54) / 2, y, 54, RAYWHITE);
@@ -2332,56 +2032,49 @@ void Game::drawMenus() {
     const char *t3 = L("menu.subtitle", "modo serio chat");
     UI::T(t3, W / 2 - UI::M(t3, 22) / 2, y, 22, LIGHTGRAY);
 
-    // Zona clickeable: el titulo completo (t1 + t2)
     int titleTop = (int)(H * 0.10f);
     int titleH = 54 + 6 + 84;
     Rectangle titleRect = {(float)(W / 2 - 400), (float)titleTop, 800.0f,
                            (float)titleH};
     bool hoveringTitle = CheckCollisionPointRec(GetMousePosition(), titleRect);
-
     if (hoveringTitle) {
-      // Cursor de mano + subrayado sutil
       SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
       DrawRectangleLinesEx(titleRect, 1, (Color){255, 255, 255, 40});
     } else {
       SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     }
-
     if (hoveringTitle && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       credits.start();
       state = ST_CREDITS;
     }
 
-    int items = 5;
+    int items = 4;
     handleGamepadMenuNav(items);
 
-    if (uiButton(0, items, 90, L("menu.play", "Jugar"), &navIndex, nullptr) ||
+    if (uiButton(0, items, 90, L("menu.single", "Un jugador"), &navIndex,
+                 nullptr) ||
         (navIndex == 0 && consumeConfirm())) {
-      state = ST_MODE_SELECT;
-      navMenu = 0;
+      saves.refresh();
+      saveListCursor = 0;
+      saveListScroll = 0;
+      saveDeleteConfirm = false;
+      state = ST_SAVE_LIST;
+      navIndex = 0;
     }
-    if (uiButton(1, items, 90, L("menu.load", "Cargar partida"), &navIndex,
+    if (uiButton(1, items, 90, L("menu.speedrun", "Speedruns"), &navIndex,
                  nullptr) ||
         (navIndex == 1 && consumeConfirm())) {
-      slotPurpose = SLOT_LOAD;
-      navSlot = 0;
-      saves.refresh();
-      state = ST_SLOT_SELECT;
-    }
-    if (uiButton(2, items, 90, L("menu.speedrun", "Speedruns"), &navIndex,
-                 nullptr) ||
-        (navIndex == 2 && consumeConfirm())) {
       state = ST_SPEEDRUN;
       navMenu = 0;
     }
-    if (uiButton(3, items, 90, L("menu.config", "Configuración"), &navIndex,
+    if (uiButton(2, items, 90, L("menu.config", "Configuración"), &navIndex,
                  nullptr) ||
         (navIndex == 2 && consumeConfirm())) {
       configReturn = ST_MENU;
       state = ST_CONFIG;
       navIndexCfg = 0;
     }
-    if (uiButton(4, items, 90, L("menu.quit", "Salir del juego"), &navIndex,
+    if (uiButton(3, items, 90, L("menu.quit", "Salir del juego"), &navIndex,
                  nullptr) ||
         (navIndex == 3 && consumeConfirm()))
       shouldQuit = true;
@@ -2390,17 +2083,11 @@ void Game::drawMenus() {
     UI::T(ver.c_str(), 5, H - 25, 20, RAYWHITE);
     break;
   }
-  case ST_MODE_SELECT:
-    drawModeSelect();
+  case ST_SAVE_LIST:
+    drawSaveList();
     break;
-  case ST_PLAYER_SELECT:
-    drawPlayerSelect();
-    break;
-  case ST_ENDLESS_CONFIG:
-    drawEndlessConfig();
-    break;
-  case ST_SLOT_SELECT:
-    drawSlotSelect();
+  case ST_SAVE_CREATE:
+    drawSaveCreate();
     break;
   case ST_LEVEL_INTRO:
     drawLevelIntro();
@@ -2471,14 +2158,576 @@ void Game::drawMenus() {
     break;
   }
 
-  // El toast se dibuja al final, en cualquier estado 2D
   drawToast();
   if (cfg.showFps)
     DrawFPS(GetScreenWidth() - 90, 20);
-
   EndDrawing();
 }
 
+// =========================================================================
+//  Save list — pantalla principal de partidas
+// =========================================================================
+void Game::drawSaveList() {
+  int W = GetScreenWidth(), H = GetScreenHeight();
+
+  UI::T(L("saves.title", "Partidas guardadas"),
+        W / 2 - UI::M(L("saves.title", "Partidas guardadas"), 42) / 2, 50, 42,
+        RAYWHITE);
+
+  const auto &list = saves.entries();
+
+  const int rowH = 58;
+  const int topY = 130;
+  const int botY = H - 120;
+  const int listX = 80;
+  const int listW = W - 160;
+  int visRows = std::max(1, (botY - topY) / rowH);
+
+  if (list.empty()) {
+    const char *msg =
+        L("saves.empty", "No hay partidas. Crea una con el botón de abajo.");
+    UI::T(msg, W / 2 - UI::M(msg, 22) / 2, H / 2 - 20, 22, LIGHTGRAY);
+  } else {
+    if (saveListCursor < 0)
+      saveListCursor = 0;
+    if (saveListCursor >= (int)list.size())
+      saveListCursor = (int)list.size() - 1;
+
+    if (saveListCursor < saveListScroll)
+      saveListScroll = saveListCursor;
+    if (saveListCursor >= saveListScroll + visRows)
+      saveListScroll = saveListCursor - visRows + 1;
+    if (saveListScroll < 0)
+      saveListScroll = 0;
+
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0.0f && !saveDeleteConfirm) {
+      saveListScroll -= (int)wheel;
+      if (saveListScroll < 0)
+        saveListScroll = 0;
+      int maxScroll = std::max(0, (int)list.size() - visRows);
+      if (saveListScroll > maxScroll)
+        saveListScroll = maxScroll;
+    }
+
+    if (IsKeyPressed(KEY_DOWN))
+      saveListCursor++;
+    if (IsKeyPressed(KEY_UP))
+      saveListCursor--;
+    if (saveListCursor < 0)
+      saveListCursor = 0;
+    if (saveListCursor >= (int)list.size())
+      saveListCursor = (int)list.size() - 1;
+
+    for (int r = 0; r < visRows; ++r) {
+      int idx = saveListScroll + r;
+      if (idx >= (int)list.size())
+        break;
+
+      const SaveEntry &e = list[idx];
+      int y = topY + r * rowH;
+
+      Rectangle row = {(float)listX, (float)y, (float)listW, (float)(rowH - 6)};
+      Vector2 mp = GetMousePosition();
+      bool hover = CheckCollisionPointRec(mp, row);
+      Vector2 md = GetMouseDelta();
+      bool mouseMoved = (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f);
+      if (hover && mouseMoved)
+        saveListCursor = idx;
+
+      bool selected = (idx == saveListCursor);
+      bool clicked = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+
+      Color bg =
+          selected ? (Color){60, 70, 105, 230} : (Color){30, 34, 48, 200};
+      Color brd = selected ? SKYBLUE : (Color){70, 80, 110, 200};
+      DrawRectangleRec(row, bg);
+      DrawRectangleLinesEx(row, 2, brd);
+
+      UI::T(e.name.c_str(), listX + 20, y + 12, 22, RAYWHITE);
+
+      char info[256];
+      const char *modeStr = (e.mode == MODE_STORY)
+                                ? L("mode.story", "Historia")
+                                : L("mode.endless", "Infinito");
+      snprintf(info, sizeof(info), "%s · Nivel %d · %s", modeStr, e.level,
+               e.speedrun ? L("saves.tag.sr", "Speedrun") : "");
+      UI::T(info, listX + 20, y + 34, 14, LIGHTGRAY);
+
+      int totalSec = (int)e.playtime;
+      int hh = totalSec / 3600;
+      int mm = (totalSec / 60) % 60;
+      char pt[32];
+      if (hh > 0)
+        snprintf(pt, sizeof(pt), "%dh %02dm", hh, mm);
+      else
+        snprintf(pt, sizeof(pt), "%dm", mm);
+
+      int ptW = UI::M(pt, 16);
+      UI::T(pt, listX + listW - ptW - 20, y + 12, 16, RAYWHITE);
+
+      const char *dateStr = formatDate(e.timestamp);
+      int dtW = UI::M(dateStr, 14);
+      UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, GRAY);
+
+      if (clicked) {
+        loadGame(e.id);
+        return;
+      }
+    }
+  }
+
+  // ----- Botones inferiores -----
+  auto bottomBtn = [&](int idx, int total, const char *label) -> bool {
+    int bw = 180, bh = 46, gap = 16;
+    int totalW = total * bw + (total - 1) * gap;
+    int bx = W / 2 - totalW / 2 + idx * (bw + gap);
+    int by = H - 90;
+    Rectangle r = {(float)bx, (float)by, (float)bw, (float)bh};
+    Vector2 mp = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mp, r);
+    bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+
+    Color bg = hover ? (Color){70, 80, 120, 255} : (Color){40, 45, 65, 255};
+    Color brd = hover ? SKYBLUE : (Color){90, 100, 140, 255};
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 2, brd);
+
+    int fs = 20;
+    int tw = UI::M(label, fs);
+    UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs,
+          hover ? WHITE : RAYWHITE);
+    return click;
+  };
+
+  bool hasSelection = !list.empty();
+  bool createClicked = bottomBtn(0, 5, L("saves.new", "+ Nueva partida"));
+  bool playClicked = hasSelection && bottomBtn(1, 5, L("saves.play", "Jugar"));
+  bool dupClicked = hasSelection && bottomBtn(2, 5, L("saves.dup", "Duplicar"));
+  bool recClicked = hasSelection && bottomBtn(3, 5, L("saves.rec", "Recrear"));
+  bool delClicked = hasSelection && bottomBtn(4, 5, L("saves.del", "Eliminar"));
+
+  // Modal de confirmación
+  if (saveDeleteConfirm) {
+    DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 180});
+
+    const char *q = L("saves.delete.confirm", "¿Eliminar esta partida?");
+    int qw = UI::M(q, 30);
+    UI::T(q, W / 2 - qw / 2, H / 2 - 40, 30, RAYWHITE);
+
+    auto confirmBtn = [&](int idx, const char *label) -> bool {
+      int bw = 160, bh = 50, gap = 30;
+      int bx = W / 2 - bw - gap / 2 + idx * (bw + gap);
+      int by = H / 2 + 20;
+      Rectangle r = {(float)bx, (float)by, (float)bw, (float)bh};
+      Vector2 mp = GetMousePosition();
+      bool hover = CheckCollisionPointRec(mp, r);
+      bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+      Color bg = hover ? (idx == 0 ? (Color){140, 60, 60, 255}
+                                   : (Color){60, 90, 140, 255})
+                       : (Color){40, 45, 65, 255};
+      DrawRectangleRec(r, bg);
+      DrawRectangleLinesEx(r, 2, RAYWHITE);
+      int fs = 22;
+      int tw = UI::M(label, fs);
+      UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs, WHITE);
+      return click;
+    };
+
+    bool yes = confirmBtn(0, L("common.yes", "Sí"));
+    bool no = confirmBtn(1, L("common.no", "No"));
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_N))
+      no = true;
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_Y))
+      yes = true;
+
+    if (yes) {
+      if (!saveDeletePendingId.empty()) {
+        saves.remove(saveDeletePendingId);
+        saveDeletePendingId.clear();
+        if (saveListCursor >= (int)saves.entries().size())
+          saveListCursor = std::max(0, (int)saves.entries().size() - 1);
+      }
+      saveDeleteConfirm = false;
+    }
+    if (no) {
+      saveDeleteConfirm = false;
+      saveDeletePendingId.clear();
+    }
+    return;
+  }
+
+  if (createClicked) {
+    createBuffer = SaveEntry{};
+    createBuffer.name = "New world";
+    createBuffer.mode = MODE_STORY;
+    createBuffer.difficulty = DIFF_NORMAL;
+    createBuffer.speedrun = false;
+    createBuffer.twoPlayers = false;
+    createBuffer.runSeed =
+        (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+    if (createBuffer.runSeed == 0)
+      createBuffer.runSeed = 1;
+    state = ST_SAVE_CREATE;
+    navIndex = 0;
+  }
+  if (playClicked && hasSelection)
+    loadGame(list[saveListCursor].id);
+  if (dupClicked && hasSelection)
+    saves.duplicate(list[saveListCursor].id);
+  if (recClicked && hasSelection)
+    saves.recreate(list[saveListCursor].id);
+  if (delClicked && hasSelection) {
+    saveDeletePendingId = list[saveListCursor].id;
+    saveDeleteConfirm = true;
+  }
+
+  if (!saveDeleteConfirm && (IsKeyPressed(KEY_ESCAPE) || consumeCancel())) {
+    state = ST_MENU;
+    navIndex = 0;
+  }
+}
+
+// =========================================================================
+//  Save create — formulario de nueva partida
+// =========================================================================
+void Game::drawSaveCreate() {
+  drawConfigHeader(L("create.title", "Nueva partida"));
+
+  bool endless = (createBuffer.mode == MODE_ENDLESS);
+
+  int seedRow = endless ? 5 : -1;
+  int randomRow = endless ? 6 : -1;
+  int enemyRow = endless ? 7 : -1;
+  int itemRow = endless ? 8 : -1;
+  int createRow = endless ? 9 : 5;
+  int cancelRow = createRow + 1;
+  int totalRows = cancelRow + 1;
+
+  if (IsKeyPressed(KEY_DOWN))
+    navIndex = (navIndex + 1) % totalRows;
+  if (IsKeyPressed(KEY_UP))
+    navIndex = (navIndex + totalRows - 1) % totalRows;
+  handleGamepadMenuNav(totalRows);
+
+  int lr = gamepadLeftRight();
+  if (IsKeyPressed(KEY_LEFT))
+    lr = -1;
+  if (IsKeyPressed(KEY_RIGHT))
+    lr = +1;
+
+  bool confirm = consumeConfirm();
+
+  auto rowY = [&](int row) {
+    return GetScreenHeight() / 2 - (totalRows * 60) / 2 + row * 60;
+  };
+
+  auto drawRow = [&](int row, const char *label, const char *value,
+                     bool *outSelected, bool *outHover) {
+    int x = GetScreenWidth() / 2 - 340;
+    int y = rowY(row);
+    Rectangle r = {(float)x, (float)y, 680, 52};
+    Vector2 mp = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mp, r);
+    Vector2 md = GetMouseDelta();
+    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+      navIndex = row;
+    bool selected = (navIndex == row);
+    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                   : (Color){35, 40, 58, 255};
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){80, 90, 125, 255});
+    UI::T(label, x + 22, y + 14, 24, RAYWHITE);
+    if (value && value[0]) {
+      char full[160];
+      snprintf(full, sizeof(full), "< %s >", value);
+      int vw = UI::M(full, 24);
+      UI::T(full, x + 680 - vw - 22, y + 14, 24, GOLD);
+    }
+    *outSelected = selected;
+    *outHover = hover;
+  };
+
+  // --- Nombre ---
+  {
+    int x = GetScreenWidth() / 2 - 340;
+    int y = rowY(0);
+    Rectangle r = {(float)x, (float)y, 680, 52};
+    Vector2 mp = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mp, r);
+    Vector2 md = GetMouseDelta();
+    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+      navIndex = 0;
+    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+      navIndex = 0;
+    bool selected = (navIndex == 0);
+    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                   : (Color){35, 40, 58, 255};
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){80, 90, 125, 255});
+    UI::T(L("create.name", "Nombre"), x + 22, y + 14, 24, RAYWHITE);
+
+    int tw = UI::M(createBuffer.name.c_str(), 24);
+    int tx = x + 680 - tw - 22;
+    UI::T(createBuffer.name.c_str(), tx, y + 14, 24, GOLD);
+
+    int k = GetCharPressed();
+    while (k > 0) {
+      if (selected && k >= 32 && k < 127 && createBuffer.name.size() < 40)
+        createBuffer.name += (char)k;
+      k = GetCharPressed();
+    }
+    if (selected && IsKeyPressed(KEY_BACKSPACE) && !createBuffer.name.empty())
+      createBuffer.name.pop_back();
+    if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
+      UI::T("_", tx + tw, y + 14, 24, GOLD);
+  }
+
+  // --- Modo ---
+  {
+    bool sel = false, hov = false;
+    const char *modeStr = (createBuffer.mode == MODE_STORY)
+                              ? L("mode.story", "Historia")
+                              : L("mode.endless", "Infinito");
+    drawRow(1, L("create.mode", "Modo"), modeStr, &sel, &hov);
+    if (sel) {
+      int x = GetScreenWidth() / 2 - 340;
+      Vector2 mp = GetMousePosition();
+      bool hitL =
+          hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && mp.x < x + 340;
+      bool hitR =
+          hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && mp.x >= x + 340;
+      if (confirm || lr != 0 || hitL || hitR) {
+        createBuffer.mode = (createBuffer.mode + 1) % 2;
+        if (confirm)
+          confirm = false;
+      }
+    }
+  }
+
+  // --- Dificultad ---
+  {
+    const char *diffStr;
+    switch (createBuffer.difficulty) {
+    case DIFF_EXPERT:
+      diffStr = "EXPERTO";
+      break;
+    case DIFF_NIGHTMARE:
+      diffStr = "PESADILLA";
+      break;
+    default:
+      diffStr = "NORMAL";
+      break;
+    }
+    bool sel = false, hov = false;
+    drawRow(2, L("create.difficulty", "Dificultad"), diffStr, &sel, &hov);
+    if (sel) {
+      int x = GetScreenWidth() / 2 - 340;
+      Vector2 mp = GetMousePosition();
+      int delta = 0;
+      if (lr < 0)
+        delta = -1;
+      if (lr > 0)
+        delta = +1;
+      if (hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        delta = (mp.x < x + 340) ? -1 : +1;
+      createBuffer.difficulty =
+          (createBuffer.difficulty + delta + DIFF_COUNT) % DIFF_COUNT;
+    }
+  }
+
+  // --- Jugadores ---
+  {
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%s", createBuffer.twoPlayers ? "2" : "1");
+    bool sel = false, hov = false;
+    drawRow(3, L("create.players", "Jugadores"), buf, &sel, &hov);
+    if (sel) {
+      bool hit = hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+      if (confirm || hit || lr != 0) {
+        createBuffer.twoPlayers = !createBuffer.twoPlayers;
+        if (confirm)
+          confirm = false;
+      }
+    }
+  }
+
+  // --- Speedrun ---
+  {
+    const char *sr =
+        createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
+    bool sel = false, hov = false;
+    drawRow(4, L("create.speedrun", "Modo speedrun"), sr, &sel, &hov);
+    if (sel) {
+      bool hit = hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+      if (confirm || hit || lr != 0) {
+        createBuffer.speedrun = !createBuffer.speedrun;
+        if (confirm)
+          confirm = false;
+      }
+    }
+  }
+
+  // --- Sección infinito ---
+  if (endless) {
+    // Seed
+    {
+      int x = GetScreenWidth() / 2 - 340;
+      int y = rowY(seedRow);
+      Rectangle r = {(float)x, (float)y, 680, 52};
+      Vector2 mp = GetMousePosition();
+      bool hover = CheckCollisionPointRec(mp, r);
+      Vector2 md = GetMouseDelta();
+      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+        navIndex = seedRow;
+      if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        navIndex = seedRow;
+      bool selected = (navIndex == seedRow);
+      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                     : (Color){35, 40, 58, 255};
+      DrawRectangleRec(r, bg);
+      DrawRectangleLinesEx(r, 2,
+                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
+      UI::T(L("endless.seed", "Seed"), x + 22, y + 14, 24, RAYWHITE);
+
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%u", createBuffer.runSeed);
+      int vw = UI::M(buf, 24);
+      int vx = x + 680 - vw - 22;
+      UI::T(buf, vx, y + 14, 24, GOLD);
+
+      int k = GetCharPressed();
+      while (k > 0) {
+        if (selected && k >= '0' && k <= '9') {
+          uint64_t v =
+              (uint64_t)createBuffer.runSeed * 10ull + (uint64_t)(k - '0');
+          if (v <= 0xFFFFFFFFull)
+            createBuffer.runSeed = (uint32_t)v;
+        }
+        k = GetCharPressed();
+      }
+      if (selected && IsKeyPressed(KEY_BACKSPACE))
+        createBuffer.runSeed /= 10;
+      if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
+        UI::T("_", vx + vw, y + 14, 24, GOLD);
+    }
+
+    // Aleatorizar
+    {
+      int x = GetScreenWidth() / 2 - 340;
+      int y = rowY(randomRow);
+      Rectangle r = {(float)x, (float)y, 680, 52};
+      Vector2 mp = GetMousePosition();
+      bool hover = CheckCollisionPointRec(mp, r);
+      Vector2 md = GetMouseDelta();
+      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+        navIndex = randomRow;
+      bool selected = (navIndex == randomRow);
+      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                     : (Color){35, 40, 58, 255};
+      DrawRectangleRec(r, bg);
+      DrawRectangleLinesEx(r, 2,
+                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
+      UI::T(L("endless.randomize", "Aleatorizar seed"), x + 22, y + 14, 24,
+            RAYWHITE);
+
+      bool clicked = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+      if ((selected && confirm) || clicked) {
+        uint32_t s = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+        if (s == 0)
+          s = 1;
+        createBuffer.runSeed = s;
+        if (selected)
+          confirm = false;
+      }
+    }
+
+    // Multiplicadores
+    auto multRowFn = [&](int row, const char *label, int *value) {
+      int x = GetScreenWidth() / 2 - 340;
+      int y = rowY(row);
+      Rectangle r = {(float)x, (float)y, 680, 52};
+      Vector2 mp = GetMousePosition();
+      bool hover = CheckCollisionPointRec(mp, r);
+      Vector2 md = GetMouseDelta();
+      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+        navIndex = row;
+      bool selected = (navIndex == row);
+      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
+                                     : (Color){35, 40, 58, 255};
+      DrawRectangleRec(r, bg);
+      DrawRectangleLinesEx(r, 2,
+                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
+      UI::T(label, x + 22, y + 14, 24, RAYWHITE);
+
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%gx", (double)C::ENDLESS_MULT[*value]);
+      char full[32];
+      snprintf(full, sizeof(full), "< %s >", buf);
+      int vw = UI::M(full, 24);
+      UI::T(full, x + 680 - vw - 22, y + 14, 24, GOLD);
+
+      if (selected) {
+        int delta = 0;
+        if (lr < 0)
+          delta = -1;
+        if (lr > 0)
+          delta = +1;
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+          delta = (mp.x < x + 340) ? -1 : +1;
+        *value =
+            (*value + delta + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
+      }
+    };
+    multRowFn(enemyRow, L("endless.enemyMult", "Multiplicador enemigos"),
+              &createBuffer.enemyMult);
+    multRowFn(itemRow, L("endless.itemMult", "Multiplicador items"),
+              &createBuffer.itemMult);
+  }
+
+  // --- Botones create/cancel ---
+  auto actionBtn = [&](int row, const char *label) -> bool {
+    int x = GetScreenWidth() / 2 - 340;
+    int y = rowY(row);
+    Rectangle r = {(float)x, (float)y, 680, 52};
+    Vector2 mp = GetMousePosition();
+    bool hover = CheckCollisionPointRec(mp, r);
+    Vector2 md = GetMouseDelta();
+    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
+      navIndex = row;
+    bool selected = (navIndex == row);
+    Color bg = (hover || selected) ? (Color){70, 100, 80, 255}
+                                   : (Color){40, 45, 65, 255};
+    DrawRectangleRec(r, bg);
+    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){90, 100, 140, 255});
+    int tw = UI::M(label, 24);
+    UI::T(label, x + (680 - tw) / 2, y + 14, 24, RAYWHITE);
+    return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+  };
+
+  bool createClicked =
+      actionBtn(createRow, L("create.confirm", "Crear partida"));
+  bool cancelClicked = actionBtn(cancelRow, L("common.back", "Volver"));
+
+  if (createClicked || (navIndex == createRow && consumeConfirm())) {
+    if (createBuffer.name.empty())
+      createBuffer.name = "New world";
+    if (createBuffer.mode == MODE_ENDLESS && createBuffer.runSeed == 0) {
+      createBuffer.runSeed =
+          (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+      if (createBuffer.runSeed == 0)
+        createBuffer.runSeed = 1;
+    }
+    startNewGame(createBuffer);
+  } else if (cancelClicked || IsKeyPressed(KEY_ESCAPE) || consumeCancel()) {
+    state = ST_SAVE_LIST;
+    navIndex = 0;
+  }
+}
+
+// =========================================================================
+//  Speedrun menu
+// =========================================================================
 void Game::drawSpeedrunMenu() {
   int W = GetScreenWidth(), H = GetScreenHeight();
   drawConfigHeader(L("speedrun.title", "Speedruns"));
@@ -2486,23 +2735,15 @@ void Game::drawSpeedrunMenu() {
   const auto &runs = saves.speedruns();
 
   if (runs.empty()) {
-    const char *msg =
-        L("speedrun.empty", "Sin runs registrados todavía.\n"
-                            "Activa el modo speedrun en configuración "
-                            "y termina una partida.");
-    int fs = 22;
-    // Texto multilínea simple
     const char *line1 = L("speedrun.empty1", "Sin runs registrados todavía.");
     const char *line2 =
-        L("speedrun.empty2", "Activa el modo speedrun en configuración "
-                             "y termina una partida.");
+        L("speedrun.empty2", "Termina una partida con speedrun activado.");
+    int fs = 22;
     UI::T(line1, W / 2 - UI::M(line1, fs) / 2, H / 2 - 20, fs, LIGHTGRAY);
     UI::T(line2, W / 2 - UI::M(line2, fs) / 2, H / 2 + 20, fs, GRAY);
-    (void)msg;
   } else {
-    // Filtra por seed+mode únicos, ordenados por fecha descendente
+    // Claves únicas (seed, mode)
     std::vector<std::pair<uint32_t, int>> keys;
-    std::vector<std::time_t> lastDate;
     for (auto &e : runs) {
       bool found = false;
       for (auto &k : keys)
@@ -2514,7 +2755,6 @@ void Game::drawSpeedrunMenu() {
         keys.push_back({e.seed, e.mode});
     }
 
-    // navMenu selecciona key
     if (navMenu < 0)
       navMenu = 0;
     if (navMenu >= (int)keys.size())
@@ -2537,15 +2777,14 @@ void Game::drawSpeedrunMenu() {
     uint32_t selSeed = keys[navMenu].first;
     int selMode = keys[navMenu].second;
 
-    // Cabecera con seed+modo, navegable
     char keyBuf[128];
     snprintf(keyBuf, sizeof(keyBuf), "Seed %u  |  %s", selSeed,
              selMode == MODE_STORY ? L("speedrun.mode.story", "Historia")
                                    : L("speedrun.mode.endless", "Infinito"));
-    UI::T(TextFormat("< %s >", keyBuf),
-          W / 2 - UI::M(TextFormat("< %s >", keyBuf), 22) / 2, 110, 22, GOLD);
+    char keyFull[160];
+    snprintf(keyFull, sizeof(keyFull), "< %s >", keyBuf);
+    UI::T(keyFull, W / 2 - UI::M(keyFull, 22) / 2, 110, 22, GOLD);
 
-    // Encuentra la mejor run (menor total) para esta seed+mode
     const SpeedrunEntry *best = nullptr;
     const SpeedrunEntry *last = nullptr;
     std::time_t lastRunDate = 0;
@@ -2560,11 +2799,9 @@ void Game::drawSpeedrunMenu() {
       }
     }
 
-    // Best splits
     std::vector<float> bestSplits;
     saves.bestSplitsFor(selSeed, selMode, bestSplits);
 
-    // Tabla de splits
     int rowY = 170;
     int rowH = 26;
     int colSplitX = W / 2 - 220;
@@ -2602,11 +2839,9 @@ void Game::drawSpeedrunMenu() {
         }
         UI::T(tbuf, colLastX, rowY, 16, c);
       }
-
       rowY += rowH;
     }
 
-    // Totales
     rowY += 10;
     if (best) {
       char tb[32];
@@ -2633,6 +2868,9 @@ void Game::drawSpeedrunMenu() {
   UI::T(hint, W / 2 - UI::M(hint, 18) / 2, H - 40, 18, GRAY);
 }
 
+// =========================================================================
+//  draw / tick / run
+// =========================================================================
 void Game::draw() {
   if (state == ST_PLAYING && twoPlayers) {
     drawSplitScreen();
@@ -2640,7 +2878,6 @@ void Game::draw() {
     BeginDrawing();
     ClearBackground(BLACK);
 
-    // Blit de cada mitad a la pantalla
     DrawTextureRec(
         rtLeft.texture,
         {0, 0, (float)rtLeft.texture.width, -(float)rtLeft.texture.height},
@@ -2650,10 +2887,8 @@ void Game::draw() {
         {0, 0, (float)rtRight.texture.width, -(float)rtRight.texture.height},
         {(float)rtLeft.texture.width, 0}, WHITE);
 
-    // Separador central
     DrawRectangle(rtLeft.texture.width - 2, 0, 4, rtH, BLACK);
 
-    // Overlays encima
     drawToast();
     drawDebugOverlay(GetScreenWidth(), GetScreenHeight(), -1);
     if (cfg.showFps && !Debug::showOverlay)
@@ -2721,98 +2956,10 @@ void Game::applyVideoSettings() {
   ensureRenderTargets();
 }
 
-static const char *cbLabel(int idx) {
-  switch (idx) {
-  case 0:
-    return L("access.cb.none", "Ninguno");
-  case 1:
-    return L("access.cb.deuteranopia", "Deuteranopía");
-  case 2:
-    return L("access.cb.protanopia", "Protanopía");
-  default:
-    return L("access.cb.tritanopia", "Tritanopía");
-  }
-}
-
-static void drawDifficultyStar(float cx, float cy, float radius, Color color,
-                               bool filled) {
-  const int points = 10;
-  Vector2 verts[10];
-  for (int i = 0; i < points; ++i) {
-    float angle = -PI / 2.0f + i * (2.0f * PI / points);
-    float r = (i % 2 == 0) ? radius : radius * 0.42f;
-    verts[i] = {cx + cosf(angle) * r, cy + sinf(angle) * r};
-  }
-  if (filled) {
-    Vector2 c = {cx, cy};
-    for (int i = 0; i < points; ++i) {
-      int j = (i + 1) % points;
-      // Doble winding para sobrevivir a cualquier estado de culling
-      DrawTriangle(c, verts[i], verts[j], color);
-      DrawTriangle(c, verts[j], verts[i], color);
-    }
-  } else {
-    for (int i = 0; i < points; ++i) {
-      int j = (i + 1) % points;
-      DrawLineEx(verts[i], verts[j], 2.0f, color);
-    }
-  }
-}
-
-void Game::drawConfigAccess() {
-  drawConfigHeader(L("config.access", "Accesibilidad"));
-  int items = 7;
-  handleGamepadMenuNav(items);
-  int lr = gamepadLeftRight();
-  auto save = [&]() { cfg.save(); };
-
-  if (uiOptionEx(0, items, 30, L("access.colorblind", "Modo daltonismo"),
-                 cbLabel(cfg.colorblindMode), &navIndex, nullptr,
-                 navIndex == 0 ? lr : 0) != UI_NONE) {
-    cfg.colorblindMode = (cfg.colorblindMode + 1) % CB_COUNT;
-    UI::colorblind = cfg.colorblindMode;
-    save();
-  }
-  if (uiOptionEx(1, items, 30, L("access.contrast", "Alto contraste"),
-                 yesNo(cfg.highContrast), &navIndex, nullptr,
-                 navIndex == 1 ? lr : 0) != UI_NONE) {
-    cfg.highContrast = !cfg.highContrast;
-    save();
-  }
-  if (uiOptionEx(2, items, 30, L("access.motion", "Reducir movimiento"),
-                 yesNo(cfg.reduceMotion), &navIndex, nullptr,
-                 navIndex == 2 ? lr : 0) != UI_NONE) {
-    cfg.reduceMotion = !cfg.reduceMotion;
-    save();
-  }
-  if (uiOptionEx(3, items, 30, L("access.subtitles", "Subtítulos grandes"),
-                 yesNo(cfg.bigSubtitles), &navIndex, nullptr,
-                 navIndex == 3 ? lr : 0) != UI_NONE) {
-    cfg.bigSubtitles = !cfg.bigSubtitles;
-    save();
-  }
-  if (uiOptionEx(4, items, 30, L("access.sprint", "Sprint (mantener/alternar)"),
-                 cfg.holdToSprint ? L("access.sprint.hold", "Mantener")
-                                  : L("access.sprint.toggle", "Alternar"),
-                 &navIndex, nullptr, navIndex == 4 ? lr : 0) != UI_NONE) {
-    cfg.holdToSprint = !cfg.holdToSprint;
-    save();
-  }
-  if (uiOptionEx(5, items, 30, L("access.jumpscares", "Sin sustos"),
-                 cfg.noJumpscares ? L("common.yes", "SI")
-                                  : L("common.no", "NO"),
-                 &navIndex, nullptr, navIndex == 5 ? lr : 0) != UI_NONE) {
-    cfg.noJumpscares = !cfg.noJumpscares;
-    save();
-  }
-  if (uiOptionEx(6, items, 30, L("common.back", "Volver"), "", &navIndex,
-                 nullptr, 0) != UI_NONE ||
-      IsKeyPressed(KEY_ESCAPE))
-    state = ST_CONFIG;
-}
-
+// =========================================================================
+//  Debug
+// =========================================================================
 void Game::handleDebugHotkeys() {
-  // Overlay: solo en gameplay o pausa
   if (state == ST_PLAYING || state == ST_PAUSED) {
     if (IsKeyPressed(KEY_F3))
       Debug::showOverlay = !Debug::showOverlay;
@@ -2829,7 +2976,6 @@ void Game::handleDebugHotkeys() {
     if (IsKeyPressed(KEY_F9))
       Debug::noClip = !Debug::noClip;
 
-    // Acciones (solo en playing, no en pausa)
     if (state == ST_PLAYING) {
       if (IsKeyPressed(KEY_F10))
         debugRevealMap();
@@ -2872,7 +3018,6 @@ void Game::debugSpawnEnemy() {
   }
   Enemy e;
   e.pos = players[0].pos;
-  // Desplaza un poco para que no aparezca encima
   e.pos.x += 1.5f;
   e.pos.z += 1.5f;
   if (maze.wallAtWorld(e.pos.x, e.pos.z)) {
@@ -2919,7 +3064,6 @@ void Game::drawDebugWorld3D(const Player &pl) {
   if (!Debug::showOverlay)
     return;
 
-  // --- Bounds ---
   if (Debug::showBounds) {
     for (int i = 0; i < (twoPlayers ? 2 : 1); ++i) {
       if (players[i].caught || players[i].escaped)
@@ -2933,7 +3077,6 @@ void Game::drawDebugWorld3D(const Player &pl) {
                                    : (Color){80, 180, 255, 220};
       DrawCircle3D({e.pos.x, 0.05f, e.pos.z}, C::E_RADIUS, {1, 0, 0}, 90.0f, c);
     }
-    // Circulo de la distancia de captura
     for (int i = 0; i < (twoPlayers ? 2 : 1); ++i) {
       if (players[i].caught || players[i].escaped)
         continue;
@@ -2942,12 +3085,9 @@ void Game::drawDebugWorld3D(const Player &pl) {
     }
   }
 
-  // --- Vision ---
   if (Debug::showVision) {
     for (auto &e : enemies) {
       Vector3 eye = {e.pos.x, 1.4f, e.pos.z};
-
-      // Busca un objetivo visible
       int target = -1;
       for (int i = 0; i < (twoPlayers ? 2 : 1); ++i) {
         if (players[i].caught || players[i].escaped || players[i].hidden)
@@ -2958,33 +3098,26 @@ void Game::drawDebugWorld3D(const Player &pl) {
           break;
         }
       }
-
       if (target >= 0) {
-        // Verde: tiene LOS directa
         Vector3 tgt = {players[target].pos.x, 1.4f, players[target].pos.z};
         DrawLine3D(eye, tgt, (Color){0, 255, 0, 200});
       } else if (e.memoryT > 0.0f) {
-        // Amarillo: memoria (última pos conocida)
         Vector3 mem = {e.lastSeen.x, 1.4f, e.lastSeen.z};
         DrawLine3D(eye, mem, (Color){255, 220, 0, 180});
       } else {
-        // Blanco: dirección de deambulación
         Vector3 fwd = {eye.x + e.dir.x * 3.0f, eye.y, eye.z + e.dir.y * 3.0f};
         DrawLine3D(eye, fwd, (Color){200, 200, 200, 150});
       }
     }
   }
 
-  // --- Paths ---
   if (Debug::showPaths) {
-    // Dibuja una línea desde cada enemigo hacia su lastSeen si tiene memoria
     for (auto &e : enemies) {
       if (e.memoryT <= 0.0f)
         continue;
       DrawLine3D({e.pos.x, 0.2f, e.pos.z}, {e.lastSeen.x, 0.2f, e.lastSeen.z},
                  (Color){255, 100, 255, 180});
     }
-    // Cruces en los enemigos
     for (auto &e : enemies) {
       float s = 0.3f;
       DrawLine3D({e.pos.x - s, 0.1f, e.pos.z}, {e.pos.x + s, 0.1f, e.pos.z},
@@ -2997,6 +3130,8 @@ void Game::drawDebugWorld3D(const Player &pl) {
 
 void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
   (void)playerNum;
+  (void)vw;
+  (void)vh;
   if (!Debug::showOverlay)
     return;
 
@@ -3005,22 +3140,20 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
   const int font = 14;
   const int width = 460;
 
-  // Calcula lineas segun contenido
   int lines = 0;
-  lines += 3; // header
-  lines += 3; // runtime
-  lines += 6; // player 1
+  lines += 3;
+  lines += 3;
+  lines += 6;
   if (twoPlayers)
-    lines += 6;                                       // player 2
-  lines += 4;                                         // world
-  lines += 2 + std::min<int>((int)enemies.size(), 6); // enemigos (max 6)
+    lines += 6;
+  lines += 4;
+  lines += 2 + std::min<int>((int)enemies.size(), 6);
   if (enemies.size() > 6)
-    lines += 1;   // linea "y N mas..."
-  lines += 1 + 8; // cheats
+    lines += 1;
+  lines += 1 + 8;
 
   int height = pad * 2 + lines * lineH;
 
-  // Fondo
   DrawRectangle(12, 12, width, height, (Color){0, 0, 0, 210});
   DrawRectangleLines(12, 12, width, height, (Color){80, 255, 100, 220});
 
@@ -3035,20 +3168,17 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
   const Color titleC = (Color){100, 255, 120, 255};
   const Color labelC = (Color){180, 180, 180, 255};
   const Color valC = (Color){240, 240, 240, 255};
-  const Color okC = (Color){120, 255, 120, 255};
   const Color offC = (Color){130, 130, 130, 255};
   const Color warnC = (Color){255, 200, 80, 255};
 
   char buf[256];
 
-  // --- Header ---
   line(titleC, TextFormat("%s  %s", C::GAME_TITLE, Debug::version()));
   snprintf(buf, sizeof(buf), "Build: %s  |  %s", Debug::buildString(),
            Debug::compilerName());
   line(labelC, buf);
   line(labelC, "F3: toggle overlay   |   Numpad: cheats (ver abajo)");
 
-  // --- Runtime ---
   snprintf(buf, sizeof(buf), "FPS: %d   Frame: %.2f ms   TimeScale: %.2fx",
            GetFPS(), GetFrameTime() * 1000.0f, Debug::timeScale);
   line(valC, buf);
@@ -3060,7 +3190,6 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
            level, levelTime, totalPlaytime);
   line(valC, buf);
 
-  // --- Jugadores ---
   for (int i = 0; i < (twoPlayers ? 2 : 1); ++i) {
     const Player &p = players[i];
     Vector2 cell = maze.worldToCell(p.pos.x, p.pos.z);
@@ -3090,7 +3219,6 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
     line(p.caught ? warnC : valC, buf);
   }
 
-  // --- Mundo ---
   line(titleC, "--- MUNDO ---");
   snprintf(buf, sizeof(buf), "Maze: %dx%d  Seed: 0x%08X", maze.w, maze.h,
            currentSeed);
@@ -3103,7 +3231,6 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
            renderDist(), cfg.guiScale);
   line(valC, buf);
 
-  // --- Enemigos ---
   snprintf(buf, sizeof(buf), "--- ENEMIGOS (%d) ---", (int)enemies.size());
   line(titleC, buf);
   int shown = std::min<int>((int)enemies.size(), 6);
@@ -3134,7 +3261,6 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
     line(offC, buf);
   }
 
-  // --- Cheats ---
   line(titleC, "--- CHEATS / VISUALIZACION ---");
   auto toggleStr = [](bool b) { return b ? "ON " : "off"; };
   snprintf(buf, sizeof(buf), "[F4] Bounds:%s  [F5] Vision:%s  [F6] Paths:%s",
@@ -3145,20 +3271,19 @@ void Game::drawDebugOverlay(int vw, int vh, int playerNum) {
            toggleStr(Debug::godMode), toggleStr(Debug::infiniteStamina),
            toggleStr(Debug::noClip));
   line(valC, buf);
-  snprintf(buf, sizeof(buf),
-           "[F10] Reveal   [F11] Teleport   [NUM.] TimeScale");
-  line(valC, buf);
-  snprintf(buf, sizeof(buf), "[NUM0] Spawn   [NUM1] Kill all   [NUM2] Restart");
-  line(valC, buf);
-  snprintf(buf, sizeof(buf), "[NUM3] Next lvl   [NUM4] Prev lvl");
-  line(valC, buf);
+  line(valC, "[F10] Reveal   [F11] Teleport   [NUM.] TimeScale");
+  line(valC, "[NUM0] Spawn   [NUM1] Kill all   [NUM2] Restart");
+  line(valC, "[NUM3] Next lvl   [NUM4] Prev lvl");
 }
 
+// =========================================================================
+//  Jumpscare
+// =========================================================================
 void Game::startJumpscare(int enemyIdx) {
   jumpscareEnemy = enemyIdx;
   jumpscareTimer = C::JUMPSCARE_DURATION;
   state = ST_JUMPSCARE;
-  EnableCursor(); // libera cursor por si el usuario quiere saltar
+  EnableCursor();
 }
 
 void Game::drawJumpscare() {
@@ -3177,43 +3302,33 @@ void Game::drawJumpscare() {
   int W = GetScreenWidth();
   int H = GetScreenHeight();
 
-  // Progreso 0..1
   float t = 1.0f - (jumpscareTimer / C::JUMPSCARE_DURATION);
   if (t < 0.0f)
     t = 0.0f;
   if (t > 1.0f)
     t = 1.0f;
 
-  // Fase 1: zoom brusco de 0 a JUMPSCARE_ZOOM_IN
-  // Fase 2: mantener + shake + flash
   float sizeScale;
   if (t < C::JUMPSCARE_ZOOM_IN) {
-    // Rápido acercamiento
     float k = t / C::JUMPSCARE_ZOOM_IN;
-    // Easing out (arranca rápido, frena un poco)
     k = 1.0f - (1.0f - k) * (1.0f - k);
-    sizeScale = 0.5f + k * 1.2f; // empieza al 50%, acaba al 170%
+    sizeScale = 0.5f + k * 1.2f;
   } else {
-    // Fase 2: mantiene tamaño + shake
     sizeScale = 1.7f;
   }
 
-  // Shake solo en fase 2
   float shake = 0.0f;
   if (t >= C::JUMPSCARE_ZOOM_IN) {
     float k = (t - C::JUMPSCARE_ZOOM_IN) / (1.0f - C::JUMPSCARE_ZOOM_IN);
-    shake = (1.0f - k) * 14.0f; // decae al final
+    shake = (1.0f - k) * 14.0f;
   }
 
   float dx = ((float)GetRandomValue(-100, 100) / 100.0f) * shake;
   float dy = ((float)GetRandomValue(-100, 100) / 100.0f) * shake;
-
-  // Centro + tamano
   float drawSize = (float)H * sizeScale;
   float x = W / 2.0f + dx;
   float y = H / 2.0f + dy;
 
-  // Aplicar tinte de hit flash al principio
   Color tint = WHITE;
   if (t < 0.2f) {
     unsigned char k = (unsigned char)((1.0f - t / 0.2f) * 100);
@@ -3221,39 +3336,40 @@ void Game::drawJumpscare() {
         (Color){255, (unsigned char)(255 - k), (unsigned char)(255 - k), 255};
   }
 
-  // Dibujar el sprite centrado, escalado
   if (tex.id != 0) {
     Rectangle src = {0, 0, (float)tex.width, (float)tex.height};
     Rectangle dst = {x - drawSize / 2.0f, y - drawSize / 2.0f, drawSize,
                      drawSize};
     DrawTexturePro(tex, src, dst, {0, 0}, 0.0f, tint);
   } else {
-    // Fallback: circulo gigante con el color del enemigo
     Color c = (kind == ENEMY_BEA)      ? (Color){210, 45, 60, 255}
               : (kind == ENEMY_MARISA) ? (Color){60, 90, 210, 255}
                                        : (Color){160, 40, 200, 255};
     DrawCircle((int)x, (int)y, drawSize * 0.4f, c);
   }
 
-  // Flash blanco al inicio
   if (t < 0.08f) {
     unsigned char a = (unsigned char)((1.0f - t / 0.08f) * 255);
     DrawRectangle(0, 0, W, H, (Color){255, 255, 255, a});
   }
-
-  // Oscurecimiento al final (transición a game over)
   if (t > 0.85f) {
     float k = (t - 0.85f) / 0.15f;
     unsigned char a = (unsigned char)(k * 255);
     DrawRectangle(0, 0, W, H, (Color){0, 0, 0, a});
   }
-
   EndDrawing();
 }
 
+// =========================================================================
+//  Items en el mundo
+// =========================================================================
 void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
-  float mult =
-      (mode == MODE_ENDLESS) ? C::ENDLESS_MULT[runConfig.itemMult] : 1.0f;
+  int im = 2;
+  if (const SaveEntry *cur = saves.find(currentSaveId))
+    im = cur->itemMult;
+  im = std::clamp(im, 0, C::ENDLESS_MULT_COUNT - 1);
+
+  float mult = (mode == MODE_ENDLESS) ? C::ENDLESS_MULT[im] : 1.0f;
   int count = std::max(0, (int)((float)std::min(6 + lvl / 2, 8) * mult));
   if (count == 0)
     return;
@@ -3268,7 +3384,6 @@ void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
                            {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
                            {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
   const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
-
   int totalWeight = 0;
   for (int i = 0; i < POOL_SIZE; ++i)
     totalWeight += pool[i].weight;
@@ -3320,6 +3435,9 @@ void Game::updateWorldItems(float dt) {
     w.bobT += dt * 2.0f;
 }
 
+// =========================================================================
+//  Interacción
+// =========================================================================
 int Game::findInteractable(const Player &pl, int &outCx, int &outCy,
                            bool &isLocker) const {
   Vector3 fwd = {sinf(pl.yaw), 0.0f, -cosf(pl.yaw)};
@@ -3330,7 +3448,6 @@ int Game::findInteractable(const Player &pl, int &outCx, int &outCy,
   outCx = cx;
   outCy = cy;
 
-  // Taquilla: pared con variante 1
   if (maze.wallAt(cx, cy)) {
     int variant = 0;
     if (cy < (int)maze.wallVariant.size() &&
@@ -3342,8 +3459,6 @@ int Game::findInteractable(const Player &pl, int &outCx, int &outCy,
     }
     return 0;
   }
-
-  // Fuente
   if (maze.hasFountain(cx, cy)) {
     isLocker = false;
     return 2;
@@ -3359,7 +3474,6 @@ void Game::handleInteraction(int p) {
   bool interactPressed = IsKeyPressed(cfg.binds[p].interact) ||
                          (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
 
-  // ---- Salir de la taquilla ----
   if (pl.hidden) {
     if (interactPressed) {
       pl.hidden = false;
@@ -3378,14 +3492,12 @@ void Game::handleInteraction(int p) {
   if (!interactPressed)
     return;
 
-  // 1) Recoger item cercano
   int idx = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
   if (idx >= 0) {
     ItemKind kind = worldItems[idx].kind;
 
     if (kind == ITEM_KEY) {
       worldItems.erase(worldItems.begin() + idx);
-
       players[0].hasKey = true;
       players[1].hasKey = true;
 
@@ -3411,7 +3523,6 @@ void Game::handleInteraction(int p) {
     return;
   }
 
-  // 2) Taquilla / fuente
   int cx, cy;
   bool isLocker;
   int what = findInteractable(pl, cx, cy, isLocker);
@@ -3419,7 +3530,6 @@ void Game::handleInteraction(int p) {
     return;
 
   if (what == 1) {
-    // Esconderse
     pl.hidden = true;
     pl.hiddenExitPos = pl.pos;
     pl.hiddenExitYaw = pl.yaw;
@@ -3436,7 +3546,6 @@ void Game::handleInteraction(int p) {
           TextFormat(L("toast.locker.hidden", "Escondido. [%s/RMB] salir"),
                      Config::keyName(cfg.binds[p].interact)));
   } else if (what == 2) {
-    // Beber agua
     if (pl.stamina < C::STAM_WATER_MAX - 0.01f) {
       pl.stamina = C::STAM_WATER_MAX;
       pl.exhausted = false;
@@ -3457,7 +3566,6 @@ void Game::handleItemInput(int p) {
   if (pl.caught || pl.escaped)
     return;
 
-  // Cambiar de slot
   if (p == 0) {
     for (int i = 0; i < C::INV_SLOTS; ++i)
       if (IsKeyPressed(KEY_ONE + i))
@@ -3470,11 +3578,10 @@ void Game::handleItemInput(int p) {
       pl.selectedSlot = (pl.selectedSlot + 1) % C::INV_SLOTS;
   }
 
-  // Dropear
   if (IsKeyPressed(cfg.binds[p].drop)) {
     if (Inventory::dropSelected(pl, maze, worldItems)) {
       if (assets.sfxPickup.frameCount > 0) {
-        SetSoundPitch(assets.sfxPickup, 0.7f); // más grave
+        SetSoundPitch(assets.sfxPickup, 0.7f);
         PlaySound(assets.sfxPickup);
         SetSoundPitch(assets.sfxPickup, 1.0f);
       }
@@ -3483,20 +3590,18 @@ void Game::handleItemInput(int p) {
     }
   }
 
-  // Usar (lanzar) el item seleccionado
-  bool usePressed = IsKeyPressed(cfg.binds[p].interact == 0 ? KEY_E : KEY_E) ||
-                    (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
-  // Nota: usar la tecla E explicitamente. Si quieres que sea remapeable,
-  // anade un campo "use" a KeyBindings.
-  usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) ||
-               IsKeyPressed(KEY_E);
-
+  bool usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) ||
+                    IsKeyPressed(KEY_E);
   if (usePressed) {
     if (Inventory::useSelected(pl, maze, projectiles, assets)) {
+      // sonido se maneja dentro
     }
   }
 }
 
+// =========================================================================
+//  HUD items
+// =========================================================================
 void Game::drawInventory(const Player &pl, int vw, int vh) {
   const int slotSize = std::max(42, vw / 32);
   const int gap = 6;
@@ -3511,15 +3616,12 @@ void Game::drawInventory(const Player &pl, int vw, int vh) {
     int y = startY + i * (slotSize + gap);
 
     Rectangle r = {(float)x, (float)y, (float)slotSize, (float)slotSize};
-
     bool selected = (i == pl.selectedSlot);
     Color bg = selected ? (Color){60, 70, 100, 200} : (Color){20, 22, 32, 170};
     Color border =
         selected ? (Color){255, 240, 140, 230} : (Color){90, 100, 130, 180};
-
     DrawRectangleRec(r, bg);
     DrawRectangleLinesEx(r, selected ? 2.0f : 1.0f, border);
-
     DrawText(TextFormat("%d", i + 1), x + 4, y + 2, 12,
              (Color){180, 180, 180, 180});
 
@@ -3539,7 +3641,6 @@ void Game::drawInventory(const Player &pl, int vw, int vh) {
         DrawRectangle(ix, iy, isz, isz, itemCol);
         DrawRectangleLines(ix, iy, isz, isz, (Color){40, 40, 50, 200});
       }
-
       if (it.count > 1) {
         const char *cnt = TextFormat("%d", it.count);
         int fs = 14;
@@ -3562,7 +3663,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
   if (it.kind == ITEM_NONE || it.count <= 0)
     return;
 
-  // ---------- Ejes de la camara ----------
   Vector3 fwd = {cam.target.x - cam.position.x, cam.target.y - cam.position.y,
                  cam.target.z - cam.position.z};
   float fwdLen = sqrtf(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
@@ -3572,7 +3672,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
   fwd.y /= fwdLen;
   fwd.z /= fwdLen;
 
-  // right = fwd x up
   Vector3 right = {fwd.y * cam.up.z - fwd.z * cam.up.y,
                    fwd.z * cam.up.x - fwd.x * cam.up.z,
                    fwd.x * cam.up.y - fwd.y * cam.up.x};
@@ -3584,17 +3683,14 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
   right.y /= rightLen;
   right.z /= rightLen;
 
-  // upReal = right x fwd
   Vector3 up = {right.y * fwd.z - right.z * fwd.y,
                 right.z * fwd.x - right.x * fwd.z,
                 right.x * fwd.y - right.y * fwd.x};
 
-  // ---------- Offset en espacio de camara ----------
   float dFwd = 0.55f;
   float dRight = 0.30f;
   float dDown = -0.22f;
 
-  // Bob del caminar
   if (pl.footstepT > 0.0f) {
     float phase = (C::STEP_SLOW - pl.footstepT) * 14.0f;
     dDown += sinf(phase) * 0.035f;
@@ -3606,7 +3702,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
       cam.position.y + fwd.y * dFwd + right.y * dRight + up.y * dDown,
       cam.position.z + fwd.z * dFwd + right.z * dRight + up.z * dDown};
 
-  // ---------- Tamano por item ----------
   float size = 0.22f;
   switch (it.kind) {
   case ITEM_ROCK:
@@ -3622,39 +3717,28 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
     size = 0.60f;
     break;
   case ITEM_KEY:
-    size = 0.55;
+    size = 0.55f;
     break;
   default:
     break;
   }
 
-  // ---------- Rotacion del quad en su propio plano ----------
-  // Un pequeño roll para dar inclinacion "agarrada". Alrededor de fwd.
-  // Tambien un pequeño pitch alrededor de right, ligero.
   float rollRad = 18.0f * DEG2RAD;
   float pitchRad = -8.0f * DEG2RAD;
 
   float cr = cosf(rollRad), sr = sinf(rollRad);
   float cp = cosf(pitchRad), sp = sinf(pitchRad);
 
-  // Ejes rotados: aplicamos roll a (right, up), luego pitch a (fwd, up)
-  // 1) roll alrededor de fwd: right' = right*cr + up*sr, up' = -right*sr +
-  // up*cr
   Vector3 r1 = {right.x * cr + up.x * sr, right.y * cr + up.y * sr,
                 right.z * cr + up.z * sr};
   Vector3 u1 = {-right.x * sr + up.x * cr, -right.y * sr + up.y * cr,
                 -right.z * sr + up.z * cr};
-
-  // 2) pitch alrededor de r1: fwd' = fwd*cp + u1*sp, u2 = -fwd*sp + u1*cp
   Vector3 f2 = {fwd.x * cp + u1.x * sp, fwd.y * cp + u1.y * sp,
                 fwd.z * cp + u1.z * sp};
   Vector3 u2 = {-fwd.x * sp + u1.x * cp, -fwd.y * sp + u1.y * cp,
                 -fwd.z * sp + u1.z * cp};
 
-  // Usamos r1 como "right", u2 como "up", f2 como "forward" del quad
   float h = size * 0.5f;
-
-  // Los 4 vertices del quad centrado en pos
   Vector3 v0 = {pos.x + r1.x * (-h) + u2.x * (-h),
                 pos.y + r1.y * (-h) + u2.y * (-h),
                 pos.z + r1.z * (-h) + u2.z * (-h)};
@@ -3668,7 +3752,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
                 pos.y + r1.y * (-h) + u2.y * (h),
                 pos.z + r1.z * (-h) + u2.z * (h)};
 
-  // ---------- Dibujar por encima de todo ----------
   rlDisableDepthTest();
   rlDisableBackfaceCulling();
 
@@ -3677,7 +3760,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     rlColor4ub(255, 255, 255, 255);
-    // Normal apuntando hacia la camara
     rlNormal3f(-f2.x, -f2.y, -f2.z);
     rlTexCoord2f(0.0f, 1.0f);
     rlVertex3f(v0.x, v0.y, v0.z);
@@ -3691,7 +3773,6 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
     rlSetTexture(0);
   } else {
     Color c = Inventory::itemColor(it.kind);
-    // Fallback: dos quads cruzados para que tenga volumen
     rlBegin(RL_QUADS);
     rlColor4ub(c.r, c.g, c.b, 255);
     rlVertex3f(v0.x, v0.y, v0.z);
@@ -3705,6 +3786,9 @@ void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
   rlEnableDepthTest();
 }
 
+// =========================================================================
+//  Niveles custom
+// =========================================================================
 bool Game::tryLoadCustomLevel(int lvl, LevelExtras &extras) {
   if (mode != MODE_STORY)
     return false;
@@ -3717,16 +3801,15 @@ bool Game::tryLoadCustomLevel(int lvl, LevelExtras &extras) {
   if (!f)
     return false;
   fclose(f);
-
   return maze.loadFromFile(full.c_str(), extras);
 }
 
 void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
                                      int lvl, std::mt19937 &rng) {
-  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();
+  float dm = diffMultFor(currentDifficulty);
+  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
 
   for (const auto &p : positions) {
-    // Solo colocamos si la celda es transitable
     if (maze.wallAtWorld(p.x, p.z))
       continue;
 
@@ -3768,7 +3851,6 @@ void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
                            {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
                            {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
   const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
-
   int totalWeight = 0;
   for (int i = 0; i < POOL_SIZE; ++i)
     totalWeight += pool[i].weight;
@@ -3787,7 +3869,6 @@ void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
   for (const auto &p : positions) {
     if (maze.wallAtWorld(p.x, p.z))
       continue;
-
     WorldPickup wp;
     wp.kind = rollKind();
     wp.pos = {p.x, 0.35f, p.z};
@@ -3800,19 +3881,18 @@ void Game::spawnKeysFromPositions(const std::vector<Vector3> &positions) {
   for (const auto &p : positions) {
     if (maze.wallAtWorld(p.x, p.z))
       continue;
-
     WorldPickup wp;
     wp.kind = ITEM_KEY;
-    wp.pos = {p.x, 0.55f, p.z}; // un pelín más alto, brilla
+    wp.pos = {p.x, 0.55f, p.z};
     wp.bobT = 0.0f;
     worldItems.push_back(wp);
   }
 }
 
+// =========================================================================
+//  startLevel
+// =========================================================================
 void Game::startLevel(int lvl) {
-  // ============================================================
-  // 1) Intentar cargar un mapa custom (solo modo historia)
-  // ============================================================
   bool usedCustom = false;
   LevelExtras extras;
 
@@ -3820,19 +3900,19 @@ void Game::startLevel(int lvl) {
     usedCustom = true;
     for (Player &p : players)
       p.hasKey = false;
-    currentSeed = 0; // los mapas custom no tienen semilla procedural
+    currentSeed = 0;
   } else {
-    // ========================================================
-    // 2) Generación procedural (código original)
-    // ========================================================
     int size = 11 + (lvl - 1) * 2;
     if (mode == MODE_ENDLESS && size > C::ENDLESS_MAX_SIZE)
       size = C::ENDLESS_MAX_SIZE;
 
+    const SaveEntry *cur = saves.find(currentSaveId);
+    bool srEnabled = (cur && cur->speedrun);
+
     uint32_t baseSeed;
-    if (mode == MODE_ENDLESS && runConfig.seed != 0) {
-      baseSeed = runConfig.seed ^ (uint32_t)(lvl * 7919);
-    } else if (cfg.speedrunMode && runSeed != 0) {
+    if (mode == MODE_ENDLESS && runSeed != 0) {
+      baseSeed = runSeed ^ (uint32_t)(lvl * 7919);
+    } else if (srEnabled && runSeed != 0) {
       baseSeed = runSeed ^ (uint32_t)(lvl * 7919);
     } else {
       baseSeed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
@@ -3841,23 +3921,15 @@ void Game::startLevel(int lvl) {
     maze.generate(size, size, baseSeed);
   }
 
-  // ============================================================
-  // 3) Construir mallas (una vez sepamos el laberinto final)
-  // ============================================================
   world.build(maze, assets);
   levelTime = 0.0f;
 
-  // ============================================================
-  // 4) Spawns de jugadores
-  // ============================================================
-  Vector3 p1Spawn;
-  Vector3 p2Spawn;
-
+  Vector3 p1Spawn, p2Spawn;
   if (usedCustom && !extras.spawns.empty()) {
     p1Spawn = extras.spawns[0];
-    if (extras.spawns.size() >= 2)
+    if (extras.spawns.size() >= 2) {
       p2Spawn = extras.spawns[1];
-    else {
+    } else {
       Vector2 c = maze.worldToCell(p1Spawn.x, p1Spawn.z);
       p2Spawn = findFreeSpawnNear(maze, (int)c.x, (int)c.y, p1Spawn);
     }
@@ -3870,18 +3942,11 @@ void Game::startLevel(int lvl) {
   if (twoPlayers)
     resetPlayerState(players[1], p2Spawn);
 
-  // ============================================================
-  // 5) Salida
-  // ============================================================
-  if (usedCustom) {
+  if (usedCustom)
     exitPos = extras.exit;
-  } else {
+  else
     exitPos = maze.cellCenter(maze.w - 2, maze.h - 2);
-  }
 
-  // ============================================================
-  // 6) Enemigos e items
-  // ============================================================
   enemies.clear();
   worldItems.clear();
   projectiles.clear();
@@ -3889,23 +3954,25 @@ void Game::startLevel(int lvl) {
   std::mt19937 rng((uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919) ^
                    0xA5A5A5A5u);
 
+  const SaveEntry *cur = saves.find(currentSaveId);
+
   if (usedCustom) {
     spawnEnemiesFromPositions(extras.enemies, lvl, rng);
     spawnItemsFromPositions(extras.items, rng);
     spawnKeysFromPositions(extras.keys);
   } else {
-    // ----- Enemigos: código original -----
     int count;
     if (mode == MODE_ENDLESS) {
       int base = std::min(2 + lvl / 2, 12);
-      float mult = C::ENDLESS_MULT[runConfig.enemyMult];
-      count = std::max(0, (int)((float)base * mult));
+      int em = (cur ? cur->enemyMult : 2);
+      em = std::clamp(em, 0, C::ENDLESS_MULT_COUNT - 1);
+      count = std::max(0, (int)((float)base * C::ENDLESS_MULT[em]));
     } else {
       count = lvl + 1;
     }
 
-    float spd =
-        C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * cfg.diffMult();
+    float dm = diffMultFor(currentDifficulty);
+    float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
     float minDist = maze.w * C::CELL * 0.35f;
 
     int attempts = 0;
@@ -3946,13 +4013,9 @@ void Game::startLevel(int lvl) {
       enemies.push_back(e);
     }
 
-    // ----- Items: código original -----
     spawnWorldItems(lvl, maze.w, rng);
   }
 
-  // ============================================================
-  // 7) Cooldowns y niebla
-  // ============================================================
   fountainCooldown[0] = 0.0f;
   fountainCooldown[1] = 0.0f;
 
@@ -3964,8 +4027,11 @@ void Game::startLevel(int lvl) {
     maze.markExplored(players[1].pos.x, players[1].pos.z, C::FOG_RADIUS);
 }
 
+// =========================================================================
+//  Level details / intro
+// =========================================================================
 bool Game::loadLevelDetails(int lvl) {
-  levelDetails = {}; // reset por si acaso
+  levelDetails = {};
 
   std::string path = resolveLevelDetailsPath(lvl);
   if (path.empty())
@@ -4008,11 +4074,9 @@ bool Game::loadLevelDetails(int lvl) {
   return true;
 }
 
-// Llamado cuando toca entrar en `lvl`. Si hay details, muestra la pantalla
-// y espera input. Si no, entra directamente (cinemática o arranque).
 void Game::requestEnterLevel(int lvl) {
   level = lvl;
-  assignGamepads(); // el intro necesita gamepadId para leer el mando
+  assignGamepads();
 
   if (mode == MODE_STORY && loadLevelDetails(lvl)) {
     state = ST_LEVEL_INTRO;
@@ -4022,7 +4086,6 @@ void Game::requestEnterLevel(int lvl) {
   enterLevel(lvl);
 }
 
-// Realmente entra: reproduce cinemática si toca, o arranca el nivel.
 void Game::enterLevel(int lvl) {
   if (mode == MODE_STORY && cfg.playCinematics) {
     char name[64];
@@ -4050,23 +4113,19 @@ void Game::drawLevelIntro() {
   drawBackground2D();
   DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 170});
 
-  // Fade-in
   float t = std::min(1.0f, introTimer / 0.8f);
   unsigned char a = (unsigned char)(t * 255.0f);
 
-  // --- "Capitulo N" ---
   char cap[64];
   snprintf(cap, sizeof(cap), L("intro.chapter", "Capítulo %d"), level);
   int capSize = 22;
   int capW = UI::M(cap, capSize);
   UI::T(cap, W / 2 - capW / 2, H / 3 - 70, capSize, (Color){200, 200, 200, a});
 
-  // --- Línea decorativa ---
   int lineW = 260;
   DrawRectangle(W / 2 - lineW / 2, H / 3 - 36, lineW, 2,
                 (Color){180, 140, 60, a});
 
-  // --- Título ---
   const char *title = levelDetails.name.empty()
                           ? L("intro.untitled", "Sin título")
                           : levelDetails.name.c_str();
@@ -4078,7 +4137,6 @@ void Game::drawLevelIntro() {
   }
   UI::T(title, W / 2 - tw / 2, H / 3, titleSize, (Color){255, 240, 200, a});
 
-  // --- Subtítulo ---
   if (!levelDetails.subtitle.empty()) {
     int subSize = 24;
     int sw = UI::M(levelDetails.subtitle.c_str(), subSize);
@@ -4086,7 +4144,6 @@ void Game::drawLevelIntro() {
           subSize, (Color){180, 180, 190, a});
   }
 
-  // --- Estrellas de dificultad ---
   int stars = std::clamp(levelDetails.difficulty, 1, 5);
   float starR = 16.0f;
   float starGap = 12.0f;
@@ -4095,21 +4152,18 @@ void Game::drawLevelIntro() {
   float sy = H * 2.0f / 3.0f;
   for (int i = 0; i < 5; ++i) {
     float cx = sx + i * (starR * 2 + starGap);
-    if (i < stars) {
+    if (i < stars)
       drawDifficultyStar(cx, sy, starR, (Color){255, 200, 70, a}, true);
-    } else {
+    else
       drawDifficultyStar(cx, sy, starR, (Color){70, 70, 85, a}, false);
-    }
   }
 
-  // Etiqueta "Dificultad"
   const char *diffLbl = L("intro.difficulty", "Dificultad");
   int dlSize = 16;
   int dlW = UI::M(diffLbl, dlSize);
   UI::T(diffLbl, W / 2 - dlW / 2, (int)sy - starR - 32, dlSize,
         (Color){150, 150, 160, a});
 
-  // --- Hint "pulsa ENTER" ---
   if (t >= 1.0f) {
     float pulse = 0.55f + 0.45f * sinf((float)GetTime() * 3.0f);
     unsigned char ha = (unsigned char)(pulse * 220);
@@ -4120,31 +4174,9 @@ void Game::drawLevelIntro() {
   }
 }
 
-static void formatSplitTime(float sec, char *out, size_t sz) {
-  if (sec < 0)
-    sec = 0;
-  int ms = (int)(sec * 1000.0f + 0.5f);
-  int totalS = ms / 1000;
-  ms %= 1000;
-  int m = totalS / 60, s = totalS % 60;
-  if (m > 0)
-    snprintf(out, sz, "%d:%02d.%03d", m, s, ms);
-  else
-    snprintf(out, sz, "%02d.%03d", s, ms);
-}
-static void formatDelta(float sec, char *out, size_t sz) {
-  const char *sign = (sec >= 0) ? "+" : "-";
-  float a = fabsf(sec);
-  int ms = (int)(a * 1000.0f + 0.5f);
-  int totalS = ms / 1000;
-  ms %= 1000;
-  int m = totalS / 60, s = totalS % 60;
-  if (m > 0)
-    snprintf(out, sz, "%s%d:%02d.%03d", sign, m, s, ms);
-  else
-    snprintf(out, sz, "%s%02d.%03d", sign, s, ms);
-}
-
+// =========================================================================
+//  Speedrun helpers
+// =========================================================================
 void Game::speedrunStartRun(uint32_t seed, int mode) {
   sr.active = true;
   sr.seed = seed;
@@ -4175,7 +4207,6 @@ void Game::speedrunRecordSplit() {
       sr.pbFlashTimer = 2.0f;
     }
   } else {
-    // Primer split conocido → es PB por definición
     if (idx >= (int)sr.bestSplits.size())
       sr.bestSplits.resize(idx + 1, 0.0f);
     sr.bestSplits[idx] = split;

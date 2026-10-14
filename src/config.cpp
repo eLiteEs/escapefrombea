@@ -5,7 +5,6 @@
 #include <cstring>
 
 static void clampSelf(Config &c) {
-  c.difficulty = std::clamp(c.difficulty, 0, DIFF_COUNT - 1);
   c.mouseSens = std::clamp(c.mouseSens, 0.1f, 5.0f);
   c.stickSens = std::clamp(c.stickSens, 0.1f, 5.0f);
   c.fov = std::clamp(c.fov, 55, 100);
@@ -24,28 +23,6 @@ static void clampSelf(Config &c) {
   c.colorblindMode = std::clamp(c.colorblindMode, 0, CB_COUNT - 1);
   if (c.language.empty())
     c.language = "es";
-}
-
-float Config::diffMult() const {
-  switch (difficulty) {
-  case DIFF_EXPERT:
-    return 1.3f;
-  case DIFF_NIGHTMARE:
-    return 1.7f;
-  default:
-    return 1.0f;
-  }
-}
-
-const char *Config::diffName() const {
-  switch (difficulty) {
-  case DIFF_EXPERT:
-    return "EXPERTO";
-  case DIFF_NIGHTMARE:
-    return "PESADILLA";
-  default:
-    return "NORMAL";
-  }
 }
 
 const char *Config::keyName(int key) {
@@ -111,7 +88,6 @@ void Config::save() const {
   fprintf(f, "masterVol=%.3f\n", (double)masterVol);
   fprintf(f, "musicVol=%.3f\n", (double)musicVol);
   fprintf(f, "sfxVol=%.3f\n", (double)sfxVol);
-  fprintf(f, "difficulty=%d\n", difficulty);
   fprintf(f, "invertY=%d\n", invertY ? 1 : 0);
   fprintf(f, "mouseSens=%.3f\n", (double)mouseSens);
   fprintf(f, "stickSens=%.3f\n", (double)stickSens);
@@ -124,7 +100,6 @@ void Config::save() const {
   fprintf(f, "swapGamepads=%d\n", swapGamepads ? 1 : 0);
   fprintf(f, "maxLevel=%d\n", maxLevel);
   fprintf(f, "maxEndlessLevel=%d\n", maxEndlessLevel);
-  fprintf(f, "speedrunMode=%d\n", speedrunMode ? 1 : 0);
   for (int p = 0; p < 2; ++p) {
     fprintf(f, "p%d_up=%d\n", p + 1, binds[p].up);
     fprintf(f, "p%d_down=%d\n", p + 1, binds[p].down);
@@ -182,8 +157,6 @@ void Config::load() {
       musicVol = asFloat(val);
     else if (!strcmp(key, "sfxVol"))
       sfxVol = asFloat(val);
-    else if (!strcmp(key, "difficulty"))
-      difficulty = asInt(val);
     else if (!strcmp(key, "invertY"))
       invertY = asInt(val) != 0;
     else if (!strcmp(key, "mouseSens"))
@@ -230,8 +203,6 @@ void Config::load() {
       holdToSprint = asInt(val) != 0;
     else if (!strcmp(key, "noJumpscares"))
       noJumpscares = asInt(val) != 0;
-    else if (!strcmp(key, "speedrunMode"))
-      speedrunMode = asInt(val) != 0;
     else {
       for (int p = 0; p < 2; ++p) {
         char buf[16];
