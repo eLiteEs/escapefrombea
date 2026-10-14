@@ -1,12 +1,14 @@
+#include "game.h"
+
 #include "debug.h"
 #include "enemy.h"
-#include "game.h"
 #include "lang.h"
 #include "paths.h"
 #include "player.h"
 #include "rlgl.h"
 #include "save.h"
 #include "ui.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -17,6 +19,51 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #endif
+
+static std::string resolveStoryPath(const char *fname) {
+  auto exists = [](const std::string &p) {
+    FILE *f = fopen(p.c_str(), "rb");
+    if (!f)
+      return false;
+    fclose(f);
+    return true;
+  };
+
+  std::string p = Paths::storyIn(Lang::currentLang(), fname);
+  if (exists(p))
+    return p;
+
+  if (strcmp(Lang::currentLang(), "es") != 0) {
+    p = Paths::storyIn("es", fname);
+    if (exists(p))
+      return p;
+  }
+  return "";
+}
+
+static std::string resolveLevelDetailsPath(int lvl) {
+  char fname[64];
+  snprintf(fname, sizeof(fname), "level_%02d_details.dgn", lvl);
+
+  auto exists = [](const std::string &p) {
+    FILE *f = fopen(p.c_str(), "rb");
+    if (!f)
+      return false;
+    fclose(f);
+    return true;
+  };
+
+  std::string p = Paths::levelDetailsIn(Lang::currentLang(), fname);
+  if (exists(p))
+    return p;
+
+  if (strcmp(Lang::currentLang(), "es") != 0) {
+    p = Paths::levelDetailsIn("es", fname);
+    if (exists(p))
+      return p;
+  }
+  return "";
+}
 
 // ---------- Util ----------
 Color Game::playerColor(int idx) const { return UI::PlayerColor(idx); }
@@ -307,17 +354,12 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
 
 // ---------- Cinemáticas ----------
 bool Game::hasStory(const char *name) const {
-  std::string full = Paths::story(name);
-  FILE *f = fopen(full.c_str(), "r");
-  if (!f)
-    return false;
-  fclose(f);
-  return true;
+  return !resolveStoryPath(name).empty();
 }
 
 void Game::playCinematic(const char *name, const char *nextAction) {
-  std::string full = Paths::story(name);
-  if (!cinematic.load(full.c_str())) {
+  std::string full = resolveStoryPath(name);
+  if (full.empty() || !cinematic.load(full.c_str())) {
     if (!strcmp(nextAction, "playing")) {
       startLevel(level);
       assignGamepads();
@@ -634,15 +676,12 @@ void Game::update(float dt) {
 
       if (mode == MODE_STORY) {
         // ¿Existe contenido para el siguiente nivel?
-        char introName[64], outroName[64];
-        char detailsName[64], mapName[64];
+        char introName[64], outroName[64], mapName[64];
         snprintf(introName, sizeof(introName), "level_%02d_intro.txt", level);
         snprintf(outroName, sizeof(outroName), "level_%02d_outro.txt", level);
-        snprintf(detailsName, sizeof(detailsName), "level_%02d_details.dgn",
-                 level);
         snprintf(mapName, sizeof(mapName), "level_%02d_map.dgn", level);
 
-        auto exists = [](const std::string &p) {
+        auto existsAt = [](const std::string &p) {
           FILE *fp = fopen(p.c_str(), "rb");
           if (!fp)
             return false;
@@ -650,10 +689,11 @@ void Game::update(float dt) {
           return true;
         };
 
-        bool hasIntro = hasStory(introName);
-        bool hasOutro = hasStory(outroName);
-        bool hasDetails = exists(Paths::level(detailsName));
-        bool hasMap = exists(Paths::level(mapName));
+        bool hasIntro = hasStory(introName); // ya resuelve por idioma
+        bool hasOutro = hasStory(outroName); // ya resuelve por idioma
+        bool hasDetails = !resolveLevelDetailsPath(level)
+                               .empty(); // busca en currentLang + es
+        bool hasMap = existsAt(Paths::level(mapName)); // mapa sin idioma
 
         bool nextLevelExists = hasIntro || hasOutro || hasDetails || hasMap;
 
@@ -3520,9 +3560,9 @@ void Game::startLevel(int lvl) {
 bool Game::loadLevelDetails(int lvl) {
   levelDetails = {}; // reset por si acaso
 
-  char fname[64];
-  snprintf(fname, sizeof(fname), "level_%02d_details.dgn", lvl);
-  std::string path = Paths::level(fname);
+  std::string path = resolveLevelDetailsPath(lvl);
+  if (path.empty())
+    return false;
 
   FILE *f = fopen(path.c_str(), "r");
   if (!f)
