@@ -3068,9 +3068,7 @@ void Game::handleItemInput(int p) {
                IsKeyPressed(KEY_E);
 
   if (usePressed) {
-    if (Inventory::useSelected(pl, maze, projectiles)) {
-      if (assets.sfxThrow.frameCount > 0)
-        PlaySound(assets.sfxThrow);
+    if (Inventory::useSelected(pl, maze, projectiles, assets)) {
     }
   }
 }

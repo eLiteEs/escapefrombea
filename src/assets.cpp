@@ -140,6 +140,7 @@ void Assets::loadSounds() {
   sfxThrow = loadSoundSmart("sfx_throw.ogg");
   sfxFootstep = loadSoundSmart("sfx_footstep.ogg");
   sfxHeartbeat = loadSoundSmart("sfx_heartbeat.ogg");
+  sfxDrink = loadSoundSmart("sfx_drink.ogg");
 }
 
 void Assets::load() {

@@ -29,6 +29,7 @@ struct Assets {
   Sound sfxThrow = {};
   Sound sfxPickup = {};
   Sound sfxHeartbeat = {};
+  Sound sfxDrink = {};
 
   void unload();
   void applyVolumes(float master, float music, float sfx);

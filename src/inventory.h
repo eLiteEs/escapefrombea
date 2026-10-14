@@ -1,4 +1,5 @@
 #pragma once
+#include "assets.h"
 #include "common.h"
 #include "maze.h"
 #include <vector>
@@ -27,7 +28,7 @@ bool collectPickup(Player &p, std::vector<WorldPickup> &world, int idx);
 // --- Uso ---
 // Lanza el item seleccionado (si es lanzable).
 bool useSelected(Player &p, const Maze &maze,
-                 std::vector<Projectile> &projectiles);
+                 std::vector<Projectile> &projectiles, Assets assets);
 
 // --- Proyectiles ---
 void updateProjectiles(std::vector<Projectile> &projs, Maze &maze,

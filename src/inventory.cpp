@@ -95,7 +95,7 @@ bool collectPickup(Player &p, std::vector<WorldPickup> &world, int idx) {
 }
 
 bool useSelected(Player &p, const Maze &maze,
-                 std::vector<Projectile> &projectiles) {
+                 std::vector<Projectile> &projectiles, Assets assets) {
   if (p.throwCooldown > 0.0f)
     return false;
   if (p.selectedSlot < 0 || p.selectedSlot >= C::INV_SLOTS)
@@ -107,11 +107,15 @@ bool useSelected(Player &p, const Maze &maze,
 
   if (it.kind == ITEM_MONSTER) {
     p.stamina = 1.0f;
-    removeOne(p, p.selectedSlot);
     p.exhausted = false;
     p.staminaDelay = 0.0f;
 
+    removeOne(p, p.selectedSlot);
     p.throwCooldown = 0.5f;
+
+    if (assets.sfxDrink.frameCount > 0)
+      PlaySound(assets.sfxDrink);
+
     return true;
   } else if (it.kind == ITEM_WALL) {
     Vector3 fwd = {sinf(p.yaw) * cosf(p.pitch), sinf(p.pitch),
@@ -131,6 +135,10 @@ bool useSelected(Player &p, const Maze &maze,
     removeOne(p, p.selectedSlot);
     p.throwCooldown = 1.0f;
     p.attackFlash = 0.10f;
+
+    if (assets.sfxThrow.frameCount > 0)
+      PlaySound(assets.sfxThrow);
+
     return true;
   } else {
     Vector3 fwd = {sinf(p.yaw) * cosf(p.pitch), sinf(p.pitch),
@@ -196,6 +204,10 @@ bool useSelected(Player &p, const Maze &maze,
 
     p.attackFlash = 0.10f;
     (void)maze;
+
+    if (assets.sfxThrow.frameCount > 0)
+      PlaySound(assets.sfxThrow);
+
     return true;
   }
 
