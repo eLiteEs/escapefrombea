@@ -20,6 +20,9 @@
 #include <emscripten.h>
 #endif
 
+static void formatSplitTime(float sec, char *out, size_t sz);
+static void formatDelta(float sec, char *out, size_t sz);
+
 static std::string resolveStoryPath(const char *fname) {
   auto exists = [](const std::string &p) {
     FILE *f = fopen(p.c_str(), "rb");
@@ -554,6 +557,9 @@ void Game::update(float dt) {
         }
         autoSaveProgress();
 
+        if (sr.active)
+          speedrunFinishRun();
+
         int caughtPlayer = players[0].caught ? 0 : 1;
 
         if (!cfg.noJumpscares && players[caughtPlayer].caughtBy >= 0) {
@@ -577,7 +583,24 @@ void Game::update(float dt) {
             cfg.save();
           }
         }
+
+        if (sr.active)
+          speedrunRecordSplit(); // <-- NUEVO
+
+        if (currentSlot >= 0 && cfg.speedrunMode) {
+          SaveSlot s;
+          s.level = level;
+          s.maxLevel =
+              (mode == MODE_STORY) ? cfg.maxLevel : cfg.maxEndlessLevel;
+          s.mode = mode;
+          s.twoPlayers = twoPlayers;
+          s.playtime = totalPlaytime;
+          s.runSeed = runSeed;
+          s.speedrunSplits = sr.splits;
+          saves.saveSlot(currentSlot, s);
+        }
         autoSaveProgress();
+
         state = ST_LEVEL_CLEAR;
       }
     } else if (pausePressed) {
@@ -716,6 +739,8 @@ void Game::update(float dt) {
 
         if (!nextLevelExists) {
           // Fin de la historia
+          if (sr.active)
+            speedrunFinishRun();
           credits.start();
           state = ST_CREDITS;
           return;
@@ -1182,6 +1207,85 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     DrawRectangle(0, 0, vw, vh, (Color){0, 80, 40, 90});
     const char *msg = L("hud.escaped.waiting", "Escapaste - esperando...");
     UI::T(msg, vw / 2 - UI::M(msg, small) / 2, vh / 2, small, RAYWHITE);
+  }
+
+  if (sr.active)
+    drawSpeedrunOverlay(vw, vh);
+}
+
+void Game::drawSpeedrunOverlay(int vw, int vh) {
+  if (sr.pbFlashTimer > 0.0f)
+    sr.pbFlashTimer -= GetFrameTime();
+
+  const int pad = 12;
+  const int boxW = 320;
+  const int boxH = 130;
+  const int bx = vw - boxW - pad;
+  const int by = pad;
+
+  // Fondo
+  DrawRectangle(bx, by, boxW, boxH, (Color){0, 0, 0, 170});
+  DrawRectangleLines(bx, by, boxW, boxH,
+                     sr.pbFlashTimer > 0.0f ? GOLD
+                                            : (Color){90, 100, 130, 200});
+
+  int tx = bx + 12;
+  int ty = by + 8;
+
+  // Nivel actual
+  char hdr[64];
+  snprintf(hdr, sizeof(hdr), "Nivel %d", level);
+  UI::T(hdr, tx, ty, 18, RAYWHITE);
+  ty += 24;
+
+  // Tiempo del nivel actual
+  float cur = totalPlaytime - sr.lastLevelStart;
+  char curT[32];
+  formatSplitTime(cur, curT, sizeof(curT));
+  UI::T(curT, tx, ty, 26, RAYWHITE);
+  ty += 30;
+
+  // Delta contra el mejor split de este nivel
+  int idx = (int)sr.splits.size(); // índice del nivel actual
+  if (idx < (int)sr.bestSplits.size() && sr.bestSplits[idx] > 0.0f) {
+    float delta = cur - sr.bestSplits[idx];
+    char dT[32];
+    formatDelta(delta, dT, sizeof(dT));
+    Color dc = (delta <= 0.0f) ? (Color){100, 240, 100, 255}
+                               : (Color){240, 100, 100, 255};
+    UI::T(dT, tx, ty, 22, dc);
+  } else {
+    UI::T("-:--.---", tx, ty, 22, GRAY);
+  }
+  ty += 26;
+
+  // Predicción de tiempo total
+  float elapsed = 0.0f;
+  for (float s : sr.splits)
+    elapsed += s;
+  elapsed += cur;
+
+  float remainingBest = 0.0f;
+  for (int i = idx + 1; i < (int)sr.bestSplits.size(); ++i)
+    remainingBest += sr.bestSplits[i];
+
+  if (elapsed > 0.0f) {
+    float predicted = elapsed + remainingBest;
+    char pT[32];
+    formatSplitTime(predicted, pT, sizeof(pT));
+    char line[64];
+    snprintf(line, sizeof(line), "Pred: %s", pT);
+    UI::T(line, tx, ty, 16, (Color){200, 200, 120, 255});
+  }
+
+  // Flash "PB!" cuando bates un split
+  if (sr.pbFlashTimer > 0.0f) {
+    float pulse = 0.5f + 0.5f * sinf(sr.pbFlashTimer * 12.0f);
+    unsigned char a = (unsigned char)(pulse * 255);
+    const char *pb = "PB!";
+    int fs = 22;
+    UI::T(pb, bx + boxW - UI::M(pb, fs) - 12, by + 8, fs,
+          (Color){255, 220, 60, a});
   }
 }
 
@@ -1702,7 +1806,15 @@ void Game::drawConfigGameplay() {
     cfg.playCinematics = !cfg.playCinematics;
     save();
   }
-  if (uiOptionEx(8, items, 40, L("common.back", "Volver"), "", &navIndex,
+
+  if (uiOptionEx(8, items, 40, L("gameplay.speedrun", "Modo speedrun"),
+                 yesNo(cfg.speedrunMode), &navIndex, nullptr,
+                 navIndex == 8 ? lr : 0) != UI_NONE) {
+    cfg.speedrunMode = !cfg.speedrunMode;
+    save();
+  }
+
+  if (uiOptionEx(9, items, 40, L("common.back", "Volver"), "", &navIndex,
                  nullptr, 0) != UI_NONE ||
       IsKeyPressed(KEY_ESCAPE))
     state = ST_CONFIG;
@@ -1897,6 +2009,24 @@ void Game::startNewGame(int slot, GameMode m, bool two) {
     s.itemMult = runConfig.itemMult;
   }
 
+  // Determinar runSeed
+  if (m == MODE_ENDLESS) {
+    runSeed = runConfig.seed ? runConfig.seed : 1;
+  } else if (m == MODE_STORY && cfg.speedrunMode) {
+    runSeed = 0xCAFE5EEDu; // seed fija para categoría historia
+  } else {
+    runSeed = (uint32_t)time(nullptr);
+  }
+  s.runSeed = runSeed;
+  s.speedrunSplits.clear();
+
+  // Arrancar speedrun
+  if (cfg.speedrunMode) {
+    speedrunStartRun(runSeed, (int)m);
+  } else {
+    sr.active = false;
+  }
+
   saves.saveSlot(slot, s);
   beginPlay(two, m);
 }
@@ -1916,6 +2046,17 @@ void Game::loadGameFromSlot(int slot) {
     runConfig.seed = s.runSeed;
     runConfig.enemyMult = s.enemyMult;
     runConfig.itemMult = s.itemMult;
+  }
+
+  runSeed = s.runSeed;
+  totalPlaytime = s.playtime;
+
+  if (cfg.speedrunMode) {
+    speedrunStartRun(runSeed, (int)mode);
+    sr.splits = s.speedrunSplits;
+    sr.lastLevelStart = totalPlaytime;
+  } else {
+    sr.active = false;
   }
 
   // Sin cinemática al cargar
@@ -2125,6 +2266,8 @@ void Game::drawPauseMenu() {
                nullptr) ||
       (navMenu == 3 && consumeConfirm())) {
     autoSaveProgress();
+    if (sr.active)
+      speedrunFinishRun();
     toMenu();
   }
   if (uiButton(4, items, 40, L("menu.quit", "Salir del juego"), &navMenu,
@@ -2209,7 +2352,7 @@ void Game::drawMenus() {
       state = ST_CREDITS;
     }
 
-    int items = 4;
+    int items = 5;
     handleGamepadMenuNav(items);
 
     if (uiButton(0, items, 90, L("menu.play", "Jugar"), &navIndex, nullptr) ||
@@ -2225,14 +2368,20 @@ void Game::drawMenus() {
       saves.refresh();
       state = ST_SLOT_SELECT;
     }
-    if (uiButton(2, items, 90, L("menu.config", "Configuración"), &navIndex,
+    if (uiButton(2, items, 90, L("menu.speedrun", "Speedruns"), &navIndex,
+                 nullptr) ||
+        (navIndex == 2 && consumeConfirm())) {
+      state = ST_SPEEDRUN;
+      navMenu = 0;
+    }
+    if (uiButton(3, items, 90, L("menu.config", "Configuración"), &navIndex,
                  nullptr) ||
         (navIndex == 2 && consumeConfirm())) {
       configReturn = ST_MENU;
       state = ST_CONFIG;
       navIndexCfg = 0;
     }
-    if (uiButton(3, items, 90, L("menu.quit", "Salir del juego"), &navIndex,
+    if (uiButton(4, items, 90, L("menu.quit", "Salir del juego"), &navIndex,
                  nullptr) ||
         (navIndex == 3 && consumeConfirm()))
       shouldQuit = true;
@@ -2276,6 +2425,9 @@ void Game::drawMenus() {
     break;
   case ST_PAUSED:
     drawPauseMenu();
+    break;
+  case ST_SPEEDRUN:
+    drawSpeedrunMenu();
     break;
   case ST_LEVEL_CLEAR: {
     char buf[192];
@@ -2325,6 +2477,160 @@ void Game::drawMenus() {
     DrawFPS(GetScreenWidth() - 90, 20);
 
   EndDrawing();
+}
+
+void Game::drawSpeedrunMenu() {
+  int W = GetScreenWidth(), H = GetScreenHeight();
+  drawConfigHeader(L("speedrun.title", "Speedruns"));
+
+  const auto &runs = saves.speedruns();
+
+  if (runs.empty()) {
+    const char *msg =
+        L("speedrun.empty", "Sin runs registrados todavía.\n"
+                            "Activa el modo speedrun en configuración "
+                            "y termina una partida.");
+    int fs = 22;
+    // Texto multilínea simple
+    const char *line1 = L("speedrun.empty1", "Sin runs registrados todavía.");
+    const char *line2 =
+        L("speedrun.empty2", "Activa el modo speedrun en configuración "
+                             "y termina una partida.");
+    UI::T(line1, W / 2 - UI::M(line1, fs) / 2, H / 2 - 20, fs, LIGHTGRAY);
+    UI::T(line2, W / 2 - UI::M(line2, fs) / 2, H / 2 + 20, fs, GRAY);
+    (void)msg;
+  } else {
+    // Filtra por seed+mode únicos, ordenados por fecha descendente
+    std::vector<std::pair<uint32_t, int>> keys;
+    std::vector<std::time_t> lastDate;
+    for (auto &e : runs) {
+      bool found = false;
+      for (auto &k : keys)
+        if (k.first == e.seed && k.second == e.mode) {
+          found = true;
+          break;
+        }
+      if (!found)
+        keys.push_back({e.seed, e.mode});
+    }
+
+    // navMenu selecciona key
+    if (navMenu < 0)
+      navMenu = 0;
+    if (navMenu >= (int)keys.size())
+      navMenu = (int)keys.size() - 1;
+
+    int lr = gamepadLeftRight();
+    if (IsKeyPressed(KEY_LEFT))
+      lr = -1;
+    if (IsKeyPressed(KEY_RIGHT))
+      lr = +1;
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      state = ST_MENU;
+      navMenu = 0;
+    }
+    if (lr < 0)
+      navMenu = (navMenu - 1 + (int)keys.size()) % (int)keys.size();
+    if (lr > 0)
+      navMenu = (navMenu + 1) % (int)keys.size();
+
+    uint32_t selSeed = keys[navMenu].first;
+    int selMode = keys[navMenu].second;
+
+    // Cabecera con seed+modo, navegable
+    char keyBuf[128];
+    snprintf(keyBuf, sizeof(keyBuf), "Seed %u  |  %s", selSeed,
+             selMode == MODE_STORY ? L("speedrun.mode.story", "Historia")
+                                   : L("speedrun.mode.endless", "Infinito"));
+    UI::T(TextFormat("< %s >", keyBuf),
+          W / 2 - UI::M(TextFormat("< %s >", keyBuf), 22) / 2, 110, 22, GOLD);
+
+    // Encuentra la mejor run (menor total) para esta seed+mode
+    const SpeedrunEntry *best = nullptr;
+    const SpeedrunEntry *last = nullptr;
+    std::time_t lastRunDate = 0;
+    for (auto &e : runs) {
+      if (e.seed != selSeed || e.mode != selMode)
+        continue;
+      if (!best || e.total < best->total)
+        best = &e;
+      if (e.date > lastRunDate) {
+        last = &e;
+        lastRunDate = e.date;
+      }
+    }
+
+    // Best splits
+    std::vector<float> bestSplits;
+    saves.bestSplitsFor(selSeed, selMode, bestSplits);
+
+    // Tabla de splits
+    int rowY = 170;
+    int rowH = 26;
+    int colSplitX = W / 2 - 220;
+    int colBestX = W / 2;
+    int colLastX = W / 2 + 180;
+
+    UI::T(L("speedrun.split", "Split"), colSplitX, rowY, 18, GRAY);
+    UI::T(L("speedrun.best", "Mejor"), colBestX, rowY, 18, GRAY);
+    UI::T(L("speedrun.last", "Última"), colLastX, rowY, 18, GRAY);
+    rowY += rowH;
+
+    int numRows = (int)bestSplits.size();
+    if (last && (int)last->splits.size() > numRows)
+      numRows = (int)last->splits.size();
+
+    for (int i = 0; i < numRows && rowY < H - 140; ++i) {
+      char name[32];
+      snprintf(name, sizeof(name), "Nivel %d", i + 1);
+      UI::T(name, colSplitX, rowY, 16, RAYWHITE);
+
+      char tbuf[32];
+      if (i < (int)bestSplits.size() && bestSplits[i] > 0.0f) {
+        formatSplitTime(bestSplits[i], tbuf, sizeof(tbuf));
+        UI::T(tbuf, colBestX, rowY, 16, GOLD);
+      } else {
+        UI::T("--:--.---", colBestX, rowY, 16, GRAY);
+      }
+      if (last && i < (int)last->splits.size()) {
+        formatSplitTime(last->splits[i], tbuf, sizeof(tbuf));
+        Color c = RAYWHITE;
+        if (i < (int)bestSplits.size() && bestSplits[i] > 0.0f) {
+          c = (last->splits[i] <= bestSplits[i] + 0.001f)
+                  ? (Color){100, 240, 100, 255}
+                  : (Color){220, 180, 100, 255};
+        }
+        UI::T(tbuf, colLastX, rowY, 16, c);
+      }
+
+      rowY += rowH;
+    }
+
+    // Totales
+    rowY += 10;
+    if (best) {
+      char tb[32];
+      formatSplitTime(best->total, tb, sizeof(tb));
+      char line[64];
+      snprintf(line, sizeof(line), "%s: %s",
+               L("speedrun.besttotal", "Mejor total"), tb);
+      UI::T(line, colSplitX, rowY, 18, GOLD);
+      rowY += 24;
+    }
+    if (last) {
+      char tb[32];
+      formatSplitTime(last->total, tb, sizeof(tb));
+      char line[104];
+      snprintf(line, sizeof(line), "%s: %s   (%s)",
+               L("speedrun.lasttotal", "Último total"), tb,
+               formatDate(last->date));
+      UI::T(line, colSplitX, rowY, 18, RAYWHITE);
+    }
+  }
+
+  const char *hint =
+      L("speedrun.hint", "Izq/Der cambia de categoría. ESC para volver.");
+  UI::T(hint, W / 2 - UI::M(hint, 18) / 2, H - 40, 18, GRAY);
 }
 
 void Game::draw() {
@@ -3525,8 +3831,9 @@ void Game::startLevel(int lvl) {
 
     uint32_t baseSeed;
     if (mode == MODE_ENDLESS && runConfig.seed != 0) {
-      // Misma seed = mismos niveles, siempre en el mismo orden
       baseSeed = runConfig.seed ^ (uint32_t)(lvl * 7919);
+    } else if (cfg.speedrunMode && runSeed != 0) {
+      baseSeed = runSeed ^ (uint32_t)(lvl * 7919);
     } else {
       baseSeed = (uint32_t)time(nullptr) ^ (uint32_t)(lvl * 7919);
     }
@@ -3648,6 +3955,9 @@ void Game::startLevel(int lvl) {
   // ============================================================
   fountainCooldown[0] = 0.0f;
   fountainCooldown[1] = 0.0f;
+
+  if (sr.active)
+    sr.lastLevelStart = totalPlaytime;
 
   maze.markExplored(players[0].pos.x, players[0].pos.z, C::FOG_RADIUS);
   if (twoPlayers)
@@ -3808,4 +4118,88 @@ void Game::drawLevelIntro() {
     int hw = UI::M(hint, hs);
     UI::T(hint, W / 2 - hw / 2, H - 60, hs, (Color){200, 200, 200, ha});
   }
+}
+
+static void formatSplitTime(float sec, char *out, size_t sz) {
+  if (sec < 0)
+    sec = 0;
+  int ms = (int)(sec * 1000.0f + 0.5f);
+  int totalS = ms / 1000;
+  ms %= 1000;
+  int m = totalS / 60, s = totalS % 60;
+  if (m > 0)
+    snprintf(out, sz, "%d:%02d.%03d", m, s, ms);
+  else
+    snprintf(out, sz, "%02d.%03d", s, ms);
+}
+static void formatDelta(float sec, char *out, size_t sz) {
+  const char *sign = (sec >= 0) ? "+" : "-";
+  float a = fabsf(sec);
+  int ms = (int)(a * 1000.0f + 0.5f);
+  int totalS = ms / 1000;
+  ms %= 1000;
+  int m = totalS / 60, s = totalS % 60;
+  if (m > 0)
+    snprintf(out, sz, "%s%d:%02d.%03d", sign, m, s, ms);
+  else
+    snprintf(out, sz, "%s%02d.%03d", sign, s, ms);
+}
+
+void Game::speedrunStartRun(uint32_t seed, int mode) {
+  sr.active = true;
+  sr.seed = seed;
+  sr.mode = mode;
+  sr.splits.clear();
+  sr.bestSplits.clear();
+  sr.lastLevelStart = totalPlaytime;
+  sr.lastSplitDelta = 0.0f;
+  sr.justRecordedPB = false;
+  sr.pbFlashTimer = 0.0f;
+  saves.bestSplitsFor(seed, mode, sr.bestSplits);
+}
+
+void Game::speedrunRecordSplit() {
+  if (!sr.active)
+    return;
+
+  float split = totalPlaytime - sr.lastLevelStart;
+  sr.lastLevelStart = totalPlaytime;
+  sr.splits.push_back(split);
+
+  int idx = (int)sr.splits.size() - 1;
+  if (idx < (int)sr.bestSplits.size() && sr.bestSplits[idx] > 0.0f) {
+    sr.lastSplitDelta = split - sr.bestSplits[idx];
+    if (split < sr.bestSplits[idx]) {
+      sr.bestSplits[idx] = split;
+      sr.justRecordedPB = true;
+      sr.pbFlashTimer = 2.0f;
+    }
+  } else {
+    // Primer split conocido → es PB por definición
+    if (idx >= (int)sr.bestSplits.size())
+      sr.bestSplits.resize(idx + 1, 0.0f);
+    sr.bestSplits[idx] = split;
+    sr.lastSplitDelta = 0.0f;
+    sr.justRecordedPB = true;
+    sr.pbFlashTimer = 2.0f;
+  }
+}
+
+void Game::speedrunFinishRun() {
+  if (!sr.active || sr.splits.empty()) {
+    sr.active = false;
+    return;
+  }
+
+  SpeedrunEntry e;
+  e.seed = sr.seed;
+  e.mode = sr.mode;
+  e.date = std::time(nullptr);
+  e.total = 0.0f;
+  for (float s : sr.splits)
+    e.total += s;
+  e.splits = sr.splits;
+  saves.addSpeedrun(e);
+
+  sr.active = false;
 }

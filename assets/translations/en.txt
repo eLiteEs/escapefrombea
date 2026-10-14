@@ -155,3 +155,17 @@ load.done=Ready
 item.key=key
 toast.key.acquired=Key acquired!
 toast.exit.locked=You need the key
+
+menu.speedrun=Speedruns
+config.gameplay.speedrun=Speedrun mode
+speedrun.title=Speedruns
+speedrun.empty1=No runs registered yet.
+speedrun.empty2=Enable speedrun mode in settings and finish a playthrough.
+speedrun.split=Split
+speedrun.best=Best
+speedrun.last=Last
+speedrun.besttotal=Best total
+speedrun.lasttotal=Last total
+speedrun.mode.story=Story
+speedrun.mode.endless=Endless
+speedrun.hint=Left/Right changes category. ESC to go back.

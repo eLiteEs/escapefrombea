@@ -22,6 +22,18 @@ struct LevelDetails {
   int difficulty = 1; // 1..5
 };
 
+struct SpeedrunState {
+  bool active = false;
+  uint32_t seed = 0;
+  int mode = 0;
+  std::vector<float> splits;
+  std::vector<float> bestSplits;
+  float lastLevelStart = 0.0f;
+  float lastSplitDelta = 0.0f;
+  bool justRecordedPB = false;
+  float pbFlashTimer = 0.0f;
+};
+
 struct Game {
   Config cfg;
   Maze maze;
@@ -191,4 +203,14 @@ struct Game {
   // Detalles del nivel (para la pantalla previa)
   LevelDetails levelDetails;
   float introTimer = 0.0f;
+
+  SpeedrunState sr;
+  uint32_t runSeed = 0;
+
+  // Speedrun
+  void speedrunStartRun(uint32_t seed, int mode);
+  void speedrunRecordSplit();
+  void speedrunFinishRun();
+  void drawSpeedrunOverlay(int vw, int vh);
+  void drawSpeedrunMenu();
 };

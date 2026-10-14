@@ -116,7 +116,8 @@ enum AppState {
   ST_PAUSED,
   ST_PLAYING,
   ST_LEVEL_CLEAR,
-  ST_GAME_OVER
+  ST_GAME_OVER,
+  ST_SPEEDRUN
 };
 
 enum SlotPurpose { SLOT_NEW = 0, SLOT_LOAD = 1 };

@@ -77,7 +77,22 @@ static void parseSlotKey(SaveSlot &slot, const char *key, const char *val) {
     slot.enemyMult = atoi(val);
   else if (!strcmp(key, "itemMult"))
     slot.itemMult = atoi(val);
-  else {
+  else if (!strcmp(key, "speedrunSplits")) {
+    slot.speedrunSplits.clear();
+    if (val[0] == 0)
+      return;
+    const char *p = val;
+    while (*p) {
+      char *end;
+      float v = strtof(p, &end);
+      if (end == p)
+        break;
+      slot.speedrunSplits.push_back(v);
+      p = end;
+      if (*p == ',')
+        ++p;
+    }
+  } else {
     int p = 0, s = 0, consumed = 0;
     int klen = (int)strlen(key);
 
@@ -116,9 +131,17 @@ bool SaveManager::saveSlot(int i, const SaveSlot &data) {
                "2f\ntimestamp=%lld\n",
                data.level, data.maxLevel, data.mode, data.twoPlayers ? 1 : 0,
                (double)data.playtime, (long long)std::time(nullptr));
+
+  char splitsBuf[512] = {0};
+  for (size_t i = 0; i < data.speedrunSplits.size(); ++i) {
+    char tmp[32];
+    snprintf(tmp, sizeof(tmp), "%s%.3f", i ? "," : "",
+             (double)data.speedrunSplits[i]);
+    strncat(splitsBuf, tmp, sizeof(splitsBuf) - strlen(splitsBuf) - 1);
+  }
   n += snprintf(buf + n, sizeof(buf) - n,
-                "runSeed=%u\nenemyMult=%d\nitemMult=%d\n", data.runSeed,
-                data.enemyMult, data.itemMult);
+                "runSeed=%u\nenemyMult=%d\nitemMult=%d\nspeedrunSplits=%s\n",
+                data.runSeed, data.enemyMult, data.itemMult, splitsBuf);
 
   for (int p = 0; p < 2; ++p) {
     n += snprintf(buf + n, sizeof(buf) - n, "p%d_sel=%d\n", p + 1,
@@ -149,6 +172,11 @@ bool SaveManager::saveSlot(int i, const SaveSlot &data) {
   fprintf(f, "runSeed=%u\n", data.runSeed);
   fprintf(f, "enemyMult=%d\n", data.enemyMult);
   fprintf(f, "itemMult=%d\n", data.itemMult);
+
+  fprintf(f, "speedrunSplits=");
+  for (size_t i = 0; i < data.speedrunSplits.size(); ++i)
+    fprintf(f, "%s%.3f", i ? "," : "", (double)data.speedrunSplits[i]);
+  fprintf(f, "\n");
 
   for (int p = 0; p < 2; ++p) {
     fprintf(f, "p%d_sel=%d\n", p + 1, data.selectedSlot[p]);
@@ -223,6 +251,8 @@ void SaveManager::refresh() {
     slots_[i].used = true;
 #endif
   }
+
+  loadSpeedruns();
 }
 
 bool SaveManager::loadSlot(int i, SaveSlot &out) const {
@@ -246,4 +276,146 @@ bool SaveManager::anyUsed() const {
     if (slots_[i].used)
       return true;
   return false;
+}
+
+static std::string speedrunsPath() {
+#if defined(__EMSCRIPTEN__)
+  return "/saves/speedruns.cfg";
+#else
+  MKDIR_SAVES();
+  return "saves/speedruns.cfg";
+#endif
+}
+
+void SaveManager::loadSpeedruns() {
+  speedruns_.clear();
+
+#if defined(__EMSCRIPTEN__)
+  std::string content = ls_load("efb_speedruns");
+  if (content.empty())
+    return;
+  const char *p = content.c_str();
+  char line[1024];
+  while (sscanf(p, "%1023[^\n]\n", line) == 1) {
+    const char *nl = strchr(p, '\n');
+    if (!nl)
+      break;
+    p = nl + 1;
+
+    if (line[0] == '#' || line[0] == 0)
+      continue;
+    // Formato: seed,mode,date,total,s1,s2,s3,...
+    SpeedrunEntry e;
+    char *tok = strtok(line, ",");
+    if (!tok)
+      continue;
+    e.seed = (uint32_t)strtoul(tok, nullptr, 10);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.mode = atoi(tok);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.date = (std::time_t)atoll(tok);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.total = strtof(tok, nullptr);
+    while ((tok = strtok(nullptr, ",")) != nullptr)
+      e.splits.push_back(strtof(tok, nullptr));
+    speedruns_.push_back(std::move(e));
+  }
+#else
+  FILE *f = fopen(speedrunsPath().c_str(), "r");
+  if (!f)
+    return;
+  char line[1024];
+  while (fgets(line, sizeof(line), f)) {
+    for (char *q = line; *q; ++q)
+      if (*q == '\r' || *q == '\n') {
+        *q = 0;
+        break;
+      }
+    if (line[0] == '#' || line[0] == 0)
+      continue;
+
+    SpeedrunEntry e;
+    char *tok = strtok(line, ",");
+    if (!tok)
+      continue;
+    e.seed = (uint32_t)strtoul(tok, nullptr, 10);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.mode = atoi(tok);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.date = (std::time_t)atoll(tok);
+    tok = strtok(nullptr, ",");
+    if (!tok)
+      continue;
+    e.total = strtof(tok, nullptr);
+    while ((tok = strtok(nullptr, ",")) != nullptr)
+      e.splits.push_back(strtof(tok, nullptr));
+    speedruns_.push_back(std::move(e));
+  }
+  fclose(f);
+#endif
+}
+
+void SaveManager::saveSpeedruns() {
+#if defined(__EMSCRIPTEN__)
+  std::string content = "# speedruns.cfg\n";
+  for (auto &e : speedruns_) {
+    char buf[512];
+    int n = snprintf(buf, sizeof(buf), "%u,%d,%lld,%.3f", e.seed, e.mode,
+                     (long long)e.date, (double)e.total);
+    content += buf;
+    for (float s : e.splits) {
+      snprintf(buf, sizeof(buf), ",%.3f", (double)s);
+      content += buf;
+    }
+    content += "\n";
+  }
+  ls_save("efb_speedruns", content);
+#else
+  FILE *f = fopen(speedrunsPath().c_str(), "w");
+  if (!f)
+    return;
+  fprintf(f, "# speedruns.cfg\n");
+  for (auto &e : speedruns_) {
+    fprintf(f, "%u,%d,%lld,%.3f", e.seed, e.mode, (long long)e.date,
+            (double)e.total);
+    for (float s : e.splits)
+      fprintf(f, ",%.3f", (double)s);
+    fprintf(f, "\n");
+  }
+  fclose(f);
+#endif
+}
+
+void SaveManager::addSpeedrun(const SpeedrunEntry &e) {
+  speedruns_.push_back(e);
+  saveSpeedruns();
+}
+
+void SaveManager::bestSplitsFor(uint32_t seed, int mode,
+                                std::vector<float> &outBest) const {
+  outBest.clear();
+  const float INF = 1e9f;
+  for (auto &e : speedruns_) {
+    if (e.seed != seed || e.mode != mode)
+      continue;
+    for (size_t i = 0; i < e.splits.size(); ++i) {
+      if (i >= outBest.size())
+        outBest.resize(i + 1, INF);
+      if (e.splits[i] > 0.0f)
+        outBest[i] = std::min(outBest[i], e.splits[i]);
+    }
+  }
+  for (auto &v : outBest)
+    if (v >= INF)
+      v = 0.0f;
 }
