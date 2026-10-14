@@ -111,7 +111,7 @@ bool useSelected(Player &p, const Maze &maze,
     p.staminaDelay = 0.0f;
 
     removeOne(p, p.selectedSlot);
-    p.throwCooldown = 0.5f;
+    p.throwCooldown = 4.0f;
 
     if (assets.sfxDrink.frameCount > 0)
       PlaySound(assets.sfxDrink);
