@@ -18,6 +18,8 @@
 #endif
 
 #if defined(__EMSCRIPTEN__)
+static Game *g_game = nullptr;
+
 static void web_frame() {
   if (g_game)
     g_game->tick();
@@ -38,6 +40,11 @@ int main() {
 #endif
 
   Game game;
+
+#if defined(__EMSCRIPTEN__)
+  g_game = &game;
+#endif
+
   game.init();
 
 #if defined(__EMSCRIPTEN__)
