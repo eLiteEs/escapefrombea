@@ -18,7 +18,7 @@
 
 APP_NAME     := escape_from_bea
 GAME_TITLE   := Escape From Marisa 3 - Escape From Bea
-VERSION      ?= 1.5.1b
+VERSION      ?= 1.5.2b
 SRC_DIR      := src
 BUILD_DIR    := build
 DIST_DIR     := dist
@@ -240,25 +240,20 @@ package-linux:
 		cp -r $(ASSET_DIRS) $(DIST_LINUX_DIR)/; \
 		echo "   assets copiados"; \
 	fi
-	@echo "$(GAME_TITLE)"	        >  $(DIST_LINUX_DIR)/README.txt
-	@echo "Version: $(VERSION)"	  >> $(DIST_LINUX_DIR)/README.txt
-	@echo ""	                     >> $(DIST_LINUX_DIR)/README.txt
-	@echo "Ejecutar:"	            >> $(DIST_LINUX_DIR)/README.txt
-	@echo "  chmod +x $(APP_NAME)"       >> $(DIST_LINUX_DIR)/README.txt
-	@echo "  ./$(APP_NAME)"	      >> $(DIST_LINUX_DIR)/README.txt
 	@[ -f README.md ] && cp README.md $(DIST_LINUX_DIR)/ || true
+	@[ -f CHANGELOG.md ] && cp CHANGELOG.md $(DIST_LINUX_DIR)/ || true
+	@[ -f ATRIBUTIONS ] && cp ATRIBUTIONS $(DIST_LINUX_DIR)/ || true
+	@[ -f LICENSE ] && cp LICENSE $(DIST_LINUX_DIR)/ || true
 
 package-windows:
 	@if [ -d "$(ASSET_DIRS)" ]; then \
 		cp -r $(ASSET_DIRS) $(DIST_WIN_DIR)/; \
 		echo "   assets copiados"; \
 	fi
-	@echo "$(GAME_TITLE)"	        >  $(DIST_WIN_DIR)/README.txt
-	@echo "Version: $(VERSION)"	  >> $(DIST_WIN_DIR)/README.txt
-	@echo ""	                     >> $(DIST_WIN_DIR)/README.txt
-	@echo "Ejecutar:"	            >> $(DIST_WIN_DIR)/README.txt
-	@echo "  Doble clic en $(APP_NAME).exe" >> $(DIST_WIN_DIR)/README.txt
 	@[ -f README.md ] && cp README.md $(DIST_WIN_DIR)/ || true
+	@[ -f CHANGELOG.md ] && cp CHANGELOG.md $(DIST_WIN_DIR)/ || true
+	@[ -f ATRIBUTIONS ] && cp ATRIBUTIONS $(DIST_WIN_DIR)/ || true
+	@[ -f LICENSE ] && cp LICENSE $(DIST_WIN_DIR)/ || true
 	@# Copia DLLs de runtime de mingw (por si acaso). Con -static no deberia
 	@# hacer falta ninguna excepto libwinpthread, pero las incluimos por seguridad.
 	@for dll in libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll; do \
