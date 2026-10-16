@@ -3,7 +3,7 @@
 
 - Programación y diseño
 * Blas Fernández 
-* Adam Aknaf
+* rana
 
 - Motor gráfico
 * raylib (Ramon Santamaria y colaboradores)
@@ -15,7 +15,7 @@
 * .name (freesound) 
 
 - Sprites
-* Adam Aknaf
+* rana
 * docformats
 * pexels
 * indiamart
@@ -37,7 +37,7 @@
 * Desarolladores de raylib por facilitarme el desarollo de este juego
 * El equipo de Deepseek por hacer una buena IA que no rompe cosas
 * Pinta, mtPaint, Audacity, Arch Linux, vim, git, qutebrowser, cmake, make, GNU C++, Emscripten por ser un buen software libre
-* Adam Aknaf por todos los momentos que han podido hacer la historia de este juego
+* rana por todos los momentos que han podido hacer la historia de este juego
 
 
 
