@@ -18,7 +18,7 @@
 
 APP_NAME     := escape_from_bea
 GAME_TITLE   := Escape From Marisa 3 - Escape From Bea
-VERSION      ?= 1.5.2b
+VERSION      ?= 1.5.4b
 SRC_DIR      := src
 BUILD_DIR    := build
 DIST_DIR     := dist
