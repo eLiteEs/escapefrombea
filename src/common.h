@@ -95,6 +95,18 @@ constexpr float DROP_DIST = 0.9f;
 
 constexpr float ENDLESS_MULT[] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
 constexpr int ENDLESS_MULT_COUNT = 6;
+
+constexpr int RC_RESOLUTIONS[][2] = {
+    {160, 100}, // 0: muy retro, coste mínimo
+    {240, 150}, // 1: retro
+    {320, 200}, // 2: default (Wolfenstein 3D)
+    {400, 250}, // 3: nítido
+    {480, 300}, // 4: alto
+    {640, 400}, // 5: máxima calidad
+};
+constexpr int RC_RES_COUNT = 6;
+constexpr int RC_RES_DEFAULT = 2;
+
 } // namespace C
 
 enum AppState {

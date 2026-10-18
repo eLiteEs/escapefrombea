@@ -9,9 +9,9 @@
 #include "debug.h"
 #include "inventory.h"
 #include "maze.h"
+#include "raycaster.h"
 #include "raylib.h"
 #include "save.h"
-#include "world_mesh.h"
 
 #include <cstdint>
 #include <string>
@@ -42,6 +42,7 @@ struct Game {
   AttractMode attract;
   Assets assets;
   SaveManager saves;
+  Raycaster rc;
 
   Player players[2];
   std::vector<Enemy> enemies;
@@ -203,7 +204,6 @@ struct Game {
   float jumpscareTimer = 0.0f;
   int jumpscareEnemy = -1;
 
-  WorldMeshes world;
   CreditsScreen credits;
 
   void spawnWorldItems(int lvl, int size, std::mt19937 &rng);
@@ -214,5 +214,6 @@ struct Game {
   int findInteractable(const Player &pl, int &outCx, int &outCy,
                        bool &isLocker) const;
   void drawInventory(const Player &pl, int vw, int vh);
-  void drawHandItem3D(const Player &pl, const Camera3D &cam);
+  void drawHandItem2D(const Player &pl, int vw, int vh);
+  void renderPlayerView(const Player &pl);
 };

@@ -101,15 +101,7 @@ void Assets::loadEnemyTextures() {
   hasCrosshair = crosshair.id != 0;
 }
 
-void Assets::loadWallTextures() {
-  wallTile = loadTileable(Paths::sprite("wall_tile.png").c_str(), hasWallTile);
-  wallLocker =
-      loadTileable(Paths::sprite("wall_locker.png").c_str(), hasWallLocker);
-  wallBrick =
-      loadTileable(Paths::sprite("wall_brick.png").c_str(), hasWallBrick);
-  floorTile =
-      loadTileable(Paths::sprite("floor_tile.png").c_str(), hasFloorTile);
-}
+void Assets::loadWallTextures() {}
 
 void Assets::loadItemTextures() {
   struct {
@@ -156,20 +148,9 @@ void Assets::unload() {
   for (int i = 0; i < ENEMY_KIND_COUNT; ++i)
     if (enemyTex[i].id != 0)
       UnloadTexture(enemyTex[i]);
-  if (hasPortalTex && portalTex.id != 0)
-    UnloadTexture(portalTex);
 
   if (hasCrosshair && crosshair.id != 0)
     UnloadTexture(crosshair);
-
-  if (hasWallTile && wallTile.id != 0)
-    UnloadTexture(wallTile);
-  if (hasWallLocker && wallLocker.id != 0)
-    UnloadTexture(wallLocker);
-  if (hasWallBrick && wallBrick.id != 0)
-    UnloadTexture(wallBrick);
-  if (hasFloorTile && floorTile.id != 0)
-    UnloadTexture(floorTile);
 
   for (int i = 0; i < ITEM_KIND_COUNT; ++i)
     if (hasItemTex[i] && itemTex[i].id != 0)

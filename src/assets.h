@@ -6,16 +6,7 @@ struct Assets {
   Texture2D portalTex = {};
   bool hasPortalTex = false;
 
-  // NUEVO
-  Texture2D wallTile = {};
-  Texture2D wallLocker = {};
-  Texture2D wallBrick = {};
-  Texture2D floorTile = {};
   Texture2D crosshair = {};
-  bool hasWallTile = false;
-  bool hasWallLocker = false;
-  bool hasWallBrick = false;
-  bool hasFloorTile = false;
   bool hasCrosshair = false;
 
   Texture2D itemTex[ITEM_KIND_COUNT] = {};

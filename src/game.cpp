@@ -1,5 +1,6 @@
 #include "game.h"
 
+#include "common.h"
 #include "debug.h"
 #include "enemy.h"
 #include "lang.h"
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <iostream>
 #include <random>
 
 #if defined(__EMSCRIPTEN__)
@@ -180,19 +182,13 @@ void Game::init() {
 
   SetConfigFlags(cfg.vsync ? FLAG_VSYNC_HINT : 0);
 
-  int monW = GetMonitorWidth(0);
-  int monH = GetMonitorHeight(0);
-
-  int winW, winH;
-  if (cfg.fullscreen) {
-    winW = monW;
-    winH = monH;
-  } else {
-    winW = std::min(cfg.windowW, monW);
-    winH = std::min(cfg.windowH, monH);
-  }
+  int winW = std::max(640, cfg.windowW);
+  int winH = std::max(480, cfg.windowH);
 
   InitWindow(winW, winH, C::GAME_TITLE);
+
+  int monW = GetMonitorWidth(0);
+  int monH = GetMonitorHeight(0);
 
   if (cfg.fullscreen) {
     SetWindowState(FLAG_FULLSCREEN_MODE);
@@ -289,7 +285,7 @@ void Game::init() {
       assets.loadEnemyTextures();
       break;
     case 1:
-      assets.loadWallTextures();
+      // assets.loadWallTextures();
       break;
     case 2:
       assets.loadItemTextures();
@@ -303,7 +299,7 @@ void Game::init() {
     case 5:
       saves.refresh();
       credits.load("assets/credits.txt");
-      attract.init(15, (uint32_t)time(nullptr) + 12345u, assets);
+      attract.init();
       break;
     }
   };
@@ -322,14 +318,21 @@ void Game::init() {
 
   if (splash.id != 0)
     UnloadTexture(splash);
-  ensureRenderTargets();
-  WaitTime(1);
+
+  // Inicializar raycaster con la resolución configurada
+  int rcIdx = std::clamp(cfg.raycastRes, 0, C::RC_RES_COUNT - 1);
+  rc.init(C::RC_RESOLUTIONS[rcIdx][0], C::RC_RESOLUTIONS[rcIdx][1]);
+  rc.loadStaticTextures();
+
+  // Aplicar FPS, VSync, resolución de ventana, RTs, etc.
+  applyVideoSettings();
+
   state = ST_MENU;
 }
 
 void Game::shutdown() {
   cfg.save();
-  world.unload();
+  rc.unload();
   if (rtLeft.texture.id != 0)
     UnloadRenderTexture(rtLeft);
   if (rtRight.texture.id != 0)
@@ -341,15 +344,33 @@ void Game::shutdown() {
 }
 
 void Game::ensureRenderTargets() {
+  // En single-player no necesitamos render targets.
+  // Si los teníamos de una partida anterior en 2 jugadores, los liberamos.
+  if (!twoPlayers) {
+    if (rtLeft.texture.id != 0) {
+      UnloadRenderTexture(rtLeft);
+      rtLeft = {};
+    }
+    if (rtRight.texture.id != 0) {
+      UnloadRenderTexture(rtRight);
+      rtRight = {};
+    }
+    rtW = rtH = 0;
+    return;
+  }
+
+  // Multi-player: crear/ajustar según el tamaño actual de la ventana
   int W = GetScreenWidth(), H = GetScreenHeight();
   if (W <= 1 || H <= 1)
     return;
   if (W == rtW && H == rtH && rtLeft.texture.id != 0)
     return;
+
   if (rtLeft.texture.id != 0)
     UnloadRenderTexture(rtLeft);
   if (rtRight.texture.id != 0)
     UnloadRenderTexture(rtRight);
+
   rtW = W;
   rtH = H;
   int halfW = std::max(1, rtW / 2);
@@ -946,256 +967,24 @@ void Game::drawMinimap(const Player &pl, int vw) {
 }
 
 void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
-  Camera3D cam = {};
-  cam.position = {pl.pos.x, C::EYE_H, pl.pos.z};
-  Vector3 fwd = {sinf(pl.yaw) * cosf(pl.pitch), sinf(pl.pitch),
-                 -cosf(pl.yaw) * cosf(pl.pitch)};
-  cam.target = Vector3Add(cam.position, fwd);
-  cam.up = {0, 1, 0};
-  cam.fovy = (float)cfg.fov;
-  cam.projection = CAMERA_PERSPECTIVE;
+  // 1) Blit del framebuffer del raycaster (ya renderizado previamente)
+  Rectangle src = {0, 0, (float)rc.texture.width, (float)rc.texture.height};
+  Rectangle dst = {0, 0, (float)vw, (float)vh};
+  DrawTexturePro(rc.texture, src, dst, {0, 0}, 0.0f, WHITE);
 
-  float mw = maze.w * C::CELL, mh = maze.h * C::CELL;
-
-  BeginMode3D(cam);
-  if (world.floorModel.meshCount > 0) {
-    DrawModel(world.floorModel, {mw * 0.5f, 0.0f, mh * 0.5f}, 1.0f, WHITE);
-  } else {
-    DrawPlane({mw / 2, 0, mh / 2}, {mw, mh}, (Color){32, 32, 42, 255});
-  }
-
-  for (int y = 0; y < maze.h; ++y)
-    for (int x = 0; x < maze.w; ++x) {
-      if (maze.g[y][x] != 1)
-        continue;
-      float wx = x * C::CELL + C::CELL * 0.5f;
-      float wz = y * C::CELL + C::CELL * 0.5f;
-      float dx = wx - pl.pos.x, dz = wz - pl.pos.z;
-      float rd = renderDist();
-      if (dx * dx + dz * dz > rd * rd)
-        continue;
-      float dist = sqrtf(dx * dx + dz * dz);
-      float distTint = 1.0f - (dist / rd) * 0.30f;
-      if (distTint < 0.35f)
-        distTint = 0.35f;
-      float parity = ((x + y) & 1) ? 0.93f : 1.0f;
-      float tint = distTint * parity;
-      Color wallTint = {(unsigned char)(255 * tint),
-                        (unsigned char)(255 * tint),
-                        (unsigned char)(255 * tint), 255};
-
-      int variant = 0;
-      if (y < (int)maze.wallVariant.size() &&
-          x < (int)maze.wallVariant[y].size())
-        variant = maze.wallVariant[y][x];
-
-      const Model *model = &world.wallModelTile;
-      if (variant == 1 && world.wallModelLocker.meshCount > 0)
-        model = &world.wallModelLocker;
-      else if (variant == 2 && world.wallModelBrick.meshCount > 0)
-        model = &world.wallModelBrick;
-
-      if (model->meshCount > 0) {
-        DrawModelEx(*model, {wx, C::WALL_H * 0.5f, wz}, {0, 1, 0}, 0.0f,
-                    {1.0f, 1.0f, 1.0f}, wallTint);
-      } else {
-        DrawCube({wx, C::WALL_H * 0.5f, wz}, C::CELL, C::WALL_H, C::CELL,
-                 wallTint);
-      }
-    }
-
-  DrawCube({mw / 2, C::WALL_H + 0.05f, mh / 2}, mw, 0.1f, mh,
-           (Color){18, 18, 26, 255});
-
-  // Portal
-  bool levelHasKey = false;
-  for (auto &w : worldItems)
-    if (w.kind == ITEM_KEY) {
-      levelHasKey = true;
-      break;
-    }
-  bool locked = levelHasKey && !(players[0].hasKey || players[1].hasKey);
-
-  float pulse = 1.0f + 0.15f * sinf((float)GetTime() * 4.0f);
-  Color exitBody =
-      locked ? (Color){180, 40, 40, 255} : (Color){70, 220, 130, 255};
-  Color exitWire = locked ? (Color){255, 80, 80, 255} : LIME;
-  DrawCube({exitPos.x, 1.2f, exitPos.z}, 1.6f * pulse, 2.4f, 1.6f * pulse,
-           exitBody);
-  DrawCubeWires({exitPos.x, 1.2f, exitPos.z}, 1.8f * pulse, 2.6f, 1.8f * pulse,
-                exitWire);
-  if (assets.hasPortalTex && !locked)
-    DrawBillboard(cam, assets.portalTex, {exitPos.x, 3.0f, exitPos.z},
-                  1.6f * pulse, WHITE);
-  if (locked) {
-    DrawCube({exitPos.x, 3.2f, exitPos.z}, 0.5f, 0.5f, 0.5f,
-             (Color){255, 200, 60, 255});
-    DrawCubeWires({exitPos.x, 3.2f, exitPos.z}, 0.6f, 0.6f, 0.6f,
-                  (Color){120, 80, 20, 255});
-  }
-
-  // Items
-  for (auto &w : worldItems) {
-    float dx = w.pos.x - pl.pos.x, dz = w.pos.z - pl.pos.z;
-    if (dx * dx + dz * dz > 35.0f * 35.0f)
-      continue;
-
-    float bob = sinf(w.bobT) * C::ROCK_PICKUP_BOB;
-    Vector3 dp = {w.pos.x, w.pos.y + bob, w.pos.z};
-    float size = 0.55f;
-    switch (w.kind) {
-    case ITEM_ROCK:
-      size = 0.35f;
-      break;
-    case ITEM_BOX:
-      size = 0.70f;
-      break;
-    case ITEM_LIME:
-      size = 0.85f;
-      break;
-    case ITEM_BICIMAD:
-      size = 1.00f;
-      break;
-    case ITEM_KEY:
-      size = 0.55f;
-      break;
-    default:
-      size = 0.70f;
-      break;
-    }
-    if (assets.hasItemTex[w.kind]) {
-      DrawBillboard(cam, assets.itemTex[w.kind],
-                    {dp.x, dp.y + size * 0.5f, dp.z}, size, WHITE);
-    } else {
-      Color c = Inventory::itemColor(w.kind);
-      DrawCube(dp, size * 0.6f, size * 0.6f, size * 0.6f, c);
-      DrawCubeWires(dp, size * 0.6f, size * 0.6f, size * 0.6f,
-                    (Color){40, 40, 50, 255});
-    }
-    if (dx * dx + dz * dz < C::PICKUP_RANGE * C::PICKUP_RANGE * 1.5f) {
-      float p2 = 0.35f + 0.10f * sinf((float)GetTime() * 5.0f);
-      DrawCubeWires(dp, size * 0.7f + p2, size * 0.7f + p2, size * 0.7f + p2,
-                    (Color){255, 240, 120, 200});
-    }
-    if (w.kind == ITEM_KEY) {
-      float gold = 0.7f + 0.3f * sinf((float)GetTime() * 5.0f);
-      DrawCubeWires(dp, size * 1.1f + gold * 0.2f, size * 1.1f + gold * 0.2f,
-                    size * 1.1f + gold * 0.2f, (Color){255, 215, 0, 200});
-      DrawCube({w.pos.x, w.pos.y + 1.0f, w.pos.z}, 0.05f, 2.0f, 0.05f,
-               (Color){255, 240, 120, 120});
-    }
-  }
-
-  // Fuentes
-  for (int y = 0; y < maze.h; ++y)
-    for (int x = 0; x < maze.w; ++x) {
-      if (!maze.hasFountain(x, y))
-        continue;
-      Vector3 fp = {x * C::CELL + C::CELL * 0.5f, 0.0f,
-                    y * C::CELL + C::CELL * 0.5f};
-      float dx = fp.x - pl.pos.x, dz = fp.z - pl.pos.z;
-      if (dx * dx + dz * dz > 40.0f * 40.0f)
-        continue;
-      DrawCylinder({fp.x, 0.0f, fp.z}, 0.55f, 0.65f, 0.9f, 12,
-                   (Color){90, 95, 115, 255});
-      DrawCylinderWires({fp.x, 0.0f, fp.z}, 0.55f, 0.65f, 0.9f, 12,
-                        (Color){40, 45, 60, 255});
-      float ripple = 0.03f * sinf((float)GetTime() * 3.0f + x + y);
-      DrawCylinder({fp.x, 0.9f + ripple, fp.z}, 0.55f, 0.55f, 0.05f, 16,
-                   (Color){60, 180, 220, 220});
-      DrawCube({fp.x, 1.05f, fp.z}, 0.06f, 0.3f, 0.06f,
-               (Color){120, 210, 240, 200});
-    }
-
-  // Tiendas
-  for (int y = 0; y < maze.h; ++y)
-    for (int x = 0; x < maze.w; ++x) {
-      if (!maze.hasTent(x, y))
-        continue;
-      Vector3 tp = {x * C::CELL + C::CELL * 0.5f, 0.0f,
-                    y * C::CELL + C::CELL * 0.5f};
-      float dx = tp.x - pl.pos.x, dz = tp.z - pl.pos.z;
-      if (dx * dx + dz * dz > 40.0f * 40.0f)
-        continue;
-      float s = C::CELL * 0.85f;
-      DrawCube({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){90, 120, 80, 255});
-      DrawCubeWires({tp.x, 0.4f, tp.z}, s, 0.8f, s, (Color){40, 60, 35, 255});
-      DrawCube({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
-               (Color){150, 90, 50, 255});
-      DrawCubeWires({tp.x, 1.0f, tp.z}, s * 1.10f, 0.4f, s * 0.70f,
-                    (Color){80, 50, 30, 255});
-      DrawCube({tp.x, 0.4f, tp.z - s * 0.5f - 0.02f}, 0.55f, 0.7f, 0.02f,
-               (Color){20, 20, 15, 255});
-    }
-
-  // Proyectiles
-  for (auto &pr : projectiles) {
-    float size = 0.25f;
-    switch (pr.kind) {
-    case ITEM_ROCK:
-      size = 0.18f;
-      break;
-    case ITEM_BOX:
-      size = 0.35f;
-      break;
-    case ITEM_LIME:
-      size = 0.80f;
-      break;
-    case ITEM_BICIMAD:
-      size = 1.25;
-      break;
-    case ITEM_WALL:
-      size = 0.9f;
-      break;
-    default:
-      size = 0.8f;
-      break;
-    }
-    if (assets.hasItemTex[pr.kind]) {
-      DrawBillboard(cam, assets.itemTex[pr.kind], pr.pos, size, WHITE);
-    } else {
-      Color c = Inventory::itemColor(pr.kind);
-      DrawSphere(pr.pos, size * 0.5f, c);
-      DrawSphereWires(pr.pos, size * 0.6f, 4, 4, (Color){220, 220, 220, 180});
-    }
-  }
-
-  // Enemigos
-  float bob = 0.12f * sinf((float)GetTime() * 3.0f);
-  for (auto &e : enemies) {
-    int kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
-    Color tint = WHITE;
-    if (e.hitFlash > 0.0f)
-      tint = (Color){255, 80, 80, 255};
-    else if (e.rageT > 0.0f)
-      tint = (Color){255, 140, 90, 255};
-    DrawBillboard(cam, assets.enemyTex[kind], {e.pos.x, 1.35f + bob, e.pos.z},
-                  2.6f, tint);
-    DrawCircle3D({e.pos.x, 0.02f, e.pos.z}, 0.7f, {1, 0, 0}, 90.0f,
-                 (Color){0, 0, 0, 90});
-  }
-
-  if (twoPlayers) {
-    const Player &other = (playerNum == 0) ? players[1] : players[0];
-    if (!other.escaped && !other.caught)
-      DrawCube({other.pos.x, 1.9f, other.pos.z}, 0.3f, 0.3f, 0.3f,
-               playerColor(1 - playerNum));
-  }
-
-  if (playerNum == 0)
-    drawDebugWorld3D(pl);
-  drawHandItem3D(pl, cam);
-  EndMode3D();
-
+  // 2) Vignette / gradient superior
   DrawRectangle(0, 0, vw, vh, (Color){0, 0, 0, 70});
   DrawRectangleGradientV(0, 0, vw, vh / 6, (Color){0, 0, 0, 140},
                          (Color){0, 0, 0, 0});
 
+  // 3) Minimapa
   drawMinimap(pl, vw);
 
+  // 4) HUD superior izquierdo
   int fsize = vw < 900 ? 22 : 32;
   int small = fsize * 5 / 8;
   int hudX = 20, hudY = 20;
+
   UI::T(TextFormat(L("hud.level", "Nivel %d"), level), hudX, hudY, fsize,
         RAYWHITE);
   UI::T(TextFormat(L("hud.time", "Tiempo: %.1f s"), levelTime), hudX,
@@ -1207,9 +996,12 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     UI::T(TextFormat(L("hud.player", "Jugador %d"), playerNum + 1), hudX,
           vh - small - 10, small, playerColor(playerNum));
 
+  // 5) Stamina, inventario, ítem en mano (todo 2D)
   drawStaminaBar(pl, vw, vh);
   drawInventory(pl, vw, vh);
+  drawHandItem2D(pl, vw, vh);
 
+  // 6) Crosshair
   if (assets.crosshair.id != 0) {
     float cw = (float)assets.crosshair.width;
     float ch = (float)assets.crosshair.height;
@@ -1223,6 +1015,7 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     }
   }
 
+  // 7) Overlays de estado del jugador
   if (pl.caught) {
     DrawRectangle(0, 0, vw, vh, (Color){120, 0, 0, 90});
     const char *msg = L("hud.caught.waiting", "Atrapado - esperando...");
@@ -1233,6 +1026,7 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     UI::T(msg, vw / 2 - UI::M(msg, small) / 2, vh / 2, small, RAYWHITE);
   }
 
+  // 8) Speedrun overlay
   if (sr.active)
     drawSpeedrunOverlay(vw, vh);
 }
@@ -1307,11 +1101,15 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 }
 
 void Game::drawSplitScreen() {
+  // Vista jugador 0
+  renderPlayerView(players[0]);
   BeginTextureMode(rtLeft);
   ClearBackground((Color){12, 12, 18, 255});
   drawGameplayView(players[0], rtLeft.texture.width, rtLeft.texture.height, 0);
   EndTextureMode();
 
+  // Vista jugador 1
+  renderPlayerView(players[1]);
   BeginTextureMode(rtRight);
   ClearBackground((Color){12, 12, 18, 255});
   drawGameplayView(players[1], rtRight.texture.width, rtRight.texture.height,
@@ -1325,6 +1123,13 @@ void Game::drawCinematic() {
   drawBackground2D();
   cinematic.draw(GetScreenWidth(), GetScreenHeight());
   EndDrawing();
+}
+
+static const char *rcResLabel(int idx) {
+  static char buf[16];
+  snprintf(buf, sizeof(buf), "%dx%d", C::RC_RESOLUTIONS[idx][0],
+           C::RC_RESOLUTIONS[idx][1]);
+  return buf;
 }
 
 // =========================================================================
@@ -1390,7 +1195,7 @@ void Game::drawConfigHub() {
 
 void Game::drawConfigVideo() {
   drawConfigHeader("VIDEO");
-  int items = 7;
+  int items = 8;
   handleGamepadMenuNav(items);
   int lr = gamepadLeftRight();
   auto save = [&]() { cfg.save(); };
@@ -1473,7 +1278,22 @@ void Game::drawConfigVideo() {
     cfg.vsync = !cfg.vsync;
     save();
   }
-  if (uiOptionEx(6, items, 30, L("common.back", "Volver"), "", &navIndex,
+  {
+    UIAction a = uiOptionEx(
+        6, items, 30, L("video.raycastres", "Resolución raycaster"),
+        rcResLabel(cfg.raycastRes), &navIndex, nullptr, navIndex == 3 ? lr : 0);
+    if (a == UI_LEFT)
+      cfg.raycastRes = std::max(0, cfg.raycastRes - 1);
+    if (a == UI_RIGHT)
+      cfg.raycastRes = std::min(C::RC_RES_COUNT - 1, cfg.raycastRes + 1);
+    if (a == UI_CONFIRM)
+      cfg.raycastRes = C::RC_RES_DEFAULT;
+    if (a != UI_NONE) {
+      applyVideoSettings();
+      save();
+    }
+  }
+  if (uiOptionEx(7, items, 30, L("common.back", "Volver"), "", &navIndex,
                  nullptr, 0) != UI_NONE ||
       IsKeyPressed(KEY_ESCAPE))
     state = ST_CONFIG;
@@ -2009,7 +1829,8 @@ void Game::drawMenus() {
 
   if (state == ST_MENU) {
     ClearBackground(BLACK);
-    attract.draw(W, H);
+    attract.prepareRaycaster(rc);
+    attract.draw(rc, W, H);
     DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 130});
   } else {
     ClearBackground((Color){12, 12, 18, 255});
@@ -2895,6 +2716,7 @@ void Game::draw() {
       DrawFPS(GetScreenWidth() - 90, 20);
     EndDrawing();
   } else if (state == ST_PLAYING) {
+    renderPlayerView(players[0]);
     BeginDrawing();
     ClearBackground((Color){12, 12, 18, 255});
     drawGameplayView(players[0], GetScreenWidth(), GetScreenHeight(), 0);
@@ -2937,6 +2759,12 @@ void Game::applyVideoSettings() {
   int fps = C::FPS_OPTIONS[std::clamp(cfg.fpsLimit, 0, C::FPS_COUNT - 1)];
   SetTargetFPS(fps == 0 ? -1 : fps);
 
+  // VSync a runtime
+  if (cfg.vsync)
+    SetWindowState(FLAG_VSYNC_HINT);
+  else
+    ClearWindowState(FLAG_VSYNC_HINT);
+
 #if !defined(__EMSCRIPTEN__)
   if (!cfg.fullscreen) {
     int W = GetMonitorWidth(0), H = GetMonitorHeight(0);
@@ -2949,6 +2777,10 @@ void Game::applyVideoSettings() {
     SetWindowSize(GetMonitorWidth(0), GetMonitorHeight(0));
   }
 #endif
+
+  // Resolución raycaster según config
+  int rcIdx = std::clamp(cfg.raycastRes, 0, C::RC_RES_COUNT - 1);
+  rc.resize(C::RC_RESOLUTIONS[rcIdx][0], C::RC_RESOLUTIONS[rcIdx][1]);
 
   UI::scale = cfg.guiScale;
   UI::colorblind = cfg.colorblindMode;
@@ -3652,140 +3484,6 @@ void Game::drawInventory(const Player &pl, int vw, int vh) {
   }
 }
 
-void Game::drawHandItem3D(const Player &pl, const Camera3D &cam) {
-  if (pl.caught || pl.escaped || pl.hidden)
-    return;
-  int slot = pl.selectedSlot;
-  if (slot < 0 || slot >= C::INV_SLOTS)
-    return;
-
-  const InvItem &it = pl.inventory[slot];
-  if (it.kind == ITEM_NONE || it.count <= 0)
-    return;
-
-  Vector3 fwd = {cam.target.x - cam.position.x, cam.target.y - cam.position.y,
-                 cam.target.z - cam.position.z};
-  float fwdLen = sqrtf(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
-  if (fwdLen < 0.0001f)
-    return;
-  fwd.x /= fwdLen;
-  fwd.y /= fwdLen;
-  fwd.z /= fwdLen;
-
-  Vector3 right = {fwd.y * cam.up.z - fwd.z * cam.up.y,
-                   fwd.z * cam.up.x - fwd.x * cam.up.z,
-                   fwd.x * cam.up.y - fwd.y * cam.up.x};
-  float rightLen =
-      sqrtf(right.x * right.x + right.y * right.y + right.z * right.z);
-  if (rightLen < 0.0001f)
-    return;
-  right.x /= rightLen;
-  right.y /= rightLen;
-  right.z /= rightLen;
-
-  Vector3 up = {right.y * fwd.z - right.z * fwd.y,
-                right.z * fwd.x - right.x * fwd.z,
-                right.x * fwd.y - right.y * fwd.x};
-
-  float dFwd = 0.55f;
-  float dRight = 0.30f;
-  float dDown = -0.22f;
-
-  if (pl.footstepT > 0.0f) {
-    float phase = (C::STEP_SLOW - pl.footstepT) * 14.0f;
-    dDown += sinf(phase) * 0.035f;
-    dRight += cosf(phase) * 0.015f;
-  }
-
-  Vector3 pos = {
-      cam.position.x + fwd.x * dFwd + right.x * dRight + up.x * dDown,
-      cam.position.y + fwd.y * dFwd + right.y * dRight + up.y * dDown,
-      cam.position.z + fwd.z * dFwd + right.z * dRight + up.z * dDown};
-
-  float size = 0.22f;
-  switch (it.kind) {
-  case ITEM_ROCK:
-    size = 0.16f;
-    break;
-  case ITEM_BOX:
-    size = 0.26f;
-    break;
-  case ITEM_LIME:
-    size = 0.45f;
-    break;
-  case ITEM_BICIMAD:
-    size = 0.60f;
-    break;
-  case ITEM_KEY:
-    size = 0.55f;
-    break;
-  default:
-    break;
-  }
-
-  float rollRad = 18.0f * DEG2RAD;
-  float pitchRad = -8.0f * DEG2RAD;
-
-  float cr = cosf(rollRad), sr = sinf(rollRad);
-  float cp = cosf(pitchRad), sp = sinf(pitchRad);
-
-  Vector3 r1 = {right.x * cr + up.x * sr, right.y * cr + up.y * sr,
-                right.z * cr + up.z * sr};
-  Vector3 u1 = {-right.x * sr + up.x * cr, -right.y * sr + up.y * cr,
-                -right.z * sr + up.z * cr};
-  Vector3 f2 = {fwd.x * cp + u1.x * sp, fwd.y * cp + u1.y * sp,
-                fwd.z * cp + u1.z * sp};
-  Vector3 u2 = {-fwd.x * sp + u1.x * cp, -fwd.y * sp + u1.y * cp,
-                -fwd.z * sp + u1.z * cp};
-
-  float h = size * 0.5f;
-  Vector3 v0 = {pos.x + r1.x * (-h) + u2.x * (-h),
-                pos.y + r1.y * (-h) + u2.y * (-h),
-                pos.z + r1.z * (-h) + u2.z * (-h)};
-  Vector3 v1 = {pos.x + r1.x * (h) + u2.x * (-h),
-                pos.y + r1.y * (h) + u2.y * (-h),
-                pos.z + r1.z * (h) + u2.z * (-h)};
-  Vector3 v2 = {pos.x + r1.x * (h) + u2.x * (h),
-                pos.y + r1.y * (h) + u2.y * (h),
-                pos.z + r1.z * (h) + u2.z * (h)};
-  Vector3 v3 = {pos.x + r1.x * (-h) + u2.x * (h),
-                pos.y + r1.y * (-h) + u2.y * (h),
-                pos.z + r1.z * (-h) + u2.z * (h)};
-
-  rlDisableDepthTest();
-  rlDisableBackfaceCulling();
-
-  if (assets.hasItemTex[it.kind]) {
-    Texture2D tex = assets.itemTex[it.kind];
-    rlSetTexture(tex.id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    rlNormal3f(-f2.x, -f2.y, -f2.z);
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(v0.x, v0.y, v0.z);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(v1.x, v1.y, v1.z);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(v2.x, v2.y, v2.z);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(v3.x, v3.y, v3.z);
-    rlEnd();
-    rlSetTexture(0);
-  } else {
-    Color c = Inventory::itemColor(it.kind);
-    rlBegin(RL_QUADS);
-    rlColor4ub(c.r, c.g, c.b, 255);
-    rlVertex3f(v0.x, v0.y, v0.z);
-    rlVertex3f(v1.x, v1.y, v1.z);
-    rlVertex3f(v2.x, v2.y, v2.z);
-    rlVertex3f(v3.x, v3.y, v3.z);
-    rlEnd();
-  }
-
-  rlEnableBackfaceCulling();
-  rlEnableDepthTest();
-}
-
 // =========================================================================
 //  Niveles custom
 // =========================================================================
@@ -3921,7 +3619,19 @@ void Game::startLevel(int lvl) {
     maze.generate(size, size, baseSeed);
   }
 
-  world.build(maze, assets);
+  {
+    int idx = std::clamp(cfg.raycastRes, 0, C::RC_RES_COUNT - 1);
+    int rw = C::RC_RESOLUTIONS[idx][0];
+    int rh = C::RC_RESOLUTIONS[idx][1];
+    if (rc.renderW != rw || rc.renderH != rh) {
+      rc.resize(rw, rh);
+    }
+    if (rc.texture.id != 0) {
+      SetTextureFilter(rc.texture, TEXTURE_FILTER_POINT);
+    }
+  }
+
+  rc.loadDynamicTextures(assets);
   levelTime = 0.0f;
 
   Vector3 p1Spawn, p2Spawn;
@@ -4233,4 +3943,71 @@ void Game::speedrunFinishRun() {
   saves.addSpeedrun(e);
 
   sr.active = false;
+}
+
+void Game::drawHandItem2D(const Player &pl, int vw, int vh) {
+  if (pl.caught || pl.escaped || pl.hidden)
+    return;
+  int slot = pl.selectedSlot;
+  if (slot < 0 || slot >= C::INV_SLOTS)
+    return;
+
+  const InvItem &it = pl.inventory[slot];
+  if (it.kind == ITEM_NONE || it.count <= 0)
+    return;
+
+  int k = (int)it.kind;
+  if (k <= ITEM_NONE || k >= ITEM_KIND_COUNT)
+    return;
+  if (!assets.hasItemTex[k])
+    return;
+
+  // Bob al caminar
+  float bob = sinf((float)GetTime() * 4.0f) * 6.0f;
+  if (pl.footstepT > 0.0f)
+    bob += sinf((C::STEP_SLOW - pl.footstepT) * 14.0f) * 12.0f;
+
+  float baseSize = vw < 900 ? 90.0f : 120.0f;
+
+  float size = baseSize;
+  switch (it.kind) {
+  case ITEM_ROCK:
+    size = baseSize * 0.6f;
+    break;
+  case ITEM_BOX:
+    size = baseSize * 1.0f;
+    break;
+  case ITEM_LIME:
+    size = baseSize * 1.1f;
+    break;
+  case ITEM_BICIMAD:
+    size = baseSize * 1.3f;
+    break;
+  case ITEM_KEY:
+    size = baseSize * 0.9f;
+    break;
+  default:
+    size = baseSize;
+    break;
+  }
+
+  float x = vw * 0.80f;
+  float y = vh - size * 0.55f + bob;
+
+  Texture2D tex = assets.itemTex[k];
+  DrawTexturePro(tex, {0, 0, (float)tex.width, (float)tex.height},
+                 {x, y, size, size}, {0, 0}, -10.0f, WHITE);
+}
+
+void Game::renderPlayerView(const Player &pl) {
+  bool levelHasKey = false;
+  for (auto &w : worldItems)
+    if (w.kind == ITEM_KEY) {
+      levelHasKey = true;
+      break;
+    }
+  bool locked = levelHasKey && !(players[0].hasKey || players[1].hasKey);
+
+  rc.render(pl, maze, enemies, projectiles, worldItems, exitPos, locked,
+            renderDist(), (float)cfg.fov);
 }

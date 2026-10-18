@@ -19,6 +19,7 @@ static void clampSelf(Config &c) {
   c.windowH = std::clamp(c.windowH, 480, 4320);
   c.fpsLimit = std::clamp(c.fpsLimit, 0, C::FPS_COUNT - 1);
   c.renderDistance = std::clamp(c.renderDistance, 0, 2);
+  c.raycastRes = std::clamp(c.raycastRes, 0, C::RC_RES_COUNT - 1);
   c.guiScale = std::clamp(c.guiScale, 0.75f, 2.0f);
   c.colorblindMode = std::clamp(c.colorblindMode, 0, CB_COUNT - 1);
   if (c.language.empty())
@@ -111,7 +112,6 @@ void Config::save() const {
   fprintf(f, "windowW=%d\n", windowW);
   fprintf(f, "windowH=%d\n", windowH);
   fprintf(f, "fpsLimit=%d\n", fpsLimit);
-  fprintf(f, "renderDistance=%d\n", renderDistance);
   fprintf(f, "guiScale=%.3f\n", (double)guiScale);
   fprintf(f, "colorblindMode=%d\n", colorblindMode);
   fprintf(f, "highContrast=%d\n", highContrast ? 1 : 0);
@@ -119,6 +119,8 @@ void Config::save() const {
   fprintf(f, "bigSubtitles=%d\n", bigSubtitles ? 1 : 0);
   fprintf(f, "holdToSprint=%d\n", holdToSprint ? 1 : 0);
   fprintf(f, "noJumpscares=%d\n", noJumpscares ? 1 : 0);
+  fprintf(f, "renderDistance=%d\n", renderDistance);
+  fprintf(f, "raycastRes=%d\n", raycastRes);
   fclose(f);
 }
 
@@ -189,6 +191,8 @@ void Config::load() {
       fpsLimit = asInt(val);
     else if (!strcmp(key, "renderDistance"))
       renderDistance = asInt(val);
+    else if (!strcmp(key, "raycastRes"))
+      raycastRes = asInt(val);
     else if (!strcmp(key, "guiScale"))
       guiScale = asFloat(val);
     else if (!strcmp(key, "colorblindMode"))

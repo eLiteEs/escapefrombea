@@ -46,6 +46,7 @@ config.access=Accessibility
 config.language=Language: %s
 config.hint=Up/down with D-pad, change with < > or A
 
+video.raycastres=Raycaster resolution
 video.fullscreen=Fullscreen
 video.resolution=Window resolution
 video.fps=FPS limit

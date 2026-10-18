@@ -56,7 +56,8 @@ struct Config {
   int windowH = 720;
   int fpsLimit = 60;      // índice en C::FPS_OPTIONS
   int renderDistance = 1; // índice en C::RENDER_DIST
-  float guiScale = 1.0f;  // 0.75 .. 2.0
+  int raycastRes = C::RC_RES_DEFAULT;
+  float guiScale = 1.0f; // 0.75 .. 2.0
 
   // Accesibilidad
   int colorblindMode = CB_NONE;
