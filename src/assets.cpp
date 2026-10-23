@@ -101,7 +101,15 @@ void Assets::loadEnemyTextures() {
   hasCrosshair = crosshair.id != 0;
 }
 
-void Assets::loadWallTextures() {}
+void Assets::loadWallTextures() {
+  wallTile = loadTileable(Paths::sprite("wall_tile.png").c_str(), hasWallTile);
+  wallLocker =
+      loadTileable(Paths::sprite("wall_locker.png").c_str(), hasWallLocker);
+  wallBrick =
+      loadTileable(Paths::sprite("wall_brick.png").c_str(), hasWallBrick);
+  floorTile =
+      loadTileable(Paths::sprite("floor_tile.png").c_str(), hasFloorTile);
+}
 
 void Assets::loadItemTextures() {
   struct {

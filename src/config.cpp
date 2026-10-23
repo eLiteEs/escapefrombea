@@ -100,6 +100,8 @@ void Config::save() const {
   fprintf(f, "language=%s\n", language.c_str());
   fprintf(f, "swapGamepads=%d\n", swapGamepads ? 1 : 0);
   fprintf(f, "maxLevel=%d\n", maxLevel);
+  fprintf(f, "quakeMovement=%d\n", quakeMovement ? 1 : 0);
+  fprintf(f, "autoBhop=%d\n", autoBhop ? 1 : 0);
   fprintf(f, "maxEndlessLevel=%d\n", maxEndlessLevel);
   for (int p = 0; p < 2; ++p) {
     fprintf(f, "p%d_up=%d\n", p + 1, binds[p].up);
@@ -121,6 +123,7 @@ void Config::save() const {
   fprintf(f, "noJumpscares=%d\n", noJumpscares ? 1 : 0);
   fprintf(f, "renderDistance=%d\n", renderDistance);
   fprintf(f, "raycastRes=%d\n", raycastRes);
+  fprintf(f, "useRenderer3D=%d\n", useRenderer3D ? 1 : 0);
   fclose(f);
 }
 
@@ -175,6 +178,10 @@ void Config::load() {
       sprintRegen = asFloat(val);
     else if (!strcmp(key, "playCinematics"))
       playCinematics = asInt(val) != 0;
+    else if (!strcmp(key, "quakeMovement"))
+      quakeMovement = asInt(val) != 0;
+    else if (!strcmp(key, "autoBhop"))
+      autoBhop = asInt(val) != 0;
     else if (!strcmp(key, "language"))
       language = val;
     else if (!strcmp(key, "swapGamepads"))
@@ -193,6 +200,8 @@ void Config::load() {
       renderDistance = asInt(val);
     else if (!strcmp(key, "raycastRes"))
       raycastRes = asInt(val);
+    else if (!strcmp(key, "useRenderer3D"))
+      useRenderer3D = asInt(val) != 0;
     else if (!strcmp(key, "guiScale"))
       guiScale = asFloat(val);
     else if (!strcmp(key, "colorblindMode"))

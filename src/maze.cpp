@@ -1,12 +1,41 @@
 #include "maze.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <queue>
 #include <random>
 #include <stack>
 #include <string>
 #include <utility>
+
+#include "assets.h"
+#include "paths.h"
+
+// Helper para añadir un quad a un mesh (2 triángulos)
+static void addQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
+                    std::vector<Vector3> &normals,
+                    std::vector<unsigned short> &indices, Vector3 v0,
+                    Vector3 v1, Vector3 v2, Vector3 v3, Vector3 normal) {
+  unsigned short base = (unsigned short)verts.size();
+  verts.push_back(v0);
+  verts.push_back(v1);
+  verts.push_back(v2);
+  verts.push_back(v3);
+  uvs.push_back({0, 1});
+  uvs.push_back({1, 1});
+  uvs.push_back({1, 0});
+  uvs.push_back({0, 0});
+  for (int i = 0; i < 4; ++i)
+    normals.push_back(normal);
+  indices.push_back(base + 0);
+  indices.push_back(base + 1);
+  indices.push_back(base + 2);
+  indices.push_back(base + 0);
+  indices.push_back(base + 2);
+  indices.push_back(base + 3);
+}
 
 void Maze::generate(int mw, int mh, uint32_t seed) {
   w = mw;
@@ -373,4 +402,183 @@ bool Maze::loadFromFile(const char *path, LevelExtras &extras) {
   }
 
   return true;
+}
+
+void Maze::buildChunks(Assets &assets) {
+  unloadChunks();
+  chunksW = (w + C::CHUNK_SIZE - 1) / C::CHUNK_SIZE;
+  chunksH = (h + C::CHUNK_SIZE - 1) / C::CHUNK_SIZE;
+  chunks.resize(chunksW * chunksH);
+
+  // Fallback blanco por si algún PNG falta
+  Texture2D whiteTex = {};
+  auto fallbackWhite = [&]() -> Texture2D {
+    if (whiteTex.id == 0) {
+      Image img = GenImageColor(1, 1, WHITE);
+      whiteTex = LoadTextureFromImage(img);
+      UnloadImage(img);
+    }
+    return whiteTex;
+  };
+
+  Texture2D texTile = assets.hasWallTile ? assets.wallTile : fallbackWhite();
+  Texture2D texLocker = assets.hasWallLocker ? assets.wallLocker : texTile;
+  Texture2D texBrick = assets.hasWallBrick ? assets.wallBrick : texTile;
+  Texture2D texFloor = assets.hasFloorTile ? assets.floorTile : texTile;
+
+  // Buffers temporales por chunk (4 conjuntos: tile, locker, brick, floor)
+  struct MeshBuf {
+    std::vector<Vector3> verts;
+    std::vector<Vector2> uvs;
+    std::vector<Vector3> normals;
+    std::vector<unsigned short> indices;
+    void clear() {
+      verts.clear();
+      uvs.clear();
+      normals.clear();
+      indices.clear();
+    }
+    bool empty() const { return verts.empty(); }
+  };
+
+  for (int cy = 0; cy < chunksH; ++cy) {
+    for (int cx = 0; cx < chunksW; ++cx) {
+      Chunk &chunk = chunks[cy * chunksW + cx];
+
+      MeshBuf bufTile, bufLocker, bufBrick, bufFloor;
+
+      int startX = cx * C::CHUNK_SIZE;
+      int startY = cy * C::CHUNK_SIZE;
+      int endX = std::min(startX + C::CHUNK_SIZE, w);
+      int endY = std::min(startY + C::CHUNK_SIZE, h);
+
+      for (int y = startY; y < endY; ++y) {
+        for (int x = startX; x < endX; ++x) {
+          if (g[y][x] == 1) {
+            // Elegir buffer de pared según variante de la celda
+            int variant = 0;
+            if (y < (int)wallVariant.size() && x < (int)wallVariant[y].size())
+              variant = wallVariant[y][x];
+            MeshBuf *buf = (variant == 1)   ? &bufLocker
+                           : (variant == 2) ? &bufBrick
+                                            : &bufTile;
+
+            // Cuatro caras de la celda de pared (solo las expuestas)
+            if (!wallAt(x, y - 1)) {
+              addQuad(buf->verts, buf->uvs, buf->normals, buf->indices,
+                      {(float)x * C::CELL, C::WALL_H, (float)y * C::CELL},
+                      {(float)(x + 1) * C::CELL, C::WALL_H, (float)y * C::CELL},
+                      {(float)(x + 1) * C::CELL, 0, (float)y * C::CELL},
+                      {(float)x * C::CELL, 0, (float)y * C::CELL}, {0, 0, -1});
+            }
+            if (!wallAt(x, y + 1)) {
+              addQuad(buf->verts, buf->uvs, buf->normals, buf->indices,
+                      {(float)(x + 1) * C::CELL, C::WALL_H,
+                       (float)(y + 1) * C::CELL},
+                      {(float)x * C::CELL, C::WALL_H, (float)(y + 1) * C::CELL},
+                      {(float)x * C::CELL, 0, (float)(y + 1) * C::CELL},
+                      {(float)(x + 1) * C::CELL, 0, (float)(y + 1) * C::CELL},
+                      {0, 0, 1});
+            }
+            if (!wallAt(x - 1, y)) {
+              addQuad(buf->verts, buf->uvs, buf->normals, buf->indices,
+                      {(float)x * C::CELL, C::WALL_H, (float)(y + 1) * C::CELL},
+                      {(float)x * C::CELL, C::WALL_H, (float)y * C::CELL},
+                      {(float)x * C::CELL, 0, (float)y * C::CELL},
+                      {(float)x * C::CELL, 0, (float)(y + 1) * C::CELL},
+                      {-1, 0, 0});
+            }
+            if (!wallAt(x + 1, y)) {
+              addQuad(buf->verts, buf->uvs, buf->normals, buf->indices,
+                      {(float)(x + 1) * C::CELL, C::WALL_H, (float)y * C::CELL},
+                      {(float)(x + 1) * C::CELL, C::WALL_H,
+                       (float)(y + 1) * C::CELL},
+                      {(float)(x + 1) * C::CELL, 0, (float)(y + 1) * C::CELL},
+                      {(float)(x + 1) * C::CELL, 0, (float)y * C::CELL},
+                      {1, 0, 0});
+            }
+          } else {
+            // Suelo + techo (van al mismo mesh, la textura es la misma)
+            addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                    bufFloor.indices,
+                    {(float)x * C::CELL, 0, (float)(y + 1) * C::CELL},
+                    {(float)(x + 1) * C::CELL, 0, (float)(y + 1) * C::CELL},
+                    {(float)(x + 1) * C::CELL, 0, (float)y * C::CELL},
+                    {(float)x * C::CELL, 0, (float)y * C::CELL}, {0, 1, 0});
+            addQuad(
+                bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                bufFloor.indices,
+                {(float)x * C::CELL, C::WALL_H, (float)y * C::CELL},
+                {(float)(x + 1) * C::CELL, C::WALL_H, (float)y * C::CELL},
+                {(float)(x + 1) * C::CELL, C::WALL_H, (float)(y + 1) * C::CELL},
+                {(float)x * C::CELL, C::WALL_H, (float)(y + 1) * C::CELL},
+                {0, -1, 0});
+          }
+        }
+      }
+
+      // Helper para construir un Model desde un MeshBuf y asignarle textura
+      auto buildModel = [&](MeshBuf &buf, Texture2D tex) -> Model {
+        if (buf.empty())
+          return {};
+        Mesh m = {};
+        m.vertexCount = (int)buf.verts.size();
+        m.triangleCount = (int)buf.indices.size() / 3;
+        m.vertices = (float *)MemAlloc(buf.verts.size() * sizeof(Vector3));
+        m.texcoords = (float *)MemAlloc(buf.uvs.size() * sizeof(Vector2));
+        m.normals = (float *)MemAlloc(buf.normals.size() * sizeof(Vector3));
+        m.indices = (unsigned short *)MemAlloc(buf.indices.size() *
+                                               sizeof(unsigned short));
+        memcpy(m.vertices, buf.verts.data(),
+               buf.verts.size() * sizeof(Vector3));
+        memcpy(m.texcoords, buf.uvs.data(), buf.uvs.size() * sizeof(Vector2));
+        memcpy(m.normals, buf.normals.data(),
+               buf.normals.size() * sizeof(Vector3));
+        memcpy(m.indices, buf.indices.data(),
+               buf.indices.size() * sizeof(unsigned short));
+
+        Model model = LoadModelFromMesh(m);
+        if (model.materialCount > 0) {
+          model.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+          model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+        }
+        // CRÍTICO: subir el mesh a la GPU (raylib 6 no lo hace solo)
+        UploadMesh(&model.meshes[0], false);
+        return model;
+      };
+
+      chunk.wallsTile = buildModel(bufTile, texTile);
+      chunk.wallsLocker = buildModel(bufLocker, texLocker);
+      chunk.wallsBrick = buildModel(bufBrick, texBrick);
+      chunk.floor = buildModel(bufFloor, texFloor);
+      chunk.built = true;
+    }
+  }
+  (void)whiteTex;
+}
+
+void Maze::unloadChunks() {
+  for (auto &ch : chunks) {
+    Model *models[4] = {&ch.wallsTile, &ch.wallsLocker, &ch.wallsBrick,
+                        &ch.floor};
+    for (Model *m : models) {
+      if (!m->meshes)
+        continue;
+      // Desenganchar texturas antes de liberar: son de Assets, no nuestras
+      if (m->materials) {
+        for (int i = 0; i < m->materialCount; ++i) {
+          if (!m->materials[i].maps)
+            continue;
+          MaterialMap &diffuse = m->materials[i].maps[MATERIAL_MAP_DIFFUSE];
+          diffuse.texture = {};
+        }
+      }
+      UnloadModel(*m);
+      *m = {};
+    }
+    ch.built = false;
+  }
+  chunks.clear();
+  chunksW = 0;
+  chunksH = 0;
 }

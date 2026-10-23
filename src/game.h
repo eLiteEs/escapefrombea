@@ -11,6 +11,7 @@
 #include "maze.h"
 #include "raycaster.h"
 #include "raylib.h"
+#include "renderer3d.h"
 #include "save.h"
 
 #include <cstdint>
@@ -43,6 +44,7 @@ struct Game {
   Assets assets;
   SaveManager saves;
   Raycaster rc;
+  Renderer3D r3d;
 
   Player players[2];
   std::vector<Enemy> enemies;
@@ -101,6 +103,7 @@ struct Game {
   // Split-screen render targets
   RenderTexture2D rtLeft = {};
   RenderTexture2D rtRight = {};
+  RenderTexture2D rt3d = {}; // Render target para el renderer 3D
   int rtW = 0, rtH = 0;
 
   uint32_t currentSeed = 0;

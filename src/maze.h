@@ -1,4 +1,5 @@
 #pragma once
+#include "assets.h"
 #include "common.h"
 #include <cstdint>
 #include <vector>
@@ -52,4 +53,17 @@ public:
                 std::vector<Vector2> &out) const;
 
   bool loadFromFile(const char *path, LevelExtras &extras);
+
+  struct Chunk {
+    Model wallsTile = {};   // variant 0
+    Model wallsLocker = {}; // variant 1
+    Model wallsBrick = {};  // variant 2
+    Model floor = {};
+    bool built = false;
+  };
+
+  std::vector<Chunk> chunks;
+  int chunksW = 0, chunksH = 0;
+  void buildChunks(Assets &assets);
+  void unloadChunks();
 };

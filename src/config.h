@@ -29,7 +29,8 @@ struct Config {
   float sprintDrain = C::STAM_DRAIN_DEF;
   float sprintRegen = C::STAM_REGEN_DEF;
   bool playCinematics = true;
-
+  bool quakeMovement = true;
+  bool autoBhop = false;
   // Idioma
   std::string language = "es";
 
@@ -57,7 +58,8 @@ struct Config {
   int fpsLimit = 60;      // índice en C::FPS_OPTIONS
   int renderDistance = 1; // índice en C::RENDER_DIST
   int raycastRes = C::RC_RES_DEFAULT;
-  float guiScale = 1.0f; // 0.75 .. 2.0
+  bool useRenderer3D = true; // true = renderer 3D, false = raycaster clásico
+  float guiScale = 1.0f;     // 0.75 .. 2.0
 
   // Accesibilidad
   int colorblindMode = CB_NONE;

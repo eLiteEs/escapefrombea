@@ -285,7 +285,7 @@ void Game::init() {
       assets.loadEnemyTextures();
       break;
     case 1:
-      // assets.loadWallTextures();
+      assets.loadWallTextures();
       break;
     case 2:
       assets.loadItemTextures();
@@ -332,6 +332,9 @@ void Game::init() {
 
 void Game::shutdown() {
   cfg.save();
+  r3d.shutdown();
+  if (rt3d.texture.id != 0)
+    UnloadRenderTexture(rt3d);
   rc.unload();
   if (rtLeft.texture.id != 0)
     UnloadRenderTexture(rtLeft);
@@ -344,38 +347,40 @@ void Game::shutdown() {
 }
 
 void Game::ensureRenderTargets() {
-  // En single-player no necesitamos render targets.
-  // Si los teníamos de una partida anterior en 2 jugadores, los liberamos.
-  if (!twoPlayers) {
-    if (rtLeft.texture.id != 0) {
-      UnloadRenderTexture(rtLeft);
-      rtLeft = {};
-    }
-    if (rtRight.texture.id != 0) {
-      UnloadRenderTexture(rtRight);
-      rtRight = {};
-    }
-    rtW = rtH = 0;
-    return;
+  int w = GetScreenWidth();
+  int h = GetScreenHeight();
+  if (twoPlayers) {
+    w /= 2;
+  }
+  if (rtLeft.texture.id != 0 &&
+      (rtLeft.texture.width != w || rtLeft.texture.height != h)) {
+    UnloadRenderTexture(rtLeft);
+    rtLeft = {};
+  }
+  if (rtRight.texture.id != 0 &&
+      (rtRight.texture.width != w || rtRight.texture.height != h)) {
+    UnloadRenderTexture(rtRight);
+    rtRight = {};
+  }
+  if (rtLeft.texture.id == 0) {
+    rtLeft = LoadRenderTexture(w, h);
+    SetTextureFilter(rtLeft.texture, TEXTURE_FILTER_BILINEAR);
+  }
+  if (rtRight.texture.id == 0) {
+    rtRight = LoadRenderTexture(w, h);
+    SetTextureFilter(rtRight.texture, TEXTURE_FILTER_BILINEAR);
   }
 
-  // Multi-player: crear/ajustar según el tamaño actual de la ventana
-  int W = GetScreenWidth(), H = GetScreenHeight();
-  if (W <= 1 || H <= 1)
-    return;
-  if (W == rtW && H == rtH && rtLeft.texture.id != 0)
-    return;
-
-  if (rtLeft.texture.id != 0)
-    UnloadRenderTexture(rtLeft);
-  if (rtRight.texture.id != 0)
-    UnloadRenderTexture(rtRight);
-
-  rtW = W;
-  rtH = H;
-  int halfW = std::max(1, rtW / 2);
-  rtLeft = LoadRenderTexture(halfW, rtH);
-  rtRight = LoadRenderTexture(rtW - halfW, rtH);
+  // NUEVO: Render target para el renderer 3D
+  if (rt3d.texture.id != 0 && (rt3d.texture.width != GetScreenWidth() ||
+                               rt3d.texture.height != GetScreenHeight())) {
+    UnloadRenderTexture(rt3d);
+    rt3d = {};
+  }
+  if (rt3d.texture.id == 0) {
+    rt3d = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    SetTextureFilter(rt3d.texture, TEXTURE_FILTER_BILINEAR);
+  }
 }
 
 // =========================================================================
@@ -968,9 +973,11 @@ void Game::drawMinimap(const Player &pl, int vw) {
 
 void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
   // 1) Blit del framebuffer del raycaster (ya renderizado previamente)
-  Rectangle src = {0, 0, (float)rc.texture.width, (float)rc.texture.height};
-  Rectangle dst = {0, 0, (float)vw, (float)vh};
-  DrawTexturePro(rc.texture, src, dst, {0, 0}, 0.0f, WHITE);
+  if (!cfg.useRenderer3D) {
+    Rectangle src = {0, 0, (float)rc.texture.width, (float)rc.texture.height};
+    Rectangle dst = {0, 0, (float)vw, (float)vh};
+    DrawTexturePro(rc.texture, src, dst, {0, 0}, 0.0f, WHITE);
+  }
 
   // 2) Vignette / gradient superior
   DrawRectangle(0, 0, vw, vh, (Color){0, 0, 0, 70});
@@ -1101,17 +1108,17 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 }
 
 void Game::drawSplitScreen() {
-  // Vista jugador 0
-  renderPlayerView(players[0]);
+  // Jugador 0
   BeginTextureMode(rtLeft);
   ClearBackground((Color){12, 12, 18, 255});
+  renderPlayerView(players[0]);
   drawGameplayView(players[0], rtLeft.texture.width, rtLeft.texture.height, 0);
   EndTextureMode();
 
-  // Vista jugador 1
-  renderPlayerView(players[1]);
+  // Jugador 1
   BeginTextureMode(rtRight);
   ClearBackground((Color){12, 12, 18, 255});
+  renderPlayerView(players[1]);
   drawGameplayView(players[1], rtRight.texture.width, rtRight.texture.height,
                    1);
   EndTextureMode();
@@ -2716,9 +2723,9 @@ void Game::draw() {
       DrawFPS(GetScreenWidth() - 90, 20);
     EndDrawing();
   } else if (state == ST_PLAYING) {
-    renderPlayerView(players[0]);
     BeginDrawing();
     ClearBackground((Color){12, 12, 18, 255});
+    renderPlayerView(players[0]);
     drawGameplayView(players[0], GetScreenWidth(), GetScreenHeight(), 0);
     drawToast();
     drawDebugOverlay(GetScreenWidth(), GetScreenHeight(), 0);
@@ -3619,6 +3626,8 @@ void Game::startLevel(int lvl) {
     maze.generate(size, size, baseSeed);
   }
 
+  maze.buildChunks(assets);
+
   {
     int idx = std::clamp(cfg.raycastRes, 0, C::RC_RES_COUNT - 1);
     int rw = C::RC_RESOLUTIONS[idx][0];
@@ -4008,6 +4017,181 @@ void Game::renderPlayerView(const Player &pl) {
     }
   bool locked = levelHasKey && !(players[0].hasKey || players[1].hasKey);
 
-  rc.render(pl, maze, enemies, projectiles, worldItems, exitPos, locked,
-            renderDist(), (float)cfg.fov);
+  if (cfg.useRenderer3D) {
+    std::vector<WorldSprite3D> sprites;
+    sprites.reserve(enemies.size() + worldItems.size() + projectiles.size() +
+                    16);
+
+    // 1. Enemigos
+    for (auto &e : enemies) {
+      int kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+      Color tint = {255, 255, 255, 255};
+      if (e.hitFlash > 0.0f)
+        tint = {255, 80, 80, 255};
+      else if (e.rageT > 0.0f)
+        tint = {255, 140, 90, 255};
+
+      Texture2D tex = assets.enemyTex[kind];
+      float aspect = (tex.id != 0 && tex.height > 0)
+                         ? (float)tex.width / (float)tex.height
+                         : 1.0f;
+      float height = 2.6f;
+      float width = height * aspect;
+
+      WorldSprite3D s;
+      s.pos = {e.pos.x, 0.0f, e.pos.z};
+      s.size = {width, height};
+      s.tex = tex;
+      s.tint = tint;
+      sprites.push_back(s);
+    }
+
+    // 2. Items del mundo
+    for (auto &w : worldItems) {
+      int k = (int)w.kind;
+      if (k < 0 || k >= ITEM_KIND_COUNT)
+        continue;
+
+      Texture2D tex = assets.itemTex[k];
+      float aspect = (tex.id != 0 && tex.height > 0)
+                         ? (float)tex.width / (float)tex.height
+                         : 1.0f;
+      float height = 0.70f;
+      switch (w.kind) {
+      case ITEM_ROCK:
+        height = 0.35f;
+        break;
+      case ITEM_BOX:
+        height = 0.70f;
+        break;
+      case ITEM_LIME:
+        height = 0.85f;
+        break;
+      case ITEM_BICIMAD:
+        height = 1.00f;
+        break;
+      case ITEM_KEY:
+        height = 0.55f;
+        break;
+      default:
+        height = 0.70f;
+        break;
+      }
+      float width = height * aspect;
+      float bob = sinf(w.bobT) * C::ROCK_PICKUP_BOB;
+
+      WorldSprite3D s;
+      s.pos = {w.pos.x, w.pos.y + bob, w.pos.z};
+      s.size = {width, height};
+      s.tex = tex;
+      s.tint = {255, 255, 255, 255};
+      sprites.push_back(s);
+    }
+
+    // 3. Proyectiles
+    for (auto &pr : projectiles) {
+      if (!pr.alive)
+        continue;
+      int k = (int)pr.kind;
+      if (k <= ITEM_NONE || k >= ITEM_KIND_COUNT)
+        continue;
+
+      Texture2D tex = assets.itemTex[k];
+      float aspect = (tex.id != 0 && tex.height > 0)
+                         ? (float)tex.width / (float)tex.height
+                         : 1.0f;
+      float size = 0.25f;
+      switch (pr.kind) {
+      case ITEM_ROCK:
+        size = 0.18f;
+        break;
+      case ITEM_BOX:
+        size = 0.35f;
+        break;
+      case ITEM_LIME:
+        size = 0.80f;
+        break;
+      case ITEM_BICIMAD:
+        size = 1.25f;
+        break;
+      case ITEM_WALL:
+        size = 0.90f;
+        break;
+      default:
+        size = 0.25f;
+        break;
+      }
+
+      WorldSprite3D s;
+      s.pos = {pr.pos.x, pr.pos.y - size * 0.5f, pr.pos.z};
+      s.size = {size * aspect, size};
+      s.tex = tex;
+      s.tint = {255, 255, 255, 255};
+      sprites.push_back(s);
+    }
+
+    // 4. Tiendas (tents)
+    int pcx = (int)floorf(pl.pos.x / C::CELL);
+    int pcz = (int)floorf(pl.pos.z / C::CELL);
+    for (int y = 0; y < maze.h; ++y) {
+      for (int x = 0; x < maze.w; ++x) {
+        if (!maze.hasTent(x, y))
+          continue;
+        if (x == pcx && y == pcz)
+          continue;
+        Vector3 center = maze.cellCenter(x, y);
+
+        Texture2D tex = assets.itemTex[ITEM_WALL];
+        float aspect = (tex.id != 0 && tex.height > 0)
+                           ? (float)tex.width / (float)tex.height
+                           : 1.0f;
+        float height = 1.5f;
+        float width = height * aspect;
+
+        WorldSprite3D s;
+        s.pos = {center.x, 0.0f, center.z};
+        s.size = {width, height};
+        s.tex = tex;
+        s.tint = {255, 255, 255, 255};
+        sprites.push_back(s);
+      }
+    }
+
+    // 5. Portal de salida
+    float pulse = 1.0f + 0.15f * sinf((float)GetTime() * 4.0f);
+    Color portalTint =
+        locked ? (Color){200, 60, 60, 255} : (Color){200, 255, 220, 255};
+
+    Texture2D portalTex = assets.portalTex;
+    float aspect = (portalTex.id != 0 && portalTex.height > 0)
+                       ? (float)portalTex.width / (float)portalTex.height
+                       : 1.0f;
+    float height = 2.4f * pulse;
+    float width = height * aspect;
+
+    WorldSprite3D sPortal;
+    sPortal.pos = {exitPos.x, 0.0f, exitPos.z};
+    sPortal.size = {width, height};
+    sPortal.tex = portalTex;
+    sPortal.tint = portalTint;
+    sprites.push_back(sPortal);
+
+    // Renderizar con Camera3D
+    Vector3 eye = {pl.pos.x, pl.pos.y + C::EYE_H, pl.pos.z};
+    r3d.render(maze, eye, pl.yaw, pl.pitch, (float)cfg.fov, renderDist(),
+               sprites, true);
+
+    if (cfg.useRenderer3D) {
+      static int logTick = 0;
+      if (++logTick % 60 == 0) {
+        TraceLog(LOG_INFO, "[R3D-DIAG] drawn=%d calls=%d visSize=%zu",
+                 r3d.lastDrawnChunks(), r3d.lastDrawCalls(),
+                 r3d.visibility().size());
+      }
+    }
+  } else {
+    // Fallback al raycaster clásico (intacto)
+    rc.render(pl, maze, enemies, projectiles, worldItems, exitPos, locked,
+              renderDist(), (float)cfg.fov);
+  }
 }

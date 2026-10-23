@@ -8,6 +8,7 @@ namespace C {
 constexpr float CELL = 4.0f;
 constexpr float WALL_H = 3.6f;
 constexpr float EYE_H = 1.7f;
+constexpr int CHUNK_SIZE = 8; // celdas por lado del chunk
 
 // Jugador
 constexpr float P_SPEED = 6.5f;
@@ -107,6 +108,15 @@ constexpr int RC_RESOLUTIONS[][2] = {
 constexpr int RC_RES_COUNT = 6;
 constexpr int RC_RES_DEFAULT = 2;
 
+constexpr float Q_WALKSPEED = 6.5f; // velocidad objetivo caminando
+constexpr float Q_SPRINT_MULT =
+    1.55f;                         // multiplicador sprint (equivale a P_SPRINT)
+constexpr float Q_ACCEL = 14.0f;   // aceleración en suelo
+constexpr float Q_AIRACCEL = 2.5f; // aceleración en aire (air control)
+constexpr float Q_FRICTION = 5.0f; // fricción en suelo
+constexpr float Q_GRAVITY = 22.0f; // gravedad
+constexpr float Q_JUMPSPEED = 6.5f; // velocidad vertical inicial del salto
+
 } // namespace C
 
 enum AppState {
@@ -204,6 +214,11 @@ struct Player {
   float hiddenExitYaw = 0.0f;
   int hiddenCellX = -1;
   int hiddenCellY = -1;
+
+  Vector3 velocity = {0, 0, 0};
+  bool onGround = true;
+  bool jumpHeld = false;
+  float groundZ = 0.0f; // altura del suelo bajo el jugador (rampas en Fase 5)
 };
 
 struct Enemy {
