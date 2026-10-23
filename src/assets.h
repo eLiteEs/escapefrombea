@@ -44,4 +44,7 @@ struct Assets {
   void loadItemTextures();
   void loadMusic();
   void loadSounds();
+  void loadFonts();
+
+  Font font = {};
 };

@@ -5,6 +5,17 @@ namespace UI {
 float scale = 1.0f;
 int colorblind = CB_NONE;
 
+Font font = {}; // ← se asigna desde Game::init()
+
+void T(const char *t, int x, int y, int size, Color c) {
+  DrawTextEx(font, t, {(float)x, (float)y}, (float)S(size), 1.0f, c);
+}
+
+int M(const char *t, int size) {
+  Vector2 v = MeasureTextEx(font, t, (float)S(size), 1.0f);
+  return (int)v.x;
+}
+
 Color PlayerColor(int idx) {
   if (colorblind == CB_NONE)
     return idx == 0 ? GOLD : SKYBLUE;

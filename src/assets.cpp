@@ -173,12 +173,36 @@ void Assets::loadSounds() {
   sfxDrink = loadSoundSmart("sfx_drink.ogg");
 }
 
+void Assets::loadFonts() {
+  // Codepoints que necesitas (ASCII + Latin-1 Supplement para castellano)
+  // Puedes generar el array con LoadCodepoints desde un string
+  const char *chars = " !\"#$%&'()*+,-./0123456789:;<=>?@"
+                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
+                      "abcdefghijklmnopqrstuvwxyz{|}~"
+                      "¡¿ÁÉÍÓÚÜÑáéíóúüñ"
+                      "«»“”‘’—–…°ªº€";
+
+  int cpCount = 0;
+  int *codepoints = LoadCodepoints(chars, &cpCount);
+
+  font = LoadFontEx(Paths::font("font.ttf").c_str(), 64, codepoints, cpCount);
+  UnloadCodepoints(codepoints);
+
+  if (font.texture.id != 0) {
+    SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+    TraceLog(LOG_INFO, "[Font] Cargada: %d glyphs", font.glyphCount);
+  } else {
+    font = GetFontDefault();
+  }
+}
+
 void Assets::load() {
   loadEnemyTextures();
   loadWallTextures();
   loadItemTextures();
   loadMusic();
   loadSounds();
+  loadFonts();
 }
 
 void Assets::unload() {
@@ -212,6 +236,10 @@ void Assets::unload() {
     UnloadSound(sfxThrow);
   if (sfxPickup.frameCount > 0)
     UnloadSound(sfxPickup);
+
+  if (font.texture.id != 0 && font.texture.id != GetFontDefault().texture.id) {
+    UnloadFont(font);
+  }
 }
 
 void Assets::applyVolumes(float master, float music, float sfx) {

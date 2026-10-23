@@ -9,10 +9,12 @@ constexpr const char *STORIES = "assets/stories/";
 constexpr const char *TRANSLATIONS = "assets/translations/";
 constexpr const char *LEGACY_AUDIO = "assets/audio/";
 constexpr const char *LEVELS = "assets/levels/";
+constexpr const char *FONTS = "assets/fonts/";
 
 inline std::string sprite(const char *n) { return std::string(SPRITES) + n; }
 inline std::string sound(const char *n) { return std::string(SOUNDS) + n; }
 inline std::string music(const char *n) { return std::string(MUSIC) + n; }
+inline std::string font(const char *n) { return std::string(FONTS) + n; }
 inline std::string translation(const char *n) {
   return std::string(TRANSLATIONS) + n;
 }

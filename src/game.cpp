@@ -276,6 +276,8 @@ void Game::init() {
       return L("load.sounds", "Cargando sonidos...");
     case 5:
       return L("load.world", "Preparando mundo...");
+    case 6:
+      return L("load.fonts", "Preparando fuentes...");
     }
     return "";
   };
@@ -301,10 +303,14 @@ void Game::init() {
       credits.load("assets/credits.txt");
       attract.init();
       break;
+    case 6:
+      assets.loadFonts();
+      UI::font = assets.font;
+      break;
     }
   };
 
-  const int N = 6;
+  const int N = 7;
   for (int i = 0; i < N; ++i) {
     drawSplash((float)i / (float)N, stepLabel(i));
     doStep(i);
