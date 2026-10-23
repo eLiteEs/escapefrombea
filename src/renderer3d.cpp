@@ -219,6 +219,72 @@ void Renderer3D::drawTintedModel(Model &model, Color tint) {
   ++m_drawCalls;
 }
 
+void Renderer3D::drawCrossQuads(Vector3 base, Vector2 size, Texture2D tex,
+                                Color tint) {
+  Texture2D useTex = (tex.id != 0) ? tex : m_white;
+  if (useTex.id == 0)
+    return;
+
+  float hw = size.x * 0.5f;
+  float h = size.y;
+  float x0 = base.x - hw;
+  float x1 = base.x + hw;
+  float z0 = base.z - hw;
+  float z1 = base.z + hw;
+  float y0 = base.y;
+  float y1 = base.y + h;
+
+  rlSetTexture(useTex.id);
+
+  rlBegin(RL_QUADS);
+  rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+
+  // --- Quad 0° cara +Z ---
+  rlTexCoord2f(0.0f, 1.0f);
+  rlVertex3f(x0, y0, base.z);
+  rlTexCoord2f(1.0f, 1.0f);
+  rlVertex3f(x1, y0, base.z);
+  rlTexCoord2f(1.0f, 0.0f);
+  rlVertex3f(x1, y1, base.z);
+  rlTexCoord2f(0.0f, 0.0f);
+  rlVertex3f(x0, y1, base.z);
+
+  // --- Quad 0° cara -Z ---
+  rlTexCoord2f(1.0f, 1.0f);
+  rlVertex3f(x1, y0, base.z);
+  rlTexCoord2f(0.0f, 1.0f);
+  rlVertex3f(x0, y0, base.z);
+  rlTexCoord2f(0.0f, 0.0f);
+  rlVertex3f(x0, y1, base.z);
+  rlTexCoord2f(1.0f, 0.0f);
+  rlVertex3f(x1, y1, base.z);
+
+  // --- Quad 90° cara +X ---
+  rlTexCoord2f(0.0f, 1.0f);
+  rlVertex3f(base.x, y0, z1);
+  rlTexCoord2f(1.0f, 1.0f);
+  rlVertex3f(base.x, y0, z0);
+  rlTexCoord2f(1.0f, 0.0f);
+  rlVertex3f(base.x, y1, z0);
+  rlTexCoord2f(0.0f, 0.0f);
+  rlVertex3f(base.x, y1, z1);
+
+  // --- Quad 90° cara -X ---
+  rlTexCoord2f(1.0f, 1.0f);
+  rlVertex3f(base.x, y0, z0);
+  rlTexCoord2f(0.0f, 1.0f);
+  rlVertex3f(base.x, y0, z1);
+  rlTexCoord2f(0.0f, 0.0f);
+  rlVertex3f(base.x, y1, z1);
+  rlTexCoord2f(1.0f, 0.0f);
+  rlVertex3f(base.x, y1, z0);
+
+  rlEnd();
+  rlSetTexture(0);
+
+  ++m_drawCalls;
+}
+
 void Renderer3D::render(Maze &maze, Vector3 eye, float yaw, float pitch,
                         float fovVerticalDeg, float renderDist,
                         const std::vector<WorldSprite3D> &sprites,
@@ -338,6 +404,10 @@ void Renderer3D::render(Maze &maze, Vector3 eye, float yaw, float pitch,
 
   // Sprites
   for (const auto &s : sprites) {
+    if (s.crossedQuads) {
+      drawCrossQuads(s.pos, s.size, s.tex, s.tint);
+      continue;
+    }
     Texture2D tex = (s.tex.id != 0) ? s.tex : m_white;
     if (tex.id == 0)
       continue;

@@ -51,6 +51,7 @@ struct Raycaster {
   RayTex enemyTex[ENEMY_KIND_COUNT];
   RayTex itemTex[ITEM_KIND_COUNT];
   RayTex portalTex;
+  RayTex fountainTex;
 
   // --- Control de carga diferida ---
   // Enemigos e items se cargan al primer startLevel, no al arrancar

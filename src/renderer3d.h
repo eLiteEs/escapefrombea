@@ -13,6 +13,7 @@ struct WorldSprite3D {
   Vector2 size = {1.0f, 1.0f}; // ancho / alto en unidades de mundo
   Texture2D tex = {};
   Color tint = {255, 255, 255, 255};
+  bool crossedQuads = false;
 };
 
 // Renderer 3D por chunks. No posee los modelos: son propiedad de Maze.
@@ -43,7 +44,6 @@ private:
   void ensureFallback();
   void buildVisibility(const Maze &maze, float ex, float ez, float dist);
   bool chunkHasVisibleCell(const Maze &maze, int cx, int cy) const;
-  void drawTintedModel(Model &model, Color tint);
 
   std::vector<unsigned char> m_visible; // w*h, 1 = potencialmente visible
   int m_visW = 0;
@@ -51,6 +51,8 @@ private:
   int m_drawnChunks = 0;
   int m_drawCalls = 0;
   Texture2D m_white = {};
+  void drawTintedModel(Model &model, Color tint);
+  void drawCrossQuads(Vector3 base, Vector2 size, Texture2D tex, Color tint);
 };
 
 #endif // RENDERER3D_H

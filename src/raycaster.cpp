@@ -106,6 +106,7 @@ void Raycaster::unload() {
   for (auto &t : itemTex)
     t.unload();
   portalTex.unload();
+  fountainTex.unload();
   dynamicLoaded = false;
 }
 
@@ -124,6 +125,28 @@ bool Raycaster::loadStaticTextures() {
     portalTex.pixels.assign(64, Color{70, 220, 130, 255});
     portalTex.loaded = true;
   }
+
+  if (!fountainTex.loadFromFile(Paths::sprite("fountain.png").c_str())) {
+    // Fallback: 32x32 con franjas horizontales azul/gris
+    fountainTex.w = 32;
+    fountainTex.h = 32;
+    fountainTex.pixels.resize(32 * 32);
+    for (int y = 0; y < 32; ++y) {
+      Color band;
+      if (y < 8)
+        band = {180, 230, 255, 255};
+      else if (y < 16)
+        band = {60, 180, 220, 255};
+      else if (y < 24)
+        band = {90, 95, 115, 255};
+      else
+        band = {50, 55, 75, 255};
+      for (int x = 0; x < 32; ++x)
+        fountainTex.pixels[y * 32 + x] = band;
+    }
+    fountainTex.loaded = true;
+  }
+
   return true;
 }
 
@@ -576,6 +599,19 @@ void Raycaster::render(const Player &pl, const Maze &maze,
         exitLocked ? (Color){200, 60, 60, 255} : (Color){200, 255, 220, 255};
     pushSprite({exitPos.x, 0.0f, exitPos.z}, 2.4f * pulse, 0.0f, &portalTex,
                portalTint);
+  }
+
+  {
+    // --- Fuentes (billboard) ---
+    for (int y = 0; y < maze.h; ++y) {
+      for (int x = 0; x < maze.w; ++x) {
+        if (!maze.hasFountain(x, y))
+          continue;
+        Vector3 center = maze.cellCenter(x, y);
+        pushSprite({center.x, 0.0f, center.z}, 1.5f, 1.5f, &fountainTex,
+                   Color{255, 255, 255, 255});
+      }
+    }
   }
 
   // Dibujar todos los sprites con zbuffer

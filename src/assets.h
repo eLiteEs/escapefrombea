@@ -21,6 +21,9 @@ struct Assets {
   bool hasWallBrick = false;
   bool hasFloorTile = false;
 
+  Texture2D fountainTex = {};
+  bool hasFountainTex = false;
+
   Music musicMenu = {};
   Music musicLevel = {};
   Sound sfxCaught = {};

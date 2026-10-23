@@ -4157,6 +4157,23 @@ void Game::renderPlayerView(const Player &pl) {
       }
     }
 
+    // 4.5. Fuentes (crossed quads, más natural que billboard)
+    for (int y = 0; y < maze.h; ++y) {
+      for (int x = 0; x < maze.w; ++x) {
+        if (!maze.hasFountain(x, y))
+          continue;
+        Vector3 center = maze.cellCenter(x, y);
+
+        WorldSprite3D s;
+        s.pos = {center.x, 0.0f, center.z};
+        s.size = {1.5f, 1.5f};
+        s.tex = assets.fountainTex;
+        s.tint = {255, 255, 255, 255};
+        s.crossedQuads = true;
+        sprites.push_back(s);
+      }
+    }
+
     // 5. Portal de salida
     float pulse = 1.0f + 0.15f * sinf((float)GetTime() * 4.0f);
     Color portalTint =

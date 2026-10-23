@@ -127,6 +127,35 @@ void Assets::loadItemTextures() {
     if (hasItemTex[d.kind])
       SetTextureFilter(itemTex[d.kind], TEXTURE_FILTER_BILINEAR);
   }
+
+  {
+    std::string path = Paths::sprite("fountain.png");
+    fountainTex = LoadTexture(path.c_str());
+    hasFountainTex = (fountainTex.id != 0);
+
+    if (hasFountainTex) {
+      SetTextureFilter(fountainTex, TEXTURE_FILTER_BILINEAR);
+    } else {
+      // Fallback procedural: franjas horizontales azul/gris
+      Image img = GenImageColor(32, 32, BLANK);
+      for (int y = 0; y < 32; ++y) {
+        Color band;
+        if (y < 8)
+          band = {180, 230, 255, 255};
+        else if (y < 16)
+          band = {60, 180, 220, 255};
+        else if (y < 24)
+          band = {90, 95, 115, 255};
+        else
+          band = {50, 55, 75, 255};
+        for (int x = 0; x < 32; ++x)
+          ImageDrawPixel(&img, x, y, band);
+      }
+      fountainTex = LoadTextureFromImage(img);
+      UnloadImage(img);
+      hasFountainTex = (fountainTex.id != 0);
+    }
+  }
 }
 
 void Assets::loadMusic() {
@@ -163,6 +192,9 @@ void Assets::unload() {
   for (int i = 0; i < ITEM_KIND_COUNT; ++i)
     if (hasItemTex[i] && itemTex[i].id != 0)
       UnloadTexture(itemTex[i]);
+
+  if (hasFountainTex && fountainTex.id != 0)
+    UnloadTexture(fountainTex);
 
   if (musicMenu.stream.buffer != nullptr)
     UnloadMusicStream(musicMenu);

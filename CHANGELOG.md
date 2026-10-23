@@ -1,10 +1,10 @@
-# Release Beta 1.5.2 (v1.5.2b) Release notes:
+# Release 1.0 (v1.0r) Release notes:
 
-- Modified size of the splash
-- Now when you die your inventory isn't cleaned
-- Added drink sound and tent throw sound
-- Added translations to story mode
-- Removed annoying noise when clearing a level
-- Added keys to story mode custom levels
-- Added speedrun mode
-- Reworked save system so now you can have infinite runs
+- Optimized the game
+- Reduced binaries size
+- Added dynamic binaries
+- Added .msi windows installer
+- Reduced sprites and sounds size
+- Made a custom raycaster to get lower RAM
+- Updated movement
+- Added 2D CPU renderer
