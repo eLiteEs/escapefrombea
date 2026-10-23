@@ -1050,7 +1050,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
   const int pad = 12;
   const int boxW = 320;
-  const int boxH = 130;
+  const int boxH = 160;
   const int bx = vw - boxW - pad;
   const int by = pad;
 
@@ -1066,12 +1066,14 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   UI::T(hdr, tx, ty, 18, RAYWHITE);
   ty += 24;
 
+  // Tiempo del nivel actual
   float cur = totalPlaytime - sr.lastLevelStart;
   char curT[32];
   formatSplitTime(cur, curT, sizeof(curT));
   UI::T(curT, tx, ty, 26, RAYWHITE);
   ty += 30;
 
+  // Delta contra el mejor split de este nivel
   int idx = (int)sr.splits.size();
   if (idx < (int)sr.bestSplits.size() && sr.bestSplits[idx] > 0.0f) {
     float delta = cur - sr.bestSplits[idx];
@@ -1083,26 +1085,32 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   } else {
     UI::T("-:--.---", tx, ty, 22, GRAY);
   }
-  ty += 26;
+  ty += 28;
 
-  float elapsed = 0.0f;
+  // Tiempo total de la run (suma de splits completados + nivel actual)
+  float total = 0.0f;
   for (float s : sr.splits)
-    elapsed += s;
-  elapsed += cur;
+    total += s;
+  total += cur;
 
+  char totT[32];
+  formatSplitTime(total, totT, sizeof(totT));
+  UI::T(TextFormat("Total: %s", totT), tx, ty, 16, GOLD);
+  ty += 22;
+
+  // Predicción (si tenemos PB de niveles futuros)
   float remainingBest = 0.0f;
   for (int i = idx + 1; i < (int)sr.bestSplits.size(); ++i)
     remainingBest += sr.bestSplits[i];
 
-  if (elapsed > 0.0f) {
-    float predicted = elapsed + remainingBest;
+  if (remainingBest > 0.0f) {
+    float predicted = total + remainingBest;
     char pT[32];
     formatSplitTime(predicted, pT, sizeof(pT));
-    char line[64];
-    snprintf(line, sizeof(line), "Pred: %s", pT);
-    UI::T(line, tx, ty, 16, (Color){200, 200, 120, 255});
+    UI::T(TextFormat("Pred: %s", pT), tx, ty, 16, (Color){200, 200, 120, 255});
   }
 
+  // Flash "PB!"
   if (sr.pbFlashTimer > 0.0f) {
     float pulse = 0.5f + 0.5f * sinf(sr.pbFlashTimer * 12.0f);
     unsigned char a = (unsigned char)(pulse * 255);
@@ -1195,11 +1203,12 @@ void Game::drawConfigHub() {
   }
   if (uiButton(6, items, 30, L("common.back", "Volver"), &navIndexCfg,
                nullptr) ||
-      (navIndexCfg == 6 && consumeConfirm())) {
+      (navIndexCfg == 6 && consumeConfirm()) || consumeCancel()) {
     state = configReturn;
     if (configReturn == ST_PAUSED)
       navMenu = 0;
   }
+
   const char *hint =
       L("config.hint", "Sube/baja con D-pad, cambia con < > o A");
   int W = GetScreenWidth();
@@ -1530,7 +1539,7 @@ void Game::drawConfigControls() {
   }
   if (uiOptionEx(row, items, 40, L("common.back", "Volver"), "", &navIndex,
                  nullptr, 0) != UI_NONE ||
-      (IsKeyPressed(KEY_ESCAPE) && remapAction < 0))
+      (consumeCancel() && remapAction < 0))
     state = ST_CONFIG;
 
   const char *hint =
@@ -1892,6 +1901,7 @@ void Game::drawMenus() {
       saveListCursor = 0;
       saveListScroll = 0;
       saveDeleteConfirm = false;
+      saveListLastClickIdx = -1;
       state = ST_SAVE_LIST;
       navIndex = 0;
     }
@@ -2064,10 +2074,6 @@ void Game::drawSaveList() {
       Rectangle row = {(float)listX, (float)y, (float)listW, (float)(rowH - 6)};
       Vector2 mp = GetMousePosition();
       bool hover = CheckCollisionPointRec(mp, row);
-      Vector2 md = GetMouseDelta();
-      bool mouseMoved = (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f);
-      if (hover && mouseMoved)
-        saveListCursor = idx;
 
       bool selected = (idx == saveListCursor);
       bool clicked = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -2105,8 +2111,20 @@ void Game::drawSaveList() {
       UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, GRAY);
 
       if (clicked) {
-        loadGame(e.id);
-        return;
+        double now = GetTime();
+        bool isDoubleClick = (idx == saveListLastClickIdx &&
+                              (now - saveListLastClickTime) < 0.4);
+
+        if (isDoubleClick) {
+          // Doble-click: entrar en la partida
+          loadGame(e.id);
+          return;
+        }
+
+        // Single-click: seleccionar
+        saveListCursor = idx;
+        saveListLastClickIdx = idx;
+        saveListLastClickTime = now;
       }
     }
   }
@@ -2198,10 +2216,9 @@ void Game::drawSaveList() {
     createBuffer.difficulty = DIFF_NORMAL;
     createBuffer.speedrun = false;
     createBuffer.twoPlayers = false;
-    createBuffer.runSeed =
-        (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
-    if (createBuffer.runSeed == 0)
-      createBuffer.runSeed = 1;
+    // Buffer de seed EMPTY: el usuario puede teclear una nueva, o dejar
+    // vacío para que se genere aleatoria al confirmar.
+    seedEditBuf[0] = '\0';
     state = ST_SAVE_CREATE;
     navIndex = 0;
   }
@@ -2282,7 +2299,9 @@ void Game::drawSaveCreate() {
     *outHover = hover;
   };
 
-  // --- Nombre ---
+  // ============================================================
+  // Fila 0 — Nombre (input editable)
+  // ============================================================
   {
     int x = GetScreenWidth() / 2 - 340;
     int y = rowY(0);
@@ -2305,19 +2324,24 @@ void Game::drawSaveCreate() {
     int tx = x + 680 - tw - 22;
     UI::T(createBuffer.name.c_str(), tx, y + 14, 24, GOLD);
 
-    int k = GetCharPressed();
-    while (k > 0) {
-      if (selected && k >= 32 && k < 127 && createBuffer.name.size() < 40)
-        createBuffer.name += (char)k;
-      k = GetCharPressed();
+    // Input SOLO si está seleccionado: así no roba caracteres a otros campos
+    if (selected) {
+      int k = GetCharPressed();
+      while (k > 0) {
+        if (k >= 32 && k < 127 && createBuffer.name.size() < 40)
+          createBuffer.name += (char)k;
+        k = GetCharPressed();
+      }
+      if (IsKeyPressed(KEY_BACKSPACE) && !createBuffer.name.empty())
+        createBuffer.name.pop_back();
     }
-    if (selected && IsKeyPressed(KEY_BACKSPACE) && !createBuffer.name.empty())
-      createBuffer.name.pop_back();
     if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
       UI::T("_", tx + tw, y + 14, 24, GOLD);
   }
 
-  // --- Modo ---
+  // ============================================================
+  // Fila 1 — Modo
+  // ============================================================
   {
     bool sel = false, hov = false;
     const char *modeStr = (createBuffer.mode == MODE_STORY)
@@ -2339,7 +2363,9 @@ void Game::drawSaveCreate() {
     }
   }
 
-  // --- Dificultad ---
+  // ============================================================
+  // Fila 2 — Dificultad
+  // ============================================================
   {
     const char *diffStr;
     switch (createBuffer.difficulty) {
@@ -2370,7 +2396,9 @@ void Game::drawSaveCreate() {
     }
   }
 
-  // --- Jugadores ---
+  // ============================================================
+  // Fila 3 — Jugadores
+  // ============================================================
   {
     char buf[8];
     snprintf(buf, sizeof(buf), "%s", createBuffer.twoPlayers ? "2" : "1");
@@ -2386,7 +2414,9 @@ void Game::drawSaveCreate() {
     }
   }
 
-  // --- Speedrun ---
+  // ============================================================
+  // Fila 4 — Speedrun
+  // ============================================================
   {
     const char *sr =
         createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
@@ -2402,18 +2432,17 @@ void Game::drawSaveCreate() {
     }
   }
 
-  // --- Sección infinito ---
+  // ============================================================
+  // Sección infinito — Seed, Aleatorizar, Multiplicadores
+  // ============================================================
   if (endless) {
-    // Seed
+    // --- Seed (input editable con seedEditBuf) ---
     {
       int x = GetScreenWidth() / 2 - 340;
       int y = rowY(seedRow);
       Rectangle r = {(float)x, (float)y, 680, 52};
       Vector2 mp = GetMousePosition();
       bool hover = CheckCollisionPointRec(mp, r);
-      Vector2 md = GetMouseDelta();
-      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-        navIndex = seedRow;
       if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         navIndex = seedRow;
       bool selected = (navIndex == seedRow);
@@ -2424,29 +2453,39 @@ void Game::drawSaveCreate() {
                            selected ? SKYBLUE : (Color){80, 90, 125, 255});
       UI::T(L("endless.seed", "Seed"), x + 22, y + 14, 24, RAYWHITE);
 
-      char buf[32];
-      snprintf(buf, sizeof(buf), "%u", createBuffer.runSeed);
-      int vw = UI::M(buf, 24);
-      int vx = x + 680 - vw - 22;
-      UI::T(buf, vx, y + 14, 24, GOLD);
-
-      int k = GetCharPressed();
-      while (k > 0) {
-        if (selected && k >= '0' && k <= '9') {
-          uint64_t v =
-              (uint64_t)createBuffer.runSeed * 10ull + (uint64_t)(k - '0');
-          if (v <= 0xFFFFFFFFull)
-            createBuffer.runSeed = (uint32_t)v;
-        }
-        k = GetCharPressed();
+      // Texto a mostrar: la seed tecleada, o un hint si está vacía
+      const char *display = seedEditBuf;
+      Color dispCol = GOLD;
+      if (seedEditBuf[0] == '\0') {
+        display = L("endless.seed.random", "(vacío = aleatoria)");
+        dispCol = GRAY;
       }
-      if (selected && IsKeyPressed(KEY_BACKSPACE))
-        createBuffer.runSeed /= 10;
+      int vw = UI::M(display, 24);
+      int vx = x + 680 - vw - 22;
+      UI::T(display, vx, y + 14, 24, dispCol);
+
+      // Input SOLO si está seleccionado
+      if (selected) {
+        int k = GetCharPressed();
+        while (k > 0) {
+          if (k >= '0' && k <= '9' && strlen(seedEditBuf) < 10) {
+            size_t len = strlen(seedEditBuf);
+            seedEditBuf[len] = (char)k;
+            seedEditBuf[len + 1] = '\0';
+          }
+          k = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE)) {
+          size_t len = strlen(seedEditBuf);
+          if (len > 0)
+            seedEditBuf[len - 1] = '\0';
+        }
+      }
       if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
         UI::T("_", vx + vw, y + 14, 24, GOLD);
     }
 
-    // Aleatorizar
+    // --- Aleatorizar seed ---
     {
       int x = GetScreenWidth() / 2 - 340;
       int y = rowY(randomRow);
@@ -2470,13 +2509,13 @@ void Game::drawSaveCreate() {
         uint32_t s = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
         if (s == 0)
           s = 1;
-        createBuffer.runSeed = s;
+        snprintf(seedEditBuf, sizeof(seedEditBuf), "%u", s);
         if (selected)
           confirm = false;
       }
     }
 
-    // Multiplicadores
+    // --- Multiplicadores ---
     auto multRowFn = [&](int row, const char *label, int *value) {
       int x = GetScreenWidth() / 2 - 340;
       int y = rowY(row);
@@ -2519,7 +2558,9 @@ void Game::drawSaveCreate() {
               &createBuffer.itemMult);
   }
 
-  // --- Botones create/cancel ---
+  // ============================================================
+  // Botones Crear / Volver
+  // ============================================================
   auto actionBtn = [&](int row, const char *label) -> bool {
     int x = GetScreenWidth() / 2 - 340;
     int y = rowY(row);
@@ -2546,12 +2587,19 @@ void Game::drawSaveCreate() {
   if (createClicked || (navIndex == createRow && consumeConfirm())) {
     if (createBuffer.name.empty())
       createBuffer.name = "New world";
-    if (createBuffer.mode == MODE_ENDLESS && createBuffer.runSeed == 0) {
-      createBuffer.runSeed =
-          (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
-      if (createBuffer.runSeed == 0)
-        createBuffer.runSeed = 1;
+
+    if (createBuffer.mode == MODE_ENDLESS) {
+      // Parsear la seed del buffer de texto. Si está vacía o es 0,
+      // generar una aleatoria.
+      uint32_t parsed = (uint32_t)strtoul(seedEditBuf, nullptr, 10);
+      if (parsed == 0) {
+        parsed = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+        if (parsed == 0)
+          parsed = 1;
+      }
+      createBuffer.runSeed = parsed;
     }
+
     startNewGame(createBuffer);
   } else if (cancelClicked || IsKeyPressed(KEY_ESCAPE) || consumeCancel()) {
     state = ST_SAVE_LIST;

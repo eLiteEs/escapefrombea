@@ -219,4 +219,11 @@ struct Game {
   void drawInventory(const Player &pl, int vw, int vh);
   void drawHandItem2D(const Player &pl, int vw, int vh);
   void renderPlayerView(const Player &pl);
+
+  // Buffer de texto para editar la seed en la creación de partida
+  char seedEditBuf[16] = {0};
+
+  // Detección de doble click en la lista de saves
+  int saveListLastClickIdx = -1;
+  double saveListLastClickTime = 0.0;
 };
