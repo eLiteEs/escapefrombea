@@ -293,11 +293,6 @@ dist-linux-dynamic: linux-dynamic
 	@cp $(BUILD_DIR)/$(APP_NAME) $(DIST_LINUX_DYNAMIC_DIR)/$(APP_NAME)
 	@chmod +x $(DIST_LINUX_DYNAMIC_DIR)/$(APP_NAME)
 	@strip $(DIST_LINUX_DYNAMIC_DIR)/$(APP_NAME) || true
-	@libraylib=$$(ldd $(BUILD_DIR)/$(APP_NAME) | grep libraylib | awk '{print $$3}'); \
-		if [ -n "$$libraylib" ] && [ -f "$$libraylib" ]; then \
-			cp "$$libraylib" $(DIST_LINUX_DYNAMIC_DIR)/; \
-			echo "   libraylib.so copiada"; \
-		fi
 	@command -v upx >/dev/null && upx --best --lzma $(DIST_LINUX_DYNAMIC_DIR)/$(APP_NAME) || true
 	@$(MAKE) --no-print-directory package-linux-dynamic
 	@cd $(DIST_DIR) && rm -f $(APP_NAME)-linux-dynamic.zip && \
@@ -320,7 +315,6 @@ dist-windows-dynamic: windows-dynamic
 	@rm -rf $(DIST_WIN_DYNAMIC_DIR)
 	@mkdir -p $(DIST_WIN_DYNAMIC_DIR)
 	@cp $(BUILD_DIR)/$(APP_NAME)-dynamic.exe $(DIST_WIN_DYNAMIC_DIR)/$(APP_NAME).exe
-	@cp $(MINGW_RAYLIB_DLL) $(DIST_WIN_DYNAMIC_DIR)/
 	@command -v upx >/dev/null && upx --best --lzma $(DIST_WIN_DYNAMIC_DIR)/$(APP_NAME).exe || true
 	@$(MAKE) --no-print-directory package-windows-dynamic
 	@cd $(DIST_DIR) && rm -f $(APP_NAME)-windows-dynamic.zip && \
