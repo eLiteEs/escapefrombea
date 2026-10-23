@@ -4005,7 +4005,7 @@ void Game::drawHandItem2D(const Player &pl, int vw, int vh) {
 
   Texture2D tex = assets.itemTex[k];
   DrawTexturePro(tex, {0, 0, (float)tex.width, (float)tex.height},
-                 {x, y, size, size}, {0, 0}, -10.0f, WHITE);
+                 {x, y - 200, size, size}, {0, 0}, -10.0f, WHITE);
 }
 
 void Game::renderPlayerView(const Player &pl) {
