@@ -13,6 +13,9 @@
 * Creeper_Ciller78 (freesound)
 * nuFF3 (freesound)
 * .name (freesound) 
+* copyc4t (freesound)
+* Vilkas_Sound (freesound)
+* dalek_reaver (freesound)
 
 - Sprites
 * rana
