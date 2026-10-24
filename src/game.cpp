@@ -4459,10 +4459,6 @@ void Game::speedrunFinishRun() {
     return;
   }
 
-  TraceLog(LOG_INFO, "[GHOST] finishRun: active=%d splits=%d levels=%d",
-           sr.active ? 1 : 0, (int)sr.splits.size(),
-           (int)srGhostRec.levels.size());
-
   SpeedrunEntry e;
   e.seed = sr.seed;
   e.mode = sr.mode;
@@ -4489,12 +4485,6 @@ void Game::speedrunFinishRun() {
 
   saves.addSpeedrun(e);
 
-  TraceLog(LOG_INFO,
-           "[GHOST] isNewPB=%d isComplete=%d prevBest=%.2f prevMaxLvl=%d "
-           "newTotal=%.2f newLvls=%d",
-           isNewPB ? 1 : 0, isComplete ? 1 : 0, prevBest, (int)prevMaxLevels,
-           e.total, (int)sr.splits.size());
-
   if (isNewPB && isComplete && !srGhostRec.levels.empty()) {
     // Cerrar la duración del último nivel grabado
     int lastLvl = level - 1;
@@ -4503,7 +4493,6 @@ void Game::speedrunFinishRun() {
       gl.duration = gl.samples.size() * C::GHOST_SAMPLE_DT;
     }
     saves.saveGhost(sr.seed, sr.mode, srGhostRec);
-    TraceLog(LOG_INFO, "[GHOST] saveGhost result=");
   }
 
   sr.active = false;
@@ -4826,9 +4815,6 @@ void Game::renderPlayerView(const Player &pl) {
     if (cfg.useRenderer3D) {
       static int logTick = 0;
       if (++logTick % 60 == 0) {
-        TraceLog(LOG_INFO, "[R3D-DIAG] drawn=%d calls=%d visSize=%zu",
-                 r3d.lastDrawnChunks(), r3d.lastDrawCalls(),
-                 r3d.visibility().size());
       }
     }
   } else {
