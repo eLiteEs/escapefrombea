@@ -226,4 +226,17 @@ struct Game {
   // Detección de doble click en la lista de saves
   int saveListLastClickIdx = -1;
   double saveListLastClickTime = 0.0;
+
+  void drawConfigSpeedrun(); // ← NUEVO
+
+  // Navegación del menú de speedruns
+  int srMenuRunCursor = 0;
+  int srMenuRunScroll = 0;
+  bool srMenuDeleteConfirm = false;
+  int srMenuDeleteIndex = -1;
+
+  GhostRun srGhostRec;      // run actual siendo grabado
+  GhostRun srGhostPlayback; // ghost cargado para la categoría
+  bool srGhostPlaybackValid = false;
+  float srGhostSampleTimer = 0.0f;
 };

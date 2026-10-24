@@ -89,6 +89,9 @@ void Assets::loadEnemyTextures() {
   p = Paths::sprite("enemy_hypergamy.png");
   enemyTex[ENEMY_HYPERGAMY] =
       loadTextureOrProcedural(p.c_str(), (Color){160, 40, 200, 255});
+  p = Paths::sprite("player.png");
+  enemyTex[PLAYER] =
+      loadTextureOrProcedural(p.c_str(), (Color){160, 160, 160, 255});
 
   p = Paths::sprite("exit_portal.png");
   portalTex = LoadTexture(p.c_str());

@@ -39,6 +39,7 @@ int main() {
   SetTraceLogLevel(LOG_INFO);
 #endif
 
+  SetTraceLogLevel(LOG_INFO);
   Game game;
 
 #if defined(__EMSCRIPTEN__)

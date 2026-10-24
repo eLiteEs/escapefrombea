@@ -22,6 +22,11 @@ static void clampSelf(Config &c) {
   c.raycastRes = std::clamp(c.raycastRes, 0, C::RC_RES_COUNT - 1);
   c.guiScale = std::clamp(c.guiScale, 0.75f, 2.0f);
   c.colorblindMode = std::clamp(c.colorblindMode, 0, CB_COUNT - 1);
+  c.srOverlayAnchor = std::clamp(c.srOverlayAnchor, 0, 8);
+  c.srOverlaySize = std::clamp(c.srOverlaySize, 0, 2);
+  c.srOverlayOffsetX = std::clamp(c.srOverlayOffsetX, -200, 200);
+  c.srOverlayOffsetY = std::clamp(c.srOverlayOffsetY, -200, 200);
+  c.srPrevSplitsCount = std::clamp(c.srPrevSplitsCount, 0, 10);
   if (c.language.empty())
     c.language = "es";
 }
@@ -113,6 +118,7 @@ void Config::save() const {
   }
   fprintf(f, "windowW=%d\n", windowW);
   fprintf(f, "windowH=%d\n", windowH);
+  fprintf(f, "srShowGhost=%d\n", srShowGhost ? 1 : 0);
   fprintf(f, "fpsLimit=%d\n", fpsLimit);
   fprintf(f, "guiScale=%.3f\n", (double)guiScale);
   fprintf(f, "colorblindMode=%d\n", colorblindMode);
@@ -124,6 +130,15 @@ void Config::save() const {
   fprintf(f, "renderDistance=%d\n", renderDistance);
   fprintf(f, "raycastRes=%d\n", raycastRes);
   fprintf(f, "useRenderer3D=%d\n", useRenderer3D ? 1 : 0);
+  fprintf(f, "srOverlayAnchor=%d\n", srOverlayAnchor);
+  fprintf(f, "srOverlaySize=%d\n", srOverlaySize);
+  fprintf(f, "srOverlayOffsetX=%d\n", srOverlayOffsetX);
+  fprintf(f, "srOverlayOffsetY=%d\n", srOverlayOffsetY);
+  fprintf(f, "srShowDelta=%d\n", srShowDelta ? 1 : 0);
+  fprintf(f, "srShowTotal=%d\n", srShowTotal ? 1 : 0);
+  fprintf(f, "srShowPredicted=%d\n", srShowPredicted ? 1 : 0);
+  fprintf(f, "srShowPbFlash=%d\n", srShowPbFlash ? 1 : 0);
+  fprintf(f, "srPrevSplitsCount=%d\n", srPrevSplitsCount);
   fclose(f);
 }
 
@@ -216,6 +231,26 @@ void Config::load() {
       holdToSprint = asInt(val) != 0;
     else if (!strcmp(key, "noJumpscares"))
       noJumpscares = asInt(val) != 0;
+    else if (!strcmp(key, "srOverlayAnchor"))
+      srOverlayAnchor = asInt(val);
+    else if (!strcmp(key, "srOverlaySize"))
+      srOverlaySize = asInt(val);
+    else if (!strcmp(key, "srOverlayOffsetX"))
+      srOverlayOffsetX = asInt(val);
+    else if (!strcmp(key, "srOverlayOffsetY"))
+      srOverlayOffsetY = asInt(val);
+    else if (!strcmp(key, "srShowDelta"))
+      srShowDelta = asInt(val) != 0;
+    else if (!strcmp(key, "srShowTotal"))
+      srShowTotal = asInt(val) != 0;
+    else if (!strcmp(key, "srShowPredicted"))
+      srShowPredicted = asInt(val) != 0;
+    else if (!strcmp(key, "srShowPbFlash"))
+      srShowPbFlash = asInt(val) != 0;
+    else if (!strcmp(key, "srPrevSplitsCount"))
+      srPrevSplitsCount = asInt(val);
+    else if (!strcmp(key, "srShowGhost"))
+      srShowGhost = asInt(val) != 0;
     else {
       for (int p = 0; p < 2; ++p) {
         char buf[16];

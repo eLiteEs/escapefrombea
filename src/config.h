@@ -68,4 +68,19 @@ struct Config {
   bool bigSubtitles = false;
   bool holdToSprint = true;
   bool noJumpscares = false;
+
+  bool srShowGhost = true;
+
+  // Overlay de speedrun
+  int srOverlayAnchor =
+      1;                 // 0..8 (3x3 grid: TL, TC, TR, ML, MC, MR, BL, BC, BR)
+  int srOverlaySize = 1; // 0=small, 1=medium, 2=large
+  int srOverlayOffsetX = 0; // -200..200 px (ajuste fino sobre el anchor)
+  int srOverlayOffsetY = 0;
+  bool srShowDelta = true;      // delta vs PB
+  bool srShowTotal = true;      // tiempo total
+  bool srShowPredicted = true;  // predicción
+  bool srShowPrevSplits = true; // lista de niveles anteriores
+  int srPrevSplitsCount = 5;    // cuántos mostrar (0..10)
+  bool srShowPbFlash = true;    // "PB!" cuando bates split
 };

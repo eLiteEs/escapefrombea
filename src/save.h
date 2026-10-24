@@ -10,7 +10,7 @@
 // -------------------------------------------------------------------------
 struct SaveEntry {
   std::string id; // "save_<ts>_<rand>"
-  std::string name = "New world";
+  std::string name = "New game";
 
   int level = 1;
   int maxLevel = 1;
@@ -51,6 +51,27 @@ struct SpeedrunEntry {
   std::vector<float> splits;
 };
 
+// --- Ghost ---
+// Una muestra de posición. Empaquetada a mano para ocupar 6 bytes.
+struct GhostSample {
+  int16_t x = 0;    // posición X en centímetros
+  int16_t z = 0;    // posición Z en centímetros
+  uint16_t yaw = 0; // ángulo normalizado: 0..65535 → 0..2π
+};
+
+// Los samples de un nivel concreto.
+struct GhostLevel {
+  float duration = 0.0f; // segundos que duró este nivel
+  std::vector<GhostSample> samples;
+};
+
+// Ghost completo de una run (todos los niveles).
+struct GhostRun {
+  uint32_t seed = 0;
+  int mode = 0;
+  std::vector<GhostLevel> levels; // levels[i] = nivel i+1
+};
+
 // -------------------------------------------------------------------------
 //  SaveManager — CRUD + historial de speedruns
 // -------------------------------------------------------------------------
@@ -88,12 +109,19 @@ public:
   void loadSpeedruns();
   void saveSpeedruns();
   void addSpeedrun(const SpeedrunEntry &e);
+  bool removeSpeedrunAt(int index); // ← NUEVO
 
   const std::vector<SpeedrunEntry> &speedruns() const { return speedruns_; }
 
   // Rellena out con el mejor split por índice para (seed, mode).
   // Índices sin datos quedan a 0.0f.
   void bestSplitsFor(uint32_t seed, int mode, std::vector<float> &out) const;
+
+  // Ghost I/O (1 fichero por categoría, solo el mejor run)
+  bool saveGhost(uint32_t seed, int mode, const GhostRun &g);
+  bool loadGhost(uint32_t seed, int mode, GhostRun &out) const;
+  bool deleteGhost(uint32_t seed, int mode);
+  bool hasGhost(uint32_t seed, int mode) const;
 
 private:
   std::vector<SaveEntry> entries_;

@@ -117,6 +117,10 @@ constexpr float Q_FRICTION = 5.0f; // fricción en suelo
 constexpr float Q_GRAVITY = 22.0f; // gravedad
 constexpr float Q_JUMPSPEED = 6.5f; // velocidad vertical inicial del salto
 
+// Speedrun ghost
+constexpr float GHOST_SAMPLE_HZ = 10.0f; // 10 muestras/segundo
+constexpr float GHOST_SAMPLE_DT = 1.0f / GHOST_SAMPLE_HZ;
+
 } // namespace C
 
 enum AppState {
@@ -129,6 +133,7 @@ enum AppState {
   ST_CONFIG_GAMEPLAY,
   ST_CONFIG_CONTROLS,
   ST_CONFIG_ACCESS,
+  ST_CONFIG_SPEEDRUN,
   ST_SPEEDRUN,
   ST_CINEMATIC,
   ST_LEVEL_INTRO,
@@ -150,6 +155,7 @@ enum EnemyKind {
   ENEMY_YE,
   ENEMY_ALMEIDA,
   ENEMY_HYPERGAMY,
+  PLAYER,
   ENEMY_KIND_COUNT
 };
 enum Diff { DIFF_NORMAL = 0, DIFF_EXPERT, DIFF_NIGHTMARE, DIFF_COUNT };
