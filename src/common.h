@@ -53,7 +53,7 @@ constexpr int FPS_OPTIONS[6] = {0, 30, 60, 120, 144, 240};
 constexpr int FPS_COUNT = 6;
 
 // Version
-constexpr const char *GAME_VERSION = "beta 1.5.4";
+constexpr const char *GAME_VERSION = "release 1.0.0r";
 constexpr const char *GAME_TITLE = "Escape From Marisa 3";
 
 // Jumpscare

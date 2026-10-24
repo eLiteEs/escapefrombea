@@ -18,7 +18,7 @@
 
 APP_NAME     := escape_from_bea
 GAME_TITLE   := Escape From Marisa 3 - Escape From Bea
-VERSION      ?= 1.5.4b
+VERSION      ?= 1.0.0r
 VERSION_MSI  ?= $(shell echo $(VERSION) | sed 's/[^0-9.].*//')
 
 SRC_DIR      := src
