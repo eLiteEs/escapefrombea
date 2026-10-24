@@ -413,6 +413,15 @@ void Game::beginPlay(bool two, GameMode m) {
     StopMusicStream(assets.musicMenu);
     musicMenuPlaying = false;
   }
+
+  for (int p = 0; p < 2; ++p) {
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      players[p].inventory[i].kind = ITEM_NONE;
+      players[p].inventory[i].count = 0;
+    }
+    players[p].selectedSlot = 0;
+  }
+
   requestEnterLevel(1);
 }
 
@@ -446,24 +455,42 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
     for (int i = 0; i < C::INV_SLOTS; ++i)
       p.inventory[i].count = p.inventory[i].count / 2;
   }
+
+  // Posición / orientación
   p.pos = spawn;
-  p.yaw = p.pitch = 0;
-  p.caught = p.escaped = false;
-  p.footstepT = 0;
+  p.pos.y = 0.0f; // asegurar que aterriza en el suelo
+  p.yaw = 0.0f;
+  p.pitch = 0.0f;
+
+  // Estado general
+  p.caught = false;
+  p.escaped = false;
+  p.footstepT = 0.0f;
   p.stamina = 1.0f;
   p.staminaDelay = 0.0f;
   p.exhausted = false;
   p.sprinting = false;
   p.escapeTime = 0.0f;
   p.caughtBy = -1;
+  p.hasKey = false;
+
+  // Esconderse
   p.hidden = false;
   p.hiddenExitPos = spawn;
   p.hiddenExitYaw = 0.0f;
   p.hiddenCellX = -1;
   p.hiddenCellY = -1;
+
+  // Inventario / armas
   p.throwCooldown = 0.0f;
   p.attackFlash = 0.0f;
-  p.hasKey = false;
+
+  // Movimiento estilo Quake — CRÍTICO: resetear para no heredar
+  // la velocidad del nivel anterior.
+  p.velocity = {0.0f, 0.0f, 0.0f};
+  p.onGround = true;
+  p.jumpHeld = false;
+  p.groundZ = 0.0f;
 }
 
 // =========================================================================
@@ -950,15 +977,47 @@ void Game::drawStaminaBar(const Player &pl, int vw, int vh) {
   int barH = 14;
   int bx = vw / 2 - barW / 2;
   int by = vh - 60;
+
   DrawRectangle(bx - 2, by - 2, barW + 4, barH + 4, (Color){0, 0, 0, 160});
   DrawRectangle(bx, by, barW, barH, (Color){40, 40, 55, 255});
-  Color c = pl.exhausted ? RED : (pl.stamina < 0.3f ? ORANGE : GREEN);
-  DrawRectangle(bx, by, (int)(barW * pl.stamina), barH, c);
+
+  float maxStam = C::STAM_WATER_MAX;
+  float clamped = std::min(pl.stamina, maxStam);
+  float clampedBase = std::min(clamped, 1.0f);        // 0..1
+  float clampedOver = std::max(0.0f, clamped - 1.0f); // 0..1
+
+  int halfW = barW / 2;
+
+  int baseW = (int)(halfW * clampedBase);
+  int overW = (int)(halfW * clampedOver);
+
+  Color cBase;
+  if (pl.exhausted)
+    cBase = RED;
+  else if (pl.stamina < 0.3f)
+    cBase = ORANGE;
+  else
+    cBase = GREEN;
+
+  Color cOver = (Color){80, 180, 255, 255}; // azul
+
+  if (baseW > 0)
+    DrawRectangle(bx, by, baseW, barH, cBase);
+
+  if (overW > 0)
+    DrawRectangle(bx + halfW, by, overW, barH, cOver);
+
+  if (pl.stamina > 0.05f || pl.stamina < 0.05f) {
+    DrawLine(bx + halfW, by, bx + halfW, by + barH, (Color){30, 30, 40, 200});
+  }
+
   DrawRectangleLines(bx, by, barW, barH, RAYWHITE);
+
   const char *label = pl.exhausted ? L("hud.stamina.exhausted", "Sin aliento")
                                    : L("hud.stamina", "Energía");
   int lw = UI::M(label, 14);
-  UI::T(label, vw / 2 - lw / 2, by - 18, 14, pl.exhausted ? RED : LIGHTGRAY);
+  Color lc = pl.exhausted ? RED : (pl.stamina > 1.0f ? cOver : LIGHTGRAY);
+  UI::T(label, vw / 2 - lw / 2, by - 18, 14, lc);
 }
 
 void Game::drawMinimap(const Player &pl, int vw) {
