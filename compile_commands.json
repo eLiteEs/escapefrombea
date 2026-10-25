@@ -248,6 +248,37 @@
     "output": "build/obj-linux/save.o"
   },
   {
+    "file": "src/game/util_format.cpp",
+    "arguments": [
+      "/usr/sbin/g++",
+      "-std=c++17",
+      "-Os",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Iinclude",
+      "-Iinclude",
+      "-Iinclude/render",
+      "-Iinclude/world",
+      "-Iinclude/game",
+      "-Iinclude/game/flow",
+      "-Iinclude/game/gameplay",
+      "-Iinclude/game/menus",
+      "-Iinclude/core",
+      "-Iinclude/ui",
+      "-Isrc",
+      "-c",
+      "src/game/util_format.cpp",
+      "-o",
+      "build/obj-linux/game/util_format.o"
+    ],
+    "directory": "/home/blasf/projects/escapefrommarisa3",
+    "output": "build/obj-linux/game/util_format.o"
+  },
+  {
     "file": "src/game/game.cpp",
     "arguments": [
       "/usr/sbin/g++",

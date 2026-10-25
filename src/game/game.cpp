@@ -8,6 +8,8 @@
 #include "player.hpp"
 #include "rlgl.h"
 #include "ui.hpp"
+#include "util_format.hpp"
+#include "gameplay_dialog.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,153 +21,6 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #endif
-
-// =========================================================================
-//  Helpers estáticos
-// =========================================================================
-static void formatSplitTime(float sec, char *out, size_t sz) {
-  if (sec < 0)
-    sec = 0;
-  int ms = (int)(sec * 1000.0f + 0.5f);
-  int totalS = ms / 1000;
-  ms %= 1000;
-  int m = totalS / 60, s = totalS % 60;
-  if (m > 0)
-    snprintf(out, sz, "%d:%02d.%03d", m, s, ms);
-  else
-    snprintf(out, sz, "%02d.%03d", s, ms);
-}
-
-static void formatDelta(float sec, char *out, size_t sz) {
-  const char *sign = (sec >= 0) ? "+" : "-";
-  float a = fabsf(sec);
-  int ms = (int)(a * 1000.0f + 0.5f);
-  int totalS = ms / 1000;
-  ms %= 1000;
-  int m = totalS / 60, s = totalS % 60;
-  if (m > 0)
-    snprintf(out, sz, "%s%d:%02d.%03d", sign, m, s, ms);
-  else
-    snprintf(out, sz, "%s%02d.%03d", sign, s, ms);
-}
-
-static float diffMultFor(int diff) {
-  switch (diff) {
-  case DIFF_EXPERT:
-    return 1.3f;
-  case DIFF_NIGHTMARE:
-    return 1.7f;
-  default:
-    return 1.0f;
-  }
-}
-
-static std::string resolveStoryPath(const char *fname) {
-  auto exists = [](const std::string &p) {
-    FILE *f = fopen(p.c_str(), "rb");
-    if (!f)
-      return false;
-    fclose(f);
-    return true;
-  };
-  std::string p = Paths::storyIn(Lang::currentLang(), fname);
-  if (exists(p))
-    return p;
-  if (strcmp(Lang::currentLang(), "es") != 0) {
-    p = Paths::storyIn("es", fname);
-    if (exists(p))
-      return p;
-  }
-  return "";
-}
-
-static std::string resolveLevelDetailsPath(int lvl) {
-  char fname[64];
-  snprintf(fname, sizeof(fname), "level_%02d_details.dgn", lvl);
-  auto exists = [](const std::string &p) {
-    FILE *f = fopen(p.c_str(), "rb");
-    if (!f)
-      return false;
-    fclose(f);
-    return true;
-  };
-  std::string p = Paths::levelDetailsIn(Lang::currentLang(), fname);
-  if (exists(p))
-    return p;
-  if (strcmp(Lang::currentLang(), "es") != 0) {
-    p = Paths::levelDetailsIn("es", fname);
-    if (exists(p))
-      return p;
-  }
-  return "";
-}
-
-static const char *yesNo(bool b) {
-  return b ? L("common.yes", "Sí") : L("common.no", "No");
-}
-
-static const char *pctStr(float v) {
-  static char buf[8];
-  snprintf(buf, sizeof(buf), "%d%%", (int)(v * 100 + 0.5f));
-  return buf;
-}
-
-static const char *fpsLabel(int idx) {
-  int v = C::FPS_OPTIONS[idx];
-  static char buf[16];
-  if (v == 0)
-    return L("video.fps.unlimited", "Sin límite");
-  snprintf(buf, sizeof(buf), "%d", v);
-  return buf;
-}
-
-static const char *rdLabel(int idx) {
-  switch (idx) {
-  case 0:
-    return L("video.renderdist.near", "Cerca (40m)");
-  case 1:
-    return L("video.renderdist.medium", "Media (60m)");
-  default:
-    return L("video.renderdist.far", "Lejos (100m)");
-  }
-}
-
-static const char *cbLabel(int idx) {
-  switch (idx) {
-  case 0:
-    return L("access.cb.none", "Ninguno");
-  case 1:
-    return L("access.cb.deuteranopia", "Deuteranopía");
-  case 2:
-    return L("access.cb.protanopia", "Protanopía");
-  default:
-    return L("access.cb.tritanopia", "Tritanopía");
-  }
-}
-
-static void drawDifficultyStar(float cx, float cy, float radius, Color color,
-                               bool filled) {
-  const int points = 10;
-  Vector2 verts[10];
-  for (int i = 0; i < points; ++i) {
-    float angle = -PI / 2.0f + i * (2.0f * PI / points);
-    float r = (i % 2 == 0) ? radius : radius * 0.42f;
-    verts[i] = {cx + cosf(angle) * r, cy + sinf(angle) * r};
-  }
-  if (filled) {
-    Vector2 c = {cx, cy};
-    for (int i = 0; i < points; ++i) {
-      int j = (i + 1) % points;
-      DrawTriangle(c, verts[i], verts[j], color);
-      DrawTriangle(c, verts[j], verts[i], color);
-    }
-  } else {
-    for (int i = 0; i < points; ++i) {
-      int j = (i + 1) % points;
-      DrawLineEx(verts[i], verts[j], 2.0f, color);
-    }
-  }
-}
 
 // =========================================================================
 //  Util
@@ -471,11 +326,11 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
 //  Cinemáticas
 // =========================================================================
 bool Game::hasStory(const char *name) const {
-  return !resolveStoryPath(name).empty();
+  return !Util::resolveStoryPath(name).empty();
 }
 
 void Game::playCinematic(const char *name, const char *nextAction) {
-  std::string full = resolveStoryPath(name);
+  std::string full = Util::resolveStoryPath(name);
   if (full.empty() || !cinematic.load(full.c_str())) {
     if (!strcmp(nextAction, "playing")) {
       startLevel(level);
@@ -864,7 +719,7 @@ void Game::update(float dt) {
 
         bool hasIntro = hasStory(introName);
         bool hasOutro = hasStory(outroName);
-        bool hasDetails = !resolveLevelDetailsPath(level).empty();
+        bool hasDetails = !Util::resolveLevelDetailsPath(level).empty();
         bool hasMap = existsAt(Paths::level(mapName));
 
         bool nextLevelExists = hasIntro || hasOutro || hasDetails || hasMap;
@@ -1208,7 +1063,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
     if (curLevelPB > 0.0f) {
       char pbbuf[32];
-      formatSplitTime(curLevelPB, pbbuf, sizeof(pbbuf));
+      Util::formatSplitTime(curLevelPB, pbbuf, sizeof(pbbuf));
       char full[48];
       snprintf(full, sizeof(full), "PB %s", pbbuf);
       int rw = UI::M(full, 11);
@@ -1222,7 +1077,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   // ==========================================================
   {
     char buf[32];
-    formatSplitTime(cur, buf, sizeof(buf));
+    Util::formatSplitTime(cur, buf, sizeof(buf));
     int fs = (cfg.srOverlaySize == 0) ? 22 : 28;
     UI::T(buf, tx, ty, fs, colGold);
     ty += fs + 4;
@@ -1235,7 +1090,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
     if (curLevelPB > 0.0f) {
       float delta = cur - curLevelPB;
       char dbuf[32];
-      formatDelta(delta, dbuf, sizeof(dbuf));
+      Util::formatDelta(delta, dbuf, sizeof(dbuf));
       Color dcol = (delta <= 0.0f) ? colGood : colBad;
       UI::T(dbuf, tx, ty, 16, dcol);
     } else {
@@ -1264,14 +1119,14 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
     for (int i = start; i < (int)sr.splits.size(); ++i) {
       char line[64], tbuf[16], dbuf[16];
-      formatSplitTime(sr.splits[i], tbuf, sizeof(tbuf));
+      Util::formatSplitTime(sr.splits[i], tbuf, sizeof(tbuf));
 
       bool hasDelta =
           (i < (int)sr.bestSplits.size() && sr.bestSplits[i] > 0.0f);
       Color c = colGray;
       if (hasDelta) {
         float delta = sr.splits[i] - sr.bestSplits[i];
-        formatDelta(delta, dbuf, sizeof(dbuf));
+        Util::formatDelta(delta, dbuf, sizeof(dbuf));
         c = (delta <= 0.0f) ? colGood : colBad;
       } else {
         snprintf(dbuf, sizeof(dbuf), "--");
@@ -1285,12 +1140,12 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
     // Fila del nivel actual (resaltada en dorado si no hay PB de nivel)
     {
       char line[64], tbuf[16], dbuf[16];
-      formatSplitTime(cur, tbuf, sizeof(tbuf));
+      Util::formatSplitTime(cur, tbuf, sizeof(tbuf));
 
       Color c = colGold;
       if (curLevelPB > 0.0f) {
         float delta = cur - curLevelPB;
-        formatDelta(delta, dbuf, sizeof(dbuf));
+        Util::formatDelta(delta, dbuf, sizeof(dbuf));
         c = (delta <= 0.0f) ? colGood : colBad;
         snprintf(line, sizeof(line), "Nv%-2d  %-9s  %s", idx + 1, tbuf, dbuf);
       } else {
@@ -1312,7 +1167,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   // ==========================================================
   if (cfg.srShowTotal) {
     char tbuf[32], line[64];
-    formatSplitTime(total, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(total, tbuf, sizeof(tbuf));
     snprintf(line, sizeof(line), "Total: %s", tbuf);
     UI::T(line, tx, ty, 12, colGold);
     ty += 16;
@@ -1320,7 +1175,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
   if (bpt > 0.0f) {
     char tbuf[32], line[64];
-    formatSplitTime(bpt, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(bpt, tbuf, sizeof(tbuf));
     snprintf(line, sizeof(line), "BPT:   %s", tbuf);
     UI::T(line, tx, ty, 12, colGray);
     ty += 16;
@@ -1328,7 +1183,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
 
   if (cfg.srShowPredicted && remainingBest > 0.0f) {
     char tbuf[32], line[64];
-    formatSplitTime(predicted, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(predicted, tbuf, sizeof(tbuf));
     snprintf(line, sizeof(line), "Pred:  %s", tbuf);
     UI::T(line, tx, ty, 12, colPred);
     ty += 16;
@@ -1485,7 +1340,7 @@ void Game::drawConfigVideo() {
 #endif
   {
     UIAction a = uiOptionEx(2, items, 30, L("video.fps", "Límite de FPS"),
-                            fpsLabel(cfg.fpsLimit), &navIndex, nullptr,
+                            Util::fpsLabel(cfg.fpsLimit), &navIndex, nullptr,
                             navIndex == 2 ? lr : 0);
     if (a == UI_LEFT)
       cfg.fpsLimit = std::max(0, cfg.fpsLimit - 1);
@@ -1501,7 +1356,7 @@ void Game::drawConfigVideo() {
   {
     UIAction a =
         uiOptionEx(3, items, 30, L("video.renderdist", "Distancia de dibujado"),
-                   rdLabel(cfg.renderDistance), &navIndex, nullptr,
+                   Util::rdLabel(cfg.renderDistance), &navIndex, nullptr,
                    navIndex == 3 ? lr : 0);
     if (a == UI_LEFT)
       cfg.renderDistance = std::max(0, cfg.renderDistance - 1);
@@ -1529,7 +1384,7 @@ void Game::drawConfigVideo() {
       save();
     }
   }
-  if (uiOptionEx(5, items, 30, L("video.vsync", "VSync"), yesNo(cfg.vsync),
+  if (uiOptionEx(5, items, 30, L("video.vsync", "VSync"), Util::yesNo(cfg.vsync),
                  &navIndex, nullptr, navIndex == 5 ? lr : 0) != UI_NONE) {
     cfg.vsync = !cfg.vsync;
     save();
@@ -1568,7 +1423,7 @@ void Game::drawConfigAudio() {
 
   {
     UIAction a = uiOptionEx(0, items, 40, L("audio.master", "Volumen maestro"),
-                            pctStr(cfg.masterVol), &navIndex, nullptr,
+                            Util::pctStr(cfg.masterVol), &navIndex, nullptr,
                             navIndex == 0 ? lr : 0);
     if (a == UI_LEFT)
       cfg.masterVol = std::max(0.0f, cfg.masterVol - 0.05f);
@@ -1581,7 +1436,7 @@ void Game::drawConfigAudio() {
   }
   {
     UIAction a = uiOptionEx(1, items, 40, L("audio.music", "Música"),
-                            pctStr(cfg.musicVol), &navIndex, nullptr,
+                            Util::pctStr(cfg.musicVol), &navIndex, nullptr,
                             navIndex == 1 ? lr : 0);
     if (a == UI_LEFT)
       cfg.musicVol = std::max(0.0f, cfg.musicVol - 0.05f);
@@ -1594,7 +1449,7 @@ void Game::drawConfigAudio() {
   }
   {
     UIAction a =
-        uiOptionEx(2, items, 40, L("audio.sfx", "Efectos"), pctStr(cfg.sfxVol),
+        uiOptionEx(2, items, 40, L("audio.sfx", "Efectos"), Util::pctStr(cfg.sfxVol),
                    &navIndex, nullptr, navIndex == 2 ? lr : 0);
     if (a == UI_LEFT)
       cfg.sfxVol = std::max(0.0f, cfg.sfxVol - 0.05f);
@@ -1619,7 +1474,7 @@ void Game::drawConfigGameplay() {
   auto save = [&]() { cfg.save(); };
 
   if (uiOptionEx(0, items, 40, L("gameplay.inverty", "Invertir eje Y"),
-                 yesNo(cfg.invertY), &navIndex, nullptr,
+                 Util::yesNo(cfg.invertY), &navIndex, nullptr,
                  navIndex == 0 ? lr : 0) != UI_NONE) {
     cfg.invertY = !cfg.invertY;
     save();
@@ -1655,7 +1510,7 @@ void Game::drawConfigGameplay() {
       save();
   }
   if (uiOptionEx(3, items, 40, L("gameplay.minimap", "Minimapa"),
-                 yesNo(cfg.showMinimap), &navIndex, nullptr,
+                 Util::yesNo(cfg.showMinimap), &navIndex, nullptr,
                  navIndex == 3 ? lr : 0) != UI_NONE) {
     cfg.showMinimap = !cfg.showMinimap;
     save();
@@ -1691,7 +1546,7 @@ void Game::drawConfigGameplay() {
       save();
   }
   if (uiOptionEx(6, items, 40, L("gameplay.cinematics", "Cinemáticas"),
-                 yesNo(cfg.playCinematics), &navIndex, nullptr,
+                 Util::yesNo(cfg.playCinematics), &navIndex, nullptr,
                  navIndex == 6 ? lr : 0) != UI_NONE) {
     cfg.playCinematics = !cfg.playCinematics;
     save();
@@ -1732,7 +1587,7 @@ void Game::drawConfigControls() {
 
   if (uiOptionEx(row, items, 40,
                  L("controls.swap", "Intercambiar mandos J1/J2"),
-                 yesNo(cfg.swapGamepads), &navIndex, nullptr,
+                 Util::yesNo(cfg.swapGamepads), &navIndex, nullptr,
                  navIndex == row ? lr : 0) != UI_NONE) {
     cfg.swapGamepads = !cfg.swapGamepads;
     cfg.save();
@@ -1792,26 +1647,26 @@ void Game::drawConfigAccess() {
   auto save = [&]() { cfg.save(); };
 
   if (uiOptionEx(0, items, 30, L("access.colorblind", "Modo daltonismo"),
-                 cbLabel(cfg.colorblindMode), &navIndex, nullptr,
+                 Util::cbLabel(cfg.colorblindMode), &navIndex, nullptr,
                  navIndex == 0 ? lr : 0) != UI_NONE) {
     cfg.colorblindMode = (cfg.colorblindMode + 1) % CB_COUNT;
     UI::colorblind = cfg.colorblindMode;
     save();
   }
   if (uiOptionEx(1, items, 30, L("access.contrast", "Alto contraste"),
-                 yesNo(cfg.highContrast), &navIndex, nullptr,
+                 Util::yesNo(cfg.highContrast), &navIndex, nullptr,
                  navIndex == 1 ? lr : 0) != UI_NONE) {
     cfg.highContrast = !cfg.highContrast;
     save();
   }
   if (uiOptionEx(2, items, 30, L("access.motion", "Reducir movimiento"),
-                 yesNo(cfg.reduceMotion), &navIndex, nullptr,
+                 Util::yesNo(cfg.reduceMotion), &navIndex, nullptr,
                  navIndex == 2 ? lr : 0) != UI_NONE) {
     cfg.reduceMotion = !cfg.reduceMotion;
     save();
   }
   if (uiOptionEx(3, items, 30, L("access.subtitles", "Subtítulos grandes"),
-                 yesNo(cfg.bigSubtitles), &navIndex, nullptr,
+                 Util::yesNo(cfg.bigSubtitles), &navIndex, nullptr,
                  navIndex == 3 ? lr : 0) != UI_NONE) {
     cfg.bigSubtitles = !cfg.bigSubtitles;
     save();
@@ -2970,7 +2825,7 @@ void Game::drawSpeedrunMenu() {
 
   if (bestIdx >= 0) {
     char tbuf[32];
-    formatSplitTime(bestTotal, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(bestTotal, tbuf, sizeof(tbuf));
     UI::T(TextFormat("%s: %s", L("speedrun.besttotal", "Mejor"), tbuf), leftX,
           topY, 16, GOLD);
     topY += 20;
@@ -2978,7 +2833,7 @@ void Game::drawSpeedrunMenu() {
 
   {
     char tbuf[32];
-    formatSplitTime(avg, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(avg, tbuf, sizeof(tbuf));
     UI::T(TextFormat("%s: %s", L("speedrun.avg", "Media"), tbuf), leftX, topY,
           16, LIGHTGRAY);
   }
@@ -3065,7 +2920,7 @@ void Game::drawSpeedrunMenu() {
 
     // Tiempo (derecha)
     char tbuf[32];
-    formatSplitTime(e.total, tbuf, sizeof(tbuf));
+    Util::formatSplitTime(e.total, tbuf, sizeof(tbuf));
     int tw = UI::M(tbuf, 13);
     UI::T(tbuf, leftX + leftW - tw - 10, ry + 4, 13, cTime);
 
@@ -3129,11 +2984,11 @@ void Game::drawSpeedrunMenu() {
       UI::T(TextFormat("Nv%d", i + 1), colNumX + 4, ry, 12, LIGHTGRAY);
 
       char tbuf[32];
-      formatSplitTime(best.splits[i], tbuf, sizeof(tbuf));
+      Util::formatSplitTime(best.splits[i], tbuf, sizeof(tbuf));
       UI::T(tbuf, colBestX, ry, 12, GOLD);
 
       if (last && i < (int)last->splits.size()) {
-        formatSplitTime(last->splits[i], tbuf, sizeof(tbuf));
+        Util::formatSplitTime(last->splits[i], tbuf, sizeof(tbuf));
         Color c = (last->splits[i] <= best.splits[i] + 0.001f)
                       ? (Color){100, 240, 100, 255}
                       : (Color){220, 180, 100, 255};
@@ -3148,7 +3003,7 @@ void Game::drawSpeedrunMenu() {
     ry += 6;
     {
       char tbuf[32];
-      formatSplitTime(best.total, tbuf, sizeof(tbuf));
+      Util::formatSplitTime(best.total, tbuf, sizeof(tbuf));
       UI::T(TextFormat("%s: %s", L("speedrun.besttotal", "Mejor total"), tbuf),
             colNumX + 4, ry, 13, GOLD);
     }
@@ -4095,7 +3950,7 @@ bool Game::tryLoadCustomLevel(int lvl, LevelExtras &extras) {
 
 void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
                                      int lvl, std::mt19937 &rng) {
-  float dm = diffMultFor(currentDifficulty);
+  float dm = Util::diffMultFor(currentDifficulty);
   float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
 
   for (const auto &p : positions) {
@@ -4282,7 +4137,7 @@ void Game::startLevel(int lvl) {
       count = lvl + 1;
     }
 
-    float dm = diffMultFor(currentDifficulty);
+    float dm = Util::diffMultFor(currentDifficulty);
     float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
     float minDist = maze.w * C::CELL * 0.35f;
 
@@ -4350,7 +4205,7 @@ void Game::startLevel(int lvl) {
 bool Game::loadLevelDetails(int lvl) {
   levelDetails = {};
 
-  std::string path = resolveLevelDetailsPath(lvl);
+  std::string path = Util::resolveLevelDetailsPath(lvl);
   if (path.empty())
     return false;
 
@@ -4470,9 +4325,9 @@ void Game::drawLevelIntro() {
   for (int i = 0; i < 5; ++i) {
     float cx = sx + i * (starR * 2 + starGap);
     if (i < stars)
-      drawDifficultyStar(cx, sy, starR, (Color){255, 200, 70, a}, true);
+      Util::drawDifficultyStar(cx, sy, starR, (Color){255, 200, 70, a}, true);
     else
-      drawDifficultyStar(cx, sy, starR, (Color){70, 70, 85, a}, false);
+      Util::drawDifficultyStar(cx, sy, starR, (Color){70, 70, 85, a}, false);
   }
 
   const char *diffLbl = L("intro.difficulty", "Dificultad");
@@ -5165,7 +5020,7 @@ void Game::drawConfigSpeedrun() {
   // 4) Delta
   {
     UIAction a =
-        drawRow(4, L("sr.showdelta", "Delta vs PB"), yesNo(cfg.srShowDelta));
+        drawRow(4, L("sr.showdelta", "Delta vs PB"), Util::yesNo(cfg.srShowDelta));
     if (a != UI_NONE) {
       cfg.srShowDelta = !cfg.srShowDelta;
       save();
@@ -5175,7 +5030,7 @@ void Game::drawConfigSpeedrun() {
   // 5) Tiempo total
   {
     UIAction a =
-        drawRow(5, L("sr.showtotal", "Tiempo total"), yesNo(cfg.srShowTotal));
+        drawRow(5, L("sr.showtotal", "Tiempo total"), Util::yesNo(cfg.srShowTotal));
     if (a != UI_NONE) {
       cfg.srShowTotal = !cfg.srShowTotal;
       save();
@@ -5185,7 +5040,7 @@ void Game::drawConfigSpeedrun() {
   // 6) Predicción
   {
     UIAction a = drawRow(6, L("sr.showpredicted", "Predicción"),
-                         yesNo(cfg.srShowPredicted));
+                         Util::yesNo(cfg.srShowPredicted));
     if (a != UI_NONE) {
       cfg.srShowPredicted = !cfg.srShowPredicted;
       save();
@@ -5195,7 +5050,7 @@ void Game::drawConfigSpeedrun() {
   // 7) Flash PB
   {
     UIAction a =
-        drawRow(7, L("sr.showpb", "Flash PB"), yesNo(cfg.srShowPbFlash));
+        drawRow(7, L("sr.showpb", "Flash PB"), Util::yesNo(cfg.srShowPbFlash));
     if (a != UI_NONE) {
       cfg.srShowPbFlash = !cfg.srShowPbFlash;
       save();
@@ -5223,7 +5078,7 @@ void Game::drawConfigSpeedrun() {
   // 9) Mostrar ghost
   {
     UIAction a =
-        drawRow(9, L("sr.showghost", "Mostrar ghost"), yesNo(cfg.srShowGhost));
+        drawRow(9, L("sr.showghost", "Mostrar ghost"), Util::yesNo(cfg.srShowGhost));
     if (a != UI_NONE) {
       cfg.srShowGhost = !cfg.srShowGhost;
       save();
@@ -5236,95 +5091,4 @@ void Game::drawConfigSpeedrun() {
     if (a != UI_NONE || IsKeyPressed(KEY_ESCAPE) || consumeCancel())
       state = ST_CONFIG;
   }
-}
-
-void Game::openDialog(const std::string &title, const std::string &text,
-                      bool isSign) {
-  dialogTitle = title;
-  dialogText = text;
-  dialogHasSignTex = isSign;
-  state = ST_DIALOG;
-  EnableCursor();
-}
-
-void Game::closeDialog() {
-  dialogTitle.clear();
-  dialogText.clear();
-  DisableCursor();
-  state = ST_PLAYING;
-}
-
-void Game::drawDialog() {
-  int W = GetScreenWidth(), H = GetScreenHeight();
-
-  DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 170});
-
-  int marginX = std::max(40, W / 8);
-  int panelH = std::max(160, H / 3);
-  int panelX = marginX;
-  int panelY = H - panelH - 40;
-  int panelW = W - marginX * 2;
-
-  DrawRectangle(panelX, panelY, panelW, panelH, (Color){15, 18, 28, 235});
-  DrawRectangleLines(panelX, panelY, panelW, panelH,
-                     dialogHasSignTex ? (Color){200, 160, 80, 255}
-                                      : (Color){120, 180, 240, 255});
-
-  UI::T(dialogTitle.c_str(), panelX + 24, panelY + 16, 24,
-        dialogHasSignTex ? (Color){255, 220, 140, 255}
-                         : (Color){160, 210, 255, 255});
-  DrawRectangle(panelX + 24, panelY + 50, panelW - 48, 1,
-                (Color){90, 100, 130, 160});
-
-  int textX = panelX + 24;
-  int textY = panelY + 64;
-  int maxW = panelW - 48;
-  int lineH = 22;
-
-  std::vector<std::string> wrapped;
-  {
-    std::string cur, word;
-    auto pushLine = [&]() {
-      wrapped.push_back(cur);
-      cur.clear();
-    };
-    auto flushWord = [&]() {
-      if (word.empty())
-        return;
-      std::string test = cur.empty() ? word : cur + " " + word;
-      if (UI::M(test.c_str(), 16) > maxW && !cur.empty()) {
-        pushLine();
-        cur = word;
-      } else {
-        cur = test;
-      }
-      word.clear();
-    };
-    for (size_t i = 0; i < dialogText.size(); ++i) {
-      char c = dialogText[i];
-      if (c == ' ') {
-        flushWord();
-      } else if (c == '\n') {
-        flushWord();
-        pushLine();
-      } else {
-        word += c;
-      }
-    }
-    flushWord();
-    if (!cur.empty())
-      pushLine();
-  }
-
-  int maxVisible = (panelH - 80) / lineH;
-  int shown = std::min((int)wrapped.size(), maxVisible);
-  for (int i = 0; i < shown; ++i)
-    UI::T(wrapped[i].c_str(), textX, textY + i * lineH, 16, RAYWHITE);
-  if ((int)wrapped.size() > shown)
-    UI::T("...", textX, textY + shown * lineH, 16, GRAY);
-
-  const char *hint = L("dialog.close", "[E / RMB / ENTER] cerrar");
-  int hs = 14;
-  int hw = UI::M(hint, hs);
-  UI::T(hint, panelX + (panelW - hw) / 2, panelY + panelH - 26, hs, GRAY);
 }
