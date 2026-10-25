@@ -142,7 +142,7 @@ void drawBackground2D() {
     unsigned char r = (unsigned char)(12 + 22 * y / H);
     unsigned char g = (unsigned char)(10 + 12 * y / H);
     unsigned char b = (unsigned char)(22 + 34 * y / H);
-    DrawRectangle(0, y, W, 4, (Color){r, g, b, 255});
+    DrawRectangle(0, y, W, 4, (Color){r, g, b, 80});
   }
 }
 

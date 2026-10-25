@@ -6,8 +6,6 @@
 #include "common.hpp"
 #include "config.hpp"
 #include "credits.hpp"
-#include "debug.hpp"
-#include "inventory.hpp"
 #include "maze.hpp"
 #include "raycaster.hpp"
 #include "raylib.h"
@@ -251,4 +249,8 @@ struct Game {
                   bool isSign);
   void closeDialog();
   void drawDialog();
+
+  void drawMenuLevelClear();
+  void drawMenuGameOver();
+  void drawMenuMain();
 };

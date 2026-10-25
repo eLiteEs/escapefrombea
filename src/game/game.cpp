@@ -4,7 +4,9 @@
 #include "debug.hpp"
 #include "enemy.hpp"
 #include "gameplay_dialog.hpp"
+#include "inventory.hpp"
 #include "lang.hpp"
+#include "menu_levels.hpp"
 #include "paths.hpp"
 #include "player.hpp"
 #include "rlgl.h"
@@ -883,62 +885,7 @@ void Game::loadGame(const std::string &saveId) {
 // =========================================================================
 //  Pausa
 // =========================================================================
-void Game::drawPauseMenu() {
-  int W = GetScreenWidth(), H = GetScreenHeight();
-  DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 200});
 
-  const char *t = L("pause.title", "Pausa");
-  UI::T(t, W / 2 - UI::M(t, 64) / 2, (int)(H * 0.12f), 64, RAYWHITE);
-
-  bool canSave = !currentSaveId.empty();
-
-  int items = 5;
-  handleGamepadMenuNav(items);
-
-  if (uiButton(0, items, 40, L("pause.resume", "Volver al juego"), &navMenu,
-               nullptr) ||
-      (navMenu == 0 && consumeConfirm())) {
-    DisableCursor();
-    state = ST_PLAYING;
-  }
-  if (canSave) {
-    if (uiButton(1, items, 40, L("pause.save", "Guardar partida"), &navMenu,
-                 nullptr) ||
-        (navMenu == 1 && consumeConfirm())) {
-      saveCurrentGame();
-    }
-  } else {
-    uiButton(1, items, 40,
-             L("pause.nosave", "(sin slot - no se puede guardar)"), nullptr,
-             nullptr);
-  }
-  if (uiButton(2, items, 40, L("menu.config", "Configuración"), &navMenu,
-               nullptr) ||
-      (navMenu == 2 && consumeConfirm())) {
-    configReturn = ST_PAUSED;
-    state = ST_CONFIG;
-    navIndexCfg = 0;
-  }
-  if (uiButton(3, items, 40, L("pause.menu", "Volver al menú"), &navMenu,
-               nullptr) ||
-      (navMenu == 3 && consumeConfirm())) {
-    autoSaveProgress();
-    if (sr.active)
-      speedrunFinishRun();
-    toMenu();
-  }
-  if (uiButton(4, items, 40, L("menu.quit", "Salir del juego"), &navMenu,
-               nullptr) ||
-      (navMenu == 4 && consumeConfirm())) {
-    autoSaveProgress();
-    shouldQuit = true;
-  }
-
-  char info[128];
-  snprintf(info, sizeof(info), L("pause.info", "Nivel %d  -  %.1fs"), level,
-           levelTime);
-  UI::T(info, W / 2 - UI::M(info, 16) / 2, H - 60, 16, LIGHTGRAY);
-}
 
 void Game::drawToast() {
   if (toastTimer <= 0.0f)
@@ -963,82 +910,20 @@ void Game::drawMenus() {
   int W = GetScreenWidth();
   int H = GetScreenHeight();
 
+  ClearBackground(BLACK);
+
   if (state == ST_MENU) {
-    ClearBackground(BLACK);
     attract.prepareRaycaster(rc);
     attract.draw(rc, W, H);
-    DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 130});
   } else {
     ClearBackground((Color){12, 12, 18, 255});
     drawBackground2D();
   }
 
   switch (state) {
-  case ST_MENU: {
-    if (assets.musicMenu.stream.buffer != nullptr && !musicMenuPlaying) {
-      PlayMusicStream(assets.musicMenu);
-      musicMenuPlaying = true;
-    }
-    int y = (int)(H * 0.10f);
-    const char *t1 = "Escape from Marisa 3:";
-    UI::T(t1, W / 2 - UI::M(t1, 54) / 2, y, 54, RAYWHITE);
-    y += 54 + 6;
-    const char *t2 = "Escape from Bea";
-    UI::T(t2, W / 2 - UI::M(t2, 84) / 2, y, 84, RED);
-    y += 84 + 14;
-    const char *t3 = L("menu.subtitle", "modo serio chat");
-    UI::T(t3, W / 2 - UI::M(t3, 22) / 2, y, 22, LIGHTGRAY);
-
-    int titleTop = (int)(H * 0.10f);
-    int titleH = 54 + 6 + 84;
-    Rectangle titleRect = {(float)(W / 2 - 400), (float)titleTop, 800.0f,
-                           (float)titleH};
-    bool hoveringTitle = CheckCollisionPointRec(GetMousePosition(), titleRect);
-    if (hoveringTitle) {
-      SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
-      DrawRectangleLinesEx(titleRect, 1, (Color){255, 255, 255, 40});
-    } else {
-      SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-    }
-    if (hoveringTitle && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      credits.start();
-      state = ST_CREDITS;
-    }
-
-    int items = 4;
-    handleGamepadMenuNav(items);
-
-    if (uiButton(0, items, 90, L("menu.single", "Un jugador"), &navIndex,
-                 nullptr) ||
-        (navIndex == 0 && consumeConfirm())) {
-      saves.refresh();
-      saveListCursor = 0;
-      saveListScroll = 0;
-      saveDeleteConfirm = false;
-      saveListLastClickIdx = -1;
-      state = ST_SAVE_LIST;
-      navIndex = 0;
-    }
-    if (uiButton(1, items, 90, L("menu.speedrun", "Speedruns"), &navIndex,
-                 nullptr) ||
-        (navIndex == 1 && consumeConfirm())) {
-      state = ST_SPEEDRUN;
-      navMenu = 0;
-    }
-    if (uiButton(2, items, 90, L("menu.config", "Configuración"), &navIndex,
-                 nullptr) ||
-        (navIndex == 2 && consumeConfirm())) {
-      configReturn = ST_MENU;
-      state = ST_CONFIG;
-      navIndexCfg = 0;
-    }
-    if (uiButton(3, items, 90, L("menu.quit", "Salir del juego"), &navIndex,
-                 nullptr) ||
-        (navIndex == 3 && consumeConfirm()))
-      shouldQuit = true;
-
-    std::string ver = std::string("Escape from Bea ") + Debug::version();
-    UI::T(ver.c_str(), 5, H - 25, 20, RAYWHITE);
+    case ST_MENU: {
+    DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 130});
+    drawMenuMain();
     break;
   }
   case ST_SAVE_LIST:
@@ -1078,41 +963,11 @@ void Game::drawMenus() {
     drawSpeedrunMenu();
     break;
   case ST_LEVEL_CLEAR: {
-    char buf[192];
-    if (mode == MODE_ENDLESS) {
-      snprintf(buf, sizeof(buf),
-               L("level.stats.endless", "Nivel %d - Récord: %d"), level,
-               cfg.maxEndlessLevel);
-      drawCenterPanel(L("level.complete", "¡Nivel completado!"), buf,
-                      L("level.controls", "ENTER: siguiente nivel ESC: menú"));
-    } else if (twoPlayers) {
-      snprintf(buf, sizeof(buf), L("level.stats.coop", "J1: %.1fs   J2: %.1fs"),
-               players[0].escapeTime, players[1].escapeTime);
-      drawCenterPanel(L("level.finished", "¡Nivel superado!"), buf,
-                      L("level.controls", "ENTER: siguiente nivel ESC: menú"));
-    } else {
-      char msg[128];
-      snprintf(msg, sizeof(msg), L("level.stats.single", "Nivel %d en %.1f s"),
-               level, players[0].escapeTime);
-      drawCenterPanel(L("level.finished", "¡Nivel superado!"), msg,
-                      L("level.controls", "ENTER: siguiente nivel ESC: menú"));
-    }
+    drawMenuLevelClear();
     break;
   }
   case ST_GAME_OVER: {
-    char buf[128];
-    if (mode == MODE_ENDLESS) {
-      snprintf(buf, sizeof(buf),
-               L("level.catched.endless", "Llegaste al nivel %d - Récord: %d"),
-               level, cfg.maxEndlessLevel);
-      drawCenterPanel(L("level.catched", "TE ATRAPARON"), buf,
-                      L("level.retry", "R: reintentar ESC: menú"));
-    } else {
-      drawCenterPanel(L("level.catched", "TE ATRAPARON"),
-                      L("level.catched.longtext",
-                        "Bea te encontró por los pasillos del instituto..."),
-                      L("level.retry", "R: reintentar ESC: menú"));
-    }
+    drawMenuGameOver();
     break;
   }
   default:
