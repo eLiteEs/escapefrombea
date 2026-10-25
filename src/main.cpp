@@ -2,7 +2,7 @@
 #pragma comment(linker, "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
 #endif
 
-#include "game.h"
+#include "game.hpp"
 
 #if defined(_WIN32) && !defined(NDEBUG)
 #define WIN32_LEAN_AND_MEAN // excluye winsock2, shellapi, etc.

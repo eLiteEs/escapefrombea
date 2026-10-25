@@ -22,12 +22,15 @@ VERSION      ?= 1.0.0r
 VERSION_MSI  ?= $(shell echo $(VERSION) | sed 's/[^0-9.].*//')
 
 SRC_DIR      := src
+INCLUDE_DIR  := include
+INCLUDE_SUBDIRS := $(shell find $(INCLUDE_DIR) -type d 2>/dev/null)
+INCLUDE_FLAGS   := $(addprefix -I,$(INCLUDE_DIR) $(INCLUDE_SUBDIRS))
 BUILD_DIR    := build
 DIST_DIR     := dist
 WIX_DIR      := wix
 
-SOURCES      := $(wildcard $(SRC_DIR)/*.cpp)
-HEADERS      := $(wildcard $(SRC_DIR)/*.h)
+SOURCES      := $(shell find $(SRC_DIR) -name '*.cpp' -type f 2>/dev/null)
+HEADERS      := $(wildcard $(INCLUDE_DIR)/*.hpp)
 OBJ_LINUX    := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-linux/%.o,$(SOURCES))
 OBJ_WIN      := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/obj-win/%.o,$(SOURCES)) win/resources.o
 
@@ -63,7 +66,7 @@ WEB_LDFLAGS  := $(WEB_LIB)/libraylib.a \
 # ---------------------------------------------------------------------------
 CXX          ?= g++
 CXXFLAGS     := -std=c++17 -Os -ffunction-sections -fdata-sections -g \
-                -Wall -Wextra -Wno-unused-parameter -I$(SRC_DIR)
+                -Wall -Wextra -Wno-unused-parameter $(INCLUDE_FLAGS) -I$(SRC_DIR)
 LDFLAGS      := -Wl,--gc-sections -s
 
 RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib 2>/dev/null)
@@ -211,17 +214,18 @@ linux-static: $(BUILD_DIR)/$(APP_NAME)-static
 
 $(BUILD_DIR)/obj-linux/%.o: $(SRC_DIR)/%.cpp $(HEADERS) | dirs
 	@echo "  CXX   $<"
+	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(RAYLIB_CFLAGS) -c $< -o $@
 
 # Dinámico (clásico)
 $(BUILD_DIR)/$(APP_NAME): $(OBJ_LINUX)
 	@echo "  LD (dynamic) $@"
-	@$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) $(RAYLIB_LIBS)
+	$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) $(RAYLIB_LIBS)
 
 # Estático
 $(BUILD_DIR)/$(APP_NAME)-static: $(OBJ_LINUX)
 	@echo "  LD (static) $@"
-	@$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) \
+	$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) \
 		-Wl,-Bstatic -lraylib -Wl,-Bdynamic \
 		-static-libgcc -static-libstdc++ \
 		-lm -lpthread -ldl -lrt -lX11
@@ -243,6 +247,7 @@ $(MINGW_RAYLIB_A) $(MINGW_RAYLIB_DLL) $(MINGW_RAYLIB_IMPLIB):
 
 $(BUILD_DIR)/obj-win/%.o: $(SRC_DIR)/%.cpp $(HEADERS) | dirs
 	@echo "  MINGW $<"
+	@mkdir -p $(dir $@)
 	@$(MINGW_CXX) $(CXXFLAGS) -I$(MINGW_RAYLIB_INC) -c $< -o $@
 
 $(BUILD_DIR)/$(APP_NAME).exe: $(OBJ_WIN)
@@ -418,8 +423,5 @@ dist-web: web
 	@echo "   -> $(WEB_ZIP)"
 
 # ---------------------------------------------------------------------------
-editor: tools/level_designer.cpp
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -o tools/level_designer tools/level_designer.cpp
-
-run-editor: editor
-	./tools/level_designer
+editor: tools/level_designer.java
+	java tools/level_designer.java

@@ -208,3 +208,7 @@ create.difficulty=Difficulty
 create.players=Players
 create.speedrun=Speedrun mode
 create.confirm=Create world
+
+dialog.sign=Sign
+dialog.npc=NPC
+dialog.close=[E / RMB / ENTER] close
