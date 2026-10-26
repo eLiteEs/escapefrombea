@@ -1,7 +1,9 @@
+#include "inventory.hpp"
+
 #include "assets.hpp"
 #include "game.hpp"
-#include "inventory.hpp"
 #include "lang.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -330,11 +332,11 @@ Color itemColor(ItemKind kind) {
   case ITEM_ROCK:
     return (Color){130, 130, 145, 255};
   case ITEM_BOX:
-    return (Color){0, 100, 0};
+    return (Color){0, 100, 0, 255};
   case ITEM_LIME:
-    return (Color){0, 255, 0};
+    return (Color){0, 255, 0, 255};
   case ITEM_BICIMAD:
-    return (Color){100, 100, 255};
+    return (Color){100, 100, 255, 255};
   default:
     return (Color){200, 200, 200, 255};
   }
@@ -362,3 +364,51 @@ const char *itemName(ItemKind kind) {
 }
 
 } // namespace Inventory
+
+void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
+                                   std::mt19937 &rng) {
+  struct Weighted {
+    ItemKind kind;
+    int weight;
+  };
+  const Weighted pool[] = {{ITEM_ROCK, 30},    {ITEM_BOX, 20},
+                           {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
+                           {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
+  const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
+  int totalWeight = 0;
+  for (int i = 0; i < POOL_SIZE; ++i)
+    totalWeight += pool[i].weight;
+
+  auto rollKind = [&]() -> ItemKind {
+    int r = (int)(rng() % totalWeight);
+    int acc = 0;
+    for (int i = 0; i < POOL_SIZE; ++i) {
+      acc += pool[i].weight;
+      if (r < acc)
+        return pool[i].kind;
+    }
+    return ITEM_ROCK;
+  };
+
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+    WorldPickup wp;
+    wp.kind = rollKind();
+    wp.pos = {p.x, p.y + 0.35f, p.z}; // ← usar p.y (altura del suelo)
+    wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
+    worldItems.push_back(wp);
+  }
+}
+
+void Game::spawnKeysFromPositions(const std::vector<Vector3> &positions) {
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+    WorldPickup wp;
+    wp.kind = ITEM_KEY;
+    wp.pos = {p.x, p.y + 0.55f, p.z}; // ← usar p.y
+    wp.bobT = 0.0f;
+    worldItems.push_back(wp);
+  }
+}

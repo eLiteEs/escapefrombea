@@ -1,7 +1,13 @@
 #include "enemy.hpp"
+
+#include "debug.hpp"
+#include "game.hpp"
+#include "util_format.hpp"
+
 #include <cmath>
 #include <random>
 #include <vector>
+#include <algorithm>
 
 bool lineOfSight(const Maze &maze, Vector3 a, Vector3 b) {
   if (maze.blockedAtWorld(a.x, a.z))
@@ -189,5 +195,42 @@ void updateEnemies(std::vector<Enemy> &enemies, const Maze &maze,
         }
       }
     }
+  }
+}
+
+void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
+                                     int lvl, std::mt19937 &rng) {
+  float dm = Util::diffMultFor(currentDifficulty);
+  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
+
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+
+    Enemy e;
+    e.pos = p;
+    e.dir = {0, 0};
+    e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
+    e.turnT = 0.0f;
+    e.prevPos = p;
+
+    int r = (int)(rng() % 100);
+    if (lvl >= 5 && r > 10)
+      e.kind = ENEMY_HYPERGAMY;
+    else if (lvl >= 4 && r < 30)
+      e.kind = ENEMY_ALMEIDA;
+    else if (lvl >= 3 && r < 30)
+      e.kind = ENEMY_CV;
+    else if (lvl >= 3 && r < 40)
+      e.kind = ENEMY_YE;
+    else if (lvl >= 2 && r < 65)
+      e.kind = ENEMY_MARISA;
+    else if (lvl >= 2 && r < 85)
+      e.kind = ENEMY_ALT;
+    else
+      e.kind = ENEMY_BEA;
+
+    e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
+    enemies.push_back(e);
   }
 }

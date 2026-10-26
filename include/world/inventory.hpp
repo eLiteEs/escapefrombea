@@ -1,8 +1,12 @@
 #pragma once
+
 #include "assets.hpp"
 #include "common.hpp"
 #include "maze.hpp"
+
 #include <vector>
+
+struct Game;
 
 namespace Inventory {
 

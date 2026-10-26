@@ -1,8 +1,9 @@
 #pragma once
 #include "common.hpp"
-#include "debug.hpp"
 #include "maze.hpp"
 #include <vector>
+
+struct Game;
 
 void updateEnemies(std::vector<Enemy>& enemies, const Maze& maze,
                    Player* players, int numPlayers, float dt,

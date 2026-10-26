@@ -1,4 +1,8 @@
 #include "save.hpp"
+
+#include "game.hpp"
+#include "lang.hpp"
+
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -17,11 +21,7 @@
 #endif
 #endif
 
-// =========================================================================
-//  IO helpers
-//  Nativo: ficheros en disco.
-//  Web:    localStorage (clave derivada del path).
-// =========================================================================
+#if defined(__EMSCRIPTEN__)
 static std::string keyFromPath(const std::string &p) {
   std::string k = p;
   for (auto &c : k)
@@ -29,6 +29,7 @@ static std::string keyFromPath(const std::string &p) {
       c = '_';
   return "efb_" + k;
 }
+#endif
 
 static bool writeFile(const std::string &path, const std::string &content) {
 #if defined(__EMSCRIPTEN__)
@@ -38,6 +39,7 @@ static bool writeFile(const std::string &path, const std::string &content) {
         try {
           localStorage.setItem(UTF8ToString($0), UTF8ToString($1));
         } catch (e) {
+          console.log(e);
         }
       },
       k.c_str(), content.c_str());
@@ -790,4 +792,55 @@ bool SaveManager::deleteGhost(uint32_t seed, int mode) {
 bool SaveManager::hasGhost(uint32_t seed, int mode) const {
   GhostRun tmp;
   return loadGhost(seed, mode, tmp) && !tmp.levels.empty();
+}
+
+void Game::saveCurrentGame() {
+  if (currentSaveId.empty()) {
+    showToast(L("toast.noslot", "Sin slot asignado"));
+    return;
+  }
+  SaveEntry e = *saves.find(currentSaveId);
+  e.level = level;
+  e.maxLevel = std::max(e.maxLevel, level);
+  e.mode = (int)mode;
+  e.difficulty = currentDifficulty;
+  e.twoPlayers = twoPlayers;
+  e.playtime = totalPlaytime;
+  e.timestamp = std::time(nullptr);
+  e.speedrunSplits = sr.splits;
+
+  int numPlayers = twoPlayers ? 2 : 1;
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    e.selectedSlot[p] = players[p].selectedSlot;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
+      e.inventory[p][i].count = players[p].inventory[i].count;
+    }
+  }
+  saves.save(e);
+  showToast(L("toast.saved", "Partida guardada"));
+}
+
+void Game::autoSaveProgress() {
+  if (currentSaveId.empty())
+    return;
+  SaveEntry e = *saves.find(currentSaveId);
+  e.level = level;
+  e.maxLevel = std::max(e.maxLevel, level);
+  e.mode = (int)mode;
+  e.difficulty = currentDifficulty;
+  e.twoPlayers = twoPlayers;
+  e.playtime = totalPlaytime;
+  e.timestamp = std::time(nullptr);
+  e.speedrunSplits = sr.splits;
+
+  int numPlayers = twoPlayers ? 2 : 1;
+  for (int p = 0; p < numPlayers && p < 2; ++p) {
+    e.selectedSlot[p] = players[p].selectedSlot;
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
+      e.inventory[p][i].count = players[p].inventory[i].count;
+    }
+  }
+  saves.save(e);
 }

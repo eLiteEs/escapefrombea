@@ -15,20 +15,13 @@
 
 #include <algorithm>
 #include <ctime>
-#include <random>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #endif
 
-// =========================================================================
-//  Util
-// =========================================================================
 Color Game::playerColor(int idx) const { return UI::PlayerColor(idx); }
 
-// =========================================================================
-//  init / shutdown / render targets
-// =========================================================================
 void Game::init() {
   cfg.load();
   Lang::load(cfg.language.c_str());
@@ -158,7 +151,7 @@ void Game::init() {
   // Aplicar FPS, VSync, resolución de ventana, RTs, etc.
   applyVideoSettings();
 
-  WaitTime(2);
+  WaitTime(1);
 
   state = ST_MENU;
 }
@@ -216,9 +209,6 @@ void Game::ensureRenderTargets() {
   }
 }
 
-// =========================================================================
-//  Estado
-// =========================================================================
 void Game::toMenu() {
   state = ST_MENU;
   navIndex = 0;
@@ -259,17 +249,6 @@ void Game::assignGamepads() {
   players[1].gamepadId = (twoPlayers && IsGamepadAvailable(p2Pad)) ? p2Pad : -1;
 }
 
-// =========================================================================
-//  Helpers de spawn
-// =========================================================================
-
-// =========================================================================
-//  Cinemáticas
-// =========================================================================
-
-// =========================================================================
-//  Input helpers
-// =========================================================================
 bool Game::consumeConfirm() {
   if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     return true;
@@ -317,9 +296,6 @@ int Game::gamepadLeftRight() {
   return 0;
 }
 
-// =========================================================================
-//  update
-// =========================================================================
 void Game::update(float dt) {
   UI::scale = cfg.guiScale;
   UI::colorblind = cfg.colorblindMode;
@@ -718,62 +694,6 @@ void Game::update(float dt) {
   }
 }
 
-void Game::showToast(const char *msg) {
-  snprintf(toastMsg, sizeof(toastMsg), "%s", msg);
-  toastTimer = 1.8f;
-}
-
-void Game::saveCurrentGame() {
-  if (currentSaveId.empty()) {
-    showToast(L("toast.noslot", "Sin slot asignado"));
-    return;
-  }
-  SaveEntry e = *saves.find(currentSaveId);
-  e.level = level;
-  e.maxLevel = std::max(e.maxLevel, level);
-  e.mode = (int)mode;
-  e.difficulty = currentDifficulty;
-  e.twoPlayers = twoPlayers;
-  e.playtime = totalPlaytime;
-  e.timestamp = std::time(nullptr);
-  e.speedrunSplits = sr.splits;
-
-  int numPlayers = twoPlayers ? 2 : 1;
-  for (int p = 0; p < numPlayers && p < 2; ++p) {
-    e.selectedSlot[p] = players[p].selectedSlot;
-    for (int i = 0; i < C::INV_SLOTS; ++i) {
-      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
-      e.inventory[p][i].count = players[p].inventory[i].count;
-    }
-  }
-  saves.save(e);
-  showToast(L("toast.saved", "Partida guardada"));
-}
-
-void Game::autoSaveProgress() {
-  if (currentSaveId.empty())
-    return;
-  SaveEntry e = *saves.find(currentSaveId);
-  e.level = level;
-  e.maxLevel = std::max(e.maxLevel, level);
-  e.mode = (int)mode;
-  e.difficulty = currentDifficulty;
-  e.twoPlayers = twoPlayers;
-  e.playtime = totalPlaytime;
-  e.timestamp = std::time(nullptr);
-  e.speedrunSplits = sr.splits;
-
-  int numPlayers = twoPlayers ? 2 : 1;
-  for (int p = 0; p < numPlayers && p < 2; ++p) {
-    e.selectedSlot[p] = players[p].selectedSlot;
-    for (int i = 0; i < C::INV_SLOTS; ++i) {
-      e.inventory[p][i].kind = (int)players[p].inventory[i].kind;
-      e.inventory[p][i].count = players[p].inventory[i].count;
-    }
-  }
-  saves.save(e);
-}
-
 void Game::startNewGame(const SaveEntry &proto) {
   std::string id = saves.create(proto);
   if (id.empty()) {
@@ -855,21 +775,6 @@ void Game::loadGame(const std::string &saveId) {
     PlayMusicStream(assets.musicLevel);
     musicLevelPlaying = true;
   }
-}
-
-void Game::drawToast() {
-  if (toastTimer <= 0.0f)
-    return;
-  int W = GetScreenWidth();
-  float a = std::min(1.0f, toastTimer / 0.4f);
-  unsigned char alpha = (unsigned char)(a * 255);
-  int tw = UI::M(toastMsg, 24);
-  int pad = 20;
-  int x = W / 2 - tw / 2 - pad;
-  int y = 80;
-  DrawRectangle(x, y, tw + pad * 2, 44, (Color){20, 20, 30, alpha});
-  DrawRectangleLines(x, y, tw + pad * 2, 44, (Color){100, 220, 120, alpha});
-  UI::T(toastMsg, W / 2 - tw / 2, y + 10, 24, (Color){200, 255, 200, alpha});
 }
 
 void Game::drawMenus() {
@@ -1060,89 +965,4 @@ void Game::applyVideoSettings() {
   UI::colorblind = cfg.colorblindMode;
 
   ensureRenderTargets();
-}
-
-void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
-                                     int lvl, std::mt19937 &rng) {
-  float dm = Util::diffMultFor(currentDifficulty);
-  float spd = C::BASE_ESPD * (1.0f + 0.15f * (float)(lvl - 1)) * dm;
-
-  for (const auto &p : positions) {
-    if (maze.wallAtWorld(p.x, p.z))
-      continue;
-
-    Enemy e;
-    e.pos = p;
-    e.dir = {0, 0};
-    e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
-    e.turnT = 0.0f;
-    e.prevPos = p;
-
-    int r = (int)(rng() % 100);
-    if (lvl >= 5 && r > 10)
-      e.kind = ENEMY_HYPERGAMY;
-    else if (lvl >= 4 && r < 30)
-      e.kind = ENEMY_ALMEIDA;
-    else if (lvl >= 3 && r < 30)
-      e.kind = ENEMY_CV;
-    else if (lvl >= 3 && r < 40)
-      e.kind = ENEMY_YE;
-    else if (lvl >= 2 && r < 65)
-      e.kind = ENEMY_MARISA;
-    else if (lvl >= 2 && r < 85)
-      e.kind = ENEMY_ALT;
-    else
-      e.kind = ENEMY_BEA;
-
-    e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
-    enemies.push_back(e);
-  }
-}
-
-void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
-                                   std::mt19937 &rng) {
-  struct Weighted {
-    ItemKind kind;
-    int weight;
-  };
-  const Weighted pool[] = {{ITEM_ROCK, 30},    {ITEM_BOX, 20},
-                           {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
-                           {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
-  const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
-  int totalWeight = 0;
-  for (int i = 0; i < POOL_SIZE; ++i)
-    totalWeight += pool[i].weight;
-
-  auto rollKind = [&]() -> ItemKind {
-    int r = (int)(rng() % totalWeight);
-    int acc = 0;
-    for (int i = 0; i < POOL_SIZE; ++i) {
-      acc += pool[i].weight;
-      if (r < acc)
-        return pool[i].kind;
-    }
-    return ITEM_ROCK;
-  };
-
-  for (const auto &p : positions) {
-    if (maze.wallAtWorld(p.x, p.z))
-      continue;
-    WorldPickup wp;
-    wp.kind = rollKind();
-    wp.pos = {p.x, p.y + 0.35f, p.z}; // ← usar p.y (altura del suelo)
-    wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
-    worldItems.push_back(wp);
-  }
-}
-
-void Game::spawnKeysFromPositions(const std::vector<Vector3> &positions) {
-  for (const auto &p : positions) {
-    if (maze.wallAtWorld(p.x, p.z))
-      continue;
-    WorldPickup wp;
-    wp.kind = ITEM_KEY;
-    wp.pos = {p.x, p.y + 0.55f, p.z}; // ← usar p.y
-    wp.bobT = 0.0f;
-    worldItems.push_back(wp);
-  }
 }

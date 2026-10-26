@@ -1,4 +1,7 @@
 #include "debug.hpp"
+
+#include "common.hpp"
+
 #include <cstdio>
 #include <cmath>
 

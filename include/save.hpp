@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+struct Game;
+
 // Content of save that is readed or written to the save file
 struct SaveEntry {
   std::string id; // "save_<ts>_<rand>"

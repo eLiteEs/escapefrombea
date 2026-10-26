@@ -438,3 +438,23 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
     UI::T(pb, px + boxW - pw - padIn, py + 8, fs, (Color){255, 220, 60, a});
   }
 }
+
+void Game::drawToast() {
+  if (toastTimer <= 0.0f)
+    return;
+  int W = GetScreenWidth();
+  float a = std::min(1.0f, toastTimer / 0.4f);
+  unsigned char alpha = (unsigned char)(a * 255);
+  int tw = UI::M(toastMsg, 24);
+  int pad = 20;
+  int x = W / 2 - tw / 2 - pad;
+  int y = 80;
+  DrawRectangle(x, y, tw + pad * 2, 44, (Color){20, 20, 30, alpha});
+  DrawRectangleLines(x, y, tw + pad * 2, 44, (Color){100, 220, 120, alpha});
+  UI::T(toastMsg, W / 2 - tw / 2, y + 10, 24, (Color){200, 255, 200, alpha});
+}
+
+void Game::showToast(const char *msg) {
+  snprintf(toastMsg, sizeof(toastMsg), "%s", msg);
+  toastTimer = 1.8f;
+}

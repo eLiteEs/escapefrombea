@@ -2,19 +2,6 @@
 #include "player.hpp"
 #include <cmath>
 
-static void moveEntity(const Maze &maze, float &x, float &z, float dx, float dz,
-                       float r) {
-  if (Debug::noClip) {
-    x += dx;
-    z += dz;
-    return;
-  }
-  if (!maze.circleHitsWall(x + dx, z, r))
-    x += dx;
-  if (!maze.circleHitsWall(x, z + dz, r))
-    z += dz;
-}
-
 bool updatePlayer(Player &pl, const KeyBindings &kb, float dt,
                   bool allowMouseLook, const Config &cfg, const Maze &maze) {
   if (pl.caught || pl.escaped)

@@ -1,5 +1,6 @@
 #include "gameplay_debug.hpp"
 
+#include "debug.hpp"
 #include "enemy.hpp"
 #include "game.hpp"
 #include "inventory.hpp"
