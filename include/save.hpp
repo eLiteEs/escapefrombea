@@ -1,37 +1,34 @@
 #pragma once
+
 #include "common.hpp"
+
 #include <cstdint>
 #include <ctime>
 #include <string>
 #include <vector>
 
-// -------------------------------------------------------------------------
-//  SaveEntry — un mundo/partida guardada
-// -------------------------------------------------------------------------
+// Content of save that is readed or written to the save file
 struct SaveEntry {
   std::string id; // "save_<ts>_<rand>"
   std::string name = "New game";
 
   int level = 1;
   int maxLevel = 1;
-  int mode = 0;       // GameMode
-  int difficulty = 0; // Diff
+  int mode = 0;
+  int difficulty = 0;
   bool speedrun = false;
   bool twoPlayers = false;
 
   float playtime = 0.0f;
-  std::time_t timestamp = 0; // última modificación
+  std::time_t timestamp = 0;
   std::time_t created = 0;
 
-  // Config de la run infinita
   uint32_t runSeed = 0;
-  int enemyMult = 2; // índice en C::ENDLESS_MULT
+  int enemyMult = 2;
   int itemMult = 2;
 
-  // Splits de speedrun en curso
   std::vector<float> speedrunSplits;
 
-  // Inventario por jugador
   struct InvSlotSaved {
     int kind = 0;
     int count = 0;
@@ -40,9 +37,6 @@ struct SaveEntry {
   int selectedSlot[2] = {0, 0};
 };
 
-// -------------------------------------------------------------------------
-//  SpeedrunEntry — una run terminada, en el historial global
-// -------------------------------------------------------------------------
 struct SpeedrunEntry {
   uint32_t seed = 0;
   int mode = 0;
@@ -51,73 +45,47 @@ struct SpeedrunEntry {
   std::vector<float> splits;
 };
 
-// --- Ghost ---
-// Una muestra de posición. Empaquetada a mano para ocupar 6 bytes.
+// Specific ghost at a time
 struct GhostSample {
   int16_t x = 0;    // posición X en centímetros
   int16_t z = 0;    // posición Z en centímetros
   uint16_t yaw = 0; // ángulo normalizado: 0..65535 → 0..2π
 };
 
-// Los samples de un nivel concreto.
+// Specific ghost at a level
 struct GhostLevel {
-  float duration = 0.0f; // segundos que duró este nivel
+  float duration = 0.0f; // How long did the ghost take to complete a level
   std::vector<GhostSample> samples;
 };
 
-// Ghost completo de una run (todos los niveles).
+// Specific ghost to a whole run
 struct GhostRun {
   uint32_t seed = 0;
   int mode = 0;
-  std::vector<GhostLevel> levels; // levels[i] = nivel i+1
+  std::vector<GhostLevel> levels;
 };
 
-// -------------------------------------------------------------------------
-//  SaveManager — CRUD + historial de speedruns
-// -------------------------------------------------------------------------
 class SaveManager {
 public:
-  // Carga el índice y todos los .sav, y el historial de speedruns.
-  void refresh();
+  void refresh(); // Reload saves
+  const std::vector<SaveEntry> &entries() const { return entries_; } // Get all saves
+  std::string create(const SaveEntry &proto); // Create a save
+  std::string duplicate(const std::string &id); // Duplicate a save
+  std::string recreate(const std::string &id); // Delete user data from a save
+  bool remove(const std::string &id); // Delete a save
+  bool save(const SaveEntry &e); // Save a save
+  const SaveEntry *find(const std::string &id) const; // Search by id and read save file as a const
+  SaveEntry *find(const std::string &id); // Search by id and read save file
 
-  const std::vector<SaveEntry> &entries() const { return entries_; }
-
-  // --- CRUD ---
-  // Crea un save a partir de un prototipo. Devuelve el id asignado
-  // (o "" si falla). El nombre puede venir vacío; se respeta tal cual.
-  std::string create(const SaveEntry &proto);
-
-  // Duplica un save existente. Nuevo id, name + " (copy)".
-  // Devuelve el id nuevo o "" si no existe el original.
-  std::string duplicate(const std::string &id);
-
-  // Reinicia el progreso de un save (nivel 1, inventario vacío,
-  // splits limpios). Mantiene nombre, modo, dificultad, config.
-  std::string recreate(const std::string &id);
-
-  // Borra del índice y del disco. Devuelve true si existía.
-  bool remove(const std::string &id);
-
-  // Persiste los cambios de un save. Si no existe, lo añade.
-  bool save(const SaveEntry &e);
-
-  // Búsquedas por id.
-  const SaveEntry *find(const std::string &id) const;
-  SaveEntry *find(const std::string &id);
-
-  // --- Historial de speedruns (global, independiente del save) ---
+  // Speedruns
   void loadSpeedruns();
   void saveSpeedruns();
   void addSpeedrun(const SpeedrunEntry &e);
-  bool removeSpeedrunAt(int index); // ← NUEVO
-
+  bool removeSpeedrunAt(int index);
   const std::vector<SpeedrunEntry> &speedruns() const { return speedruns_; }
-
-  // Rellena out con el mejor split por índice para (seed, mode).
-  // Índices sin datos quedan a 0.0f.
   void bestSplitsFor(uint32_t seed, int mode, std::vector<float> &out) const;
 
-  // Ghost I/O (1 fichero por categoría, solo el mejor run)
+  // Ghosts
   bool saveGhost(uint32_t seed, int mode, const GhostRun &g);
   bool loadGhost(uint32_t seed, int mode, GhostRun &out) const;
   bool deleteGhost(uint32_t seed, int mode);

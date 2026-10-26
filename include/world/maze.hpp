@@ -1,6 +1,6 @@
 #pragma once
+
 #include "assets.hpp"
-#include "common.hpp"
 
 #include <cstdint>
 #include <string>

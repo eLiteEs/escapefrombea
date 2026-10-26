@@ -104,7 +104,7 @@ struct Game {
   RenderTexture2D rt3d = {}; // Render target para el renderer 3D
   int rtW = 0, rtH = 0;
 
-  uint32_t currentSeed = 0;
+  uint32_t currentSeed = 0; // Current save seed
 
   // Audio
   bool musicMenuPlaying = false;
@@ -134,27 +134,38 @@ struct Game {
   // Update / Draw
   void update(float dt);
   void draw();
+
+  // Game screen
+  void drawGameplayView(const Player &pl, int vw, int vh, int playerNum);
+  void drawSplitScreen();
+
+  // HUD
+  void drawInventory(const Player &pl, int vw, int vh);
+  void drawHandItem2D(const Player &pl, int vw, int vh);
+  void drawMinimap(const Player &pl, int vw);
+  void drawStaminaBar(const Player &pl, int vw, int vh);
+  void drawCinematic();
+  void drawToast();
+
+  // Menus
   void drawMenus();
+  void drawSpeedrunMenu();
+  void drawPauseMenu();
+  void drawMenuLevelClear();
+  void drawMenuGameOver();
+  void drawMenuMain();
 
   void drawSaveList();
   void drawSaveCreate();
 
+  // Configs
   void drawConfigHub();
   void drawConfigVideo();
   void drawConfigAudio();
   void drawConfigGameplay();
   void drawConfigControls();
   void drawConfigAccess();
-
-  void drawGameplayView(const Player &pl, int vw, int vh, int playerNum);
-  void drawMinimap(const Player &pl, int vw);
-  void drawStaminaBar(const Player &pl, int vw, int vh);
-  void drawSplitScreen();
-  void drawCinematic();
-  void drawPauseMenu();
-  void drawToast();
-  void drawSpeedrunMenu();
-  void drawSpeedrunOverlay(int vw, int vh);
+  void drawConfigSpeedrun();
 
   // Cinemáticas y transiciones de nivel
   void playCinematic(const char *name, const char *nextAction);
@@ -164,10 +175,21 @@ struct Game {
   void enterLevel(int lvl);
   void drawLevelIntro();
 
-  // Speedrun
+  // Speedruns
   void speedrunStartRun(uint32_t seed, int mode);
   void speedrunRecordSplit();
   void speedrunFinishRun();
+  void drawSpeedrunOverlay(int vw, int vh);
+
+  int srMenuRunCursor = 0;
+  int srMenuRunScroll = 0;
+  bool srMenuDeleteConfirm = false;
+  int srMenuDeleteIndex = -1;
+
+  GhostRun srGhostRec;
+  GhostRun srGhostPlayback;
+  bool srGhostPlaybackValid = false;
+  float srGhostSampleTimer = 0.0f;
 
   // Niveles custom
   bool tryLoadCustomLevel(int lvl, LevelExtras &extras);
@@ -189,6 +211,7 @@ struct Game {
   void applyVideoSettings();
   float renderDist() const;
 
+  // Debug
   void handleDebugHotkeys();
   void drawDebugOverlay(int vw, int vh, int playerNum);
   void drawDebugWorld3D(const Player &pl);
@@ -199,44 +222,34 @@ struct Game {
   void debugTeleportToExit();
   void debugRevealMap();
 
+  // Jumpscare
   void startJumpscare(int enemyIdx);
   void drawJumpscare();
   float jumpscareTimer = 0.0f;
   int jumpscareEnemy = -1;
 
+  // Credits
   CreditsScreen credits;
 
+  // Items
   void spawnWorldItems(int lvl, int size, std::mt19937 &rng);
   void updateWorldItems(float dt);
 
+  // Interactions
   void handleInteraction(int playerIdx);
   void handleItemInput(int playerIdx);
   int findInteractable(const Player &pl, int &outCx, int &outCy,
                        bool &isLocker) const;
-  void drawInventory(const Player &pl, int vw, int vh);
-  void drawHandItem2D(const Player &pl, int vw, int vh);
   void renderPlayerView(const Player &pl);
 
   // Buffer de texto para editar la seed en la creación de partida
   char seedEditBuf[16] = {0};
 
-  // Detección de doble click en la lista de saves
+  // Handle double clicking on save list
   int saveListLastClickIdx = -1;
   double saveListLastClickTime = 0.0;
 
-  void drawConfigSpeedrun(); // ← NUEVO
-
-  // Navegación del menú de speedruns
-  int srMenuRunCursor = 0;
-  int srMenuRunScroll = 0;
-  bool srMenuDeleteConfirm = false;
-  int srMenuDeleteIndex = -1;
-
-  GhostRun srGhostRec;      // run actual siendo grabado
-  GhostRun srGhostPlayback; // ghost cargado para la categoría
-  bool srGhostPlaybackValid = false;
-  float srGhostSampleTimer = 0.0f;
-
+  // NPCs, Signs, Dialogs
   std::vector<LevelExtras::SignData> currentSigns;
   std::vector<LevelExtras::NpcData> currentNpcs;
 
@@ -248,8 +261,4 @@ struct Game {
                   bool isSign);
   void closeDialog();
   void drawDialog();
-
-  void drawMenuLevelClear();
-  void drawMenuGameOver();
-  void drawMenuMain();
 };

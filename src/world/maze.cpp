@@ -11,25 +11,6 @@
 #include <utility>
 
 #include "assets.hpp"
-#include "paths.hpp"
-
-static void addTri(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
-                   std::vector<Vector3> &normals,
-                   std::vector<unsigned short> &indices, Vector3 v0, Vector3 v1,
-                   Vector3 v2, Vector3 n) {
-  unsigned short base = (unsigned short)verts.size();
-  verts.push_back(v0);
-  verts.push_back(v1);
-  verts.push_back(v2);
-  uvs.push_back({0.0f, 1.0f});
-  uvs.push_back({1.0f, 1.0f});
-  uvs.push_back({0.5f, 0.0f});
-  for (int i = 0; i < 3; ++i)
-    normals.push_back(n);
-  indices.push_back(base + 0);
-  indices.push_back(base + 1);
-  indices.push_back(base + 2);
-}
 
 // Helper para añadir un quad a un mesh (2 triángulos)
 static void addQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
