@@ -2,6 +2,7 @@
 
 #include "enemy.hpp"
 #include "game.hpp"
+#include "inventory.hpp"
 
 void Game::handleDebugHotkeys() {
     if (state == ST_PLAYING || state == ST_PAUSED) {

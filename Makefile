@@ -220,12 +220,12 @@ $(BUILD_DIR)/obj-linux/%.o: $(SRC_DIR)/%.cpp $(HEADERS) | dirs
 # Dinámico (clásico)
 $(BUILD_DIR)/$(APP_NAME): $(OBJ_LINUX)
 	@echo "  LD (dynamic) $@"
-	$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) $(RAYLIB_LIBS)
+	@$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) $(RAYLIB_LIBS)
 
 # Estático
 $(BUILD_DIR)/$(APP_NAME)-static: $(OBJ_LINUX)
 	@echo "  LD (static) $@"
-	$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) \
+	@$(CXX) $(OBJ_LINUX) -o $@ $(LDFLAGS) \
 		-Wl,-Bstatic -lraylib -Wl,-Bdynamic \
 		-static-libgcc -static-libstdc++ \
 		-lm -lpthread -ldl -lrt -lX11

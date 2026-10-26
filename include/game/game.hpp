@@ -184,7 +184,6 @@ struct Game {
   bool consumeConfirm();
   bool consumeCancel();
   Color playerColor(int idx) const;
-  static const char *formatDate(std::time_t t);
 
   // Vídeo / accesibilidad
   void applyVideoSettings();

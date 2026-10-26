@@ -2,6 +2,7 @@
 
 #include "common.hpp"
 #include "game.hpp"
+#include "inventory.hpp"
 #include "lang.hpp"
 #include "ui.hpp"
 #include "util_format.hpp"

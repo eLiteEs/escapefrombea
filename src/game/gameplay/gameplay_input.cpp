@@ -1,6 +1,7 @@
 #include "gameplay_input.hpp"
 
 #include "game.hpp"
+#include "inventory.hpp"
 #include "lang.hpp"
 
 void Game::handleInteraction(int p) {

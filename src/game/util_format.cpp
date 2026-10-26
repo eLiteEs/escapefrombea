@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace Util {
 
@@ -153,6 +154,17 @@ void drawDifficultyStar(float cx, float cy, float radius, Color color,
             DrawLineEx(verts[i], verts[j], 2.0f, color);
         }
     }
+}
+
+const char* formatDate(std::time_t t) {
+    if (t == 0)
+        return "-";
+    static char buf[64];
+    std::tm *tm_ = std::localtime(&t);
+    if (!tm_)
+        return "-";
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", tm_);
+    return buf;
 }
 
 }

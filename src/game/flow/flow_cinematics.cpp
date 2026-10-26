@@ -1,4 +1,6 @@
 #include "flow_cinematics.hpp"
+
+#include "debug.hpp"
 #include "util_format.hpp"
 
 #include <cstring>

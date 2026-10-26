@@ -3,6 +3,8 @@
 #include "game.hpp"
 #include "lang.hpp"
 #include "ui.hpp"
+#include "util_format.hpp"
+
 #include <cstring>
 
 void Game::drawSaveList() {
@@ -100,7 +102,7 @@ void Game::drawSaveList() {
       int ptW = UI::M(pt, 16);
       UI::T(pt, listX + listW - ptW - 20, y + 12, 16, RAYWHITE);
 
-      const char *dateStr = formatDate(e.timestamp);
+      const char *dateStr = Util::formatDate(e.timestamp);
       int dtW = UI::M(dateStr, 14);
       UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, GRAY);
 

@@ -1,7 +1,10 @@
 #pragma once
+
+#include "raylib.h"
+
 #include <cstddef>
 #include <string>
-#include "raylib.h"
+#include <ctime>
 
 namespace Util {
     void formatSplitTime(float sec, char* out, size_t sz);
@@ -15,4 +18,5 @@ namespace Util {
     const char* rdLabel(int idx);
     const char* cbLabel(int idx);
     void drawDifficultyStar(float cx, float cy, float radius, Color color, bool filled);
+    const char* formatDate(std::time_t t);
 }
