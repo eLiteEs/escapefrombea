@@ -170,6 +170,7 @@ void Game::shutdown() {
   assets.unload();
   CloseAudioDevice();
   CloseWindow();
+  Lang::unloadExtra();
 }
 
 void Game::ensureRenderTargets() {
@@ -211,6 +212,10 @@ void Game::ensureRenderTargets() {
 
 void Game::toMenu() {
   state = ST_MENU;
+
+  Lang::unloadExtra();
+  currentTranslationsLevel = -1;
+
   navIndex = 0;
   EnableCursor();
   if (assets.musicLevel.stream.buffer != nullptr && musicLevelPlaying) {

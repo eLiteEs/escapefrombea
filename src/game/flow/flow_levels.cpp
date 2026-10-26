@@ -1,5 +1,6 @@
 #include "flow_levels.hpp"
 
+#include "common.hpp"
 #include "game.hpp"
 #include "lang.hpp"
 #include "paths.hpp"
@@ -25,8 +26,13 @@ static Vector3 findFreeSpawnNear(const Maze &maze, int cx, int cy,
 
 static void resetPlayerState(Player &p, Vector3 spawn) {
   if (p.caught) {
-    for (int i = 0; i < C::INV_SLOTS; ++i)
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
       p.inventory[i].count = p.inventory[i].count / 2;
+      if(p.inventory[i].count < 1) {
+        p.inventory[i].count = 0;
+        p.inventory[i].kind = ITEM_NONE;
+      }
+    }
   }
 
   // Posición / orientación
@@ -134,10 +140,14 @@ void Game::startLevel(int lvl) {
     exitPos = extras.exit;
 
     currentSigns = extras.signs;
+    loadLevelTranslations(lvl);
     currentNpcs = extras.npcs;
   } else {
     exitPos = maze.cellCenter(maze.w - 2, maze.h - 2);
     exitPos.y = maze.groundZAtWorld(exitPos.x, exitPos.z);
+
+    Lang::unloadExtra();
+    currentTranslationsLevel = -1;
 
     currentSigns.clear();
     currentNpcs.clear();

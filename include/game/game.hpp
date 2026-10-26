@@ -106,6 +106,12 @@ struct Game {
 
   uint32_t currentSeed = 0; // Current save seed
 
+  int currentTranslationsLevel = -1;   // nivel cuyas traducciones están cargadas
+
+  void loadLevelTranslations(int lvl);
+  void reloadLevelTranslations();
+  std::string resolveDialogText(const std::string& raw) const;
+
   // Audio
   bool musicMenuPlaying = false;
   bool musicLevelPlaying = false;

@@ -59,12 +59,14 @@ void Game::drawConfigHub() {
           6, items, 30,
           TextFormat(L("config.language", "Idioma: %s"), Lang::currentLang()),
           &navIndexCfg, nullptr) ||
-      (navIndexCfg == 5 && consumeConfirm())) {
+      (navIndexCfg == 6 && consumeConfirm())) {
     std::string cur = Lang::currentLang();
     cfg.language = (cur == "es") ? "en" : "es";
     Lang::load(cfg.language.c_str());
+    reloadLevelTranslations();
     cfg.save();
   }
+
   if (uiButton(7, items, 30, L("common.back", "Volver"), &navIndexCfg,
                nullptr) ||
       (navIndexCfg == 6 && consumeConfirm()) || consumeCancel()) {

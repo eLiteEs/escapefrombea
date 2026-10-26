@@ -1,21 +1,14 @@
 ####LL####
-#s#.....k#
-#.#ee.##.#
+#s#....Tk#
+#T#ee.##.#
 #i#....#.#
 #i#....#iL
 #.#LL#.#iL
-L.....i#i#
-L..>F.i<.#
-#.e....#f#
+L......#i#
+L.F..e.#.#
+#.T....#f#
 ###LL#####
-@HEIGHTS
-0000000000
-0000000000
-0000000000
-0000000000
-0000000000
-0000000000
-0000000000
-0000111100
-0000000000
-0000000000
+@SIGNS
+1,2,Hola; bienvenido a Escape from Bea.\nUsa Click derecho para coger items y Click izquierdo para lanzarlos
+2,8,Con click derecho puedes usar la fuente y tambien esconderte en taquillas
+7,1,En algunos niveles necesitaras una llave para poder completarlo

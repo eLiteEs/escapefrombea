@@ -10,6 +10,8 @@ import java.util.*;
 
 record TileDef(char ch, Color fg, Color bg, String name) {}
 record Change(int x, int y, char prevCell, int prevHeight) {}
+record SignEntry(int x, int y, String text) {}
+record NpcEntry(int x, int y, String name, String text) {}
 
 // ==================== CONSTANTS ====================
 final int MAX_HEIGHT = 4;
@@ -27,6 +29,12 @@ final TileDef[] TILES = {
     new TileDef('L', from256(15),  from256(25),  "taquilla"),
     new TileDef('F', from256(16),  from256(45),  "fuente"),
     new TileDef('k', from256(220), from256(94),  "llave"),
+    new TileDef('^', from256(220), from256(94),  "rampa N"),
+    new TileDef('>', from256(220), from256(94),  "rampa E"),
+    new TileDef('v', from256(220), from256(94),  "rampa S"),
+    new TileDef('<', from256(220), from256(94),  "rampa W"),
+    new TileDef('T', from256(220), from256(130), "cartel"),
+    new TileDef('N', from256(16),  from256(130), "NPC"),
 };
 
 // ==================== STATE ====================
@@ -43,6 +51,7 @@ char brush = '#';
 int brushHeight = 0;
 boolean heightMode = false;
 int zoomIdx = 2;
+int activeFloor = 0;   // -1 = "Todos"
 
 String currentPath = "assets/levels/level_01_map.dgn";
 ArrayDeque<ArrayList<Change>> undoStack = new ArrayDeque<>();
@@ -52,6 +61,9 @@ boolean dirty = false;
 char[][] clipboardCells = null;
 int[][] clipboardHeights = null;
 
+final ArrayList<SignEntry> signs = new ArrayList<>();
+final ArrayList<NpcEntry>  npcs  = new ArrayList<>();
+
 JFrame frame;
 JLabel mapLabel;
 JLabel statusLabel;
@@ -60,8 +72,9 @@ JButton[] paletteButtons;
 JButton[] heightButtons;
 JToggleButton btnCells, btnHeights;
 JPanel palettePanel, heightPanel;
+JComboBox<String> floorCombo;
 
-// ==================== ENTRY POINT ====================
+// ==================== ENTRY ====================
 void main() {
     for (int y = 0; y < mapH; y++) {
         Arrays.fill(cells[y], '.');
@@ -98,6 +111,10 @@ Color heightColor(int h) {
     };
 }
 
+boolean isWallTile(char c) { return c == '#' || c == 'L' || c == 'B'; }
+boolean isRamp(char c)     { return c == '^' || c == '>' || c == 'v' || c == '<'; }
+boolean isMarker(char c)   { return c == 'T' || c == 'N'; }
+
 TileDef tileFor(char ch) {
     for (TileDef t : TILES) if (t.ch() == ch) return t;
     return null;
@@ -129,14 +146,15 @@ void newMap(int w, int h) {
     anchorX = anchorY = 0;
     clearSelection();
     undoStack.clear();
+    signs.clear();
+    npcs.clear();
     dirty = false;
     refreshBuffer();
     updateStatus();
 }
 
-// ==================== UNDO (grupos por operación) ====================
+// ==================== UNDO ====================
 void beginOp() { currentOp = new ArrayList<>(); }
-
 void commitOp() {
     if (currentOp != null && !currentOp.isEmpty()) {
         undoStack.push(currentOp);
@@ -144,12 +162,10 @@ void commitOp() {
     }
     currentOp = null;
 }
-
 void touch(int x, int y) {
     if (currentOp == null) beginOp();
     currentOp.add(new Change(x, y, cells[y][x], heights[y][x]));
 }
-
 boolean doUndo() {
     if (undoStack.isEmpty()) return false;
     var op = undoStack.pop();
@@ -161,14 +177,108 @@ boolean doUndo() {
     return true;
 }
 
-// ==================== PINTAR / SELECCIONAR ====================
+// ==================== SIGN / NPC HELPERS ====================
+SignEntry findSign(int x, int y) {
+    for (SignEntry s : signs) if (s.x() == x && s.y() == y) return s;
+    return null;
+}
+NpcEntry findNpc(int x, int y) {
+    for (NpcEntry n : npcs) if (n.x() == x && n.y() == y) return n;
+    return null;
+}
+
+String promptMultiline(String title, String initial) {
+    JTextArea ta = new JTextArea(initial, 6, 42);
+    ta.setLineWrap(true);
+    ta.setWrapStyleWord(true);
+    JScrollPane scroll = new JScrollPane(ta);
+    Object[] msg = { title, scroll };
+    int r = JOptionPane.showConfirmDialog(frame, msg, "Editor de texto",
+        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+    return (r == JOptionPane.OK_OPTION) ? ta.getText() : null;
+}
+
+void createSignAt(int x, int y) {
+    if (findSign(x, y) != null) return;
+    String txt = promptMultiline("Texto del cartel en (" + x + "," + y + "):",
+                                 "Texto del cartel");
+    if (txt == null) {
+        cells[y][x] = '.';   // cancelado
+        return;
+    }
+    signs.add(new SignEntry(x, y, txt));
+    dirty = true;
+}
+
+void createNpcAt(int x, int y) {
+    if (findNpc(x, y) != null) return;
+    String name = JOptionPane.showInputDialog(frame,
+        "Nombre del NPC en (" + x + "," + y + "):", "NPC");
+    if (name == null) { cells[y][x] = '.'; return; }
+    String txt = promptMultiline("Diálogo de " + name + ":", "Hola.");
+    if (txt == null) { cells[y][x] = '.'; return; }
+    npcs.add(new NpcEntry(x, y, name, txt));
+    dirty = true;
+}
+
+void editSignAt(int x, int y) {
+    SignEntry s = findSign(x, y);
+    if (s == null) { createSignAt(x, y); return; }
+    String newTxt = promptMultiline("Editar cartel en (" + x + "," + y + "):",
+                                    s.text());
+    if (newTxt == null) return;
+    signs.remove(s);
+    signs.add(new SignEntry(x, y, newTxt));
+    dirty = true;
+    status("Cartel actualizado");
+}
+
+void editNpcAt(int x, int y) {
+    NpcEntry n = findNpc(x, y);
+    if (n == null) { createNpcAt(x, y); return; }
+    String newName = JOptionPane.showInputDialog(frame,
+        "Nombre del NPC en (" + x + "," + y + "):", n.name());
+    if (newName == null) return;
+    String newTxt = promptMultiline("Diálogo de " + newName + ":", n.text());
+    if (newTxt == null) return;
+    npcs.remove(n);
+    npcs.add(new NpcEntry(x, y, newName, newTxt));
+    dirty = true;
+    status("NPC actualizado");
+}
+
+// ==================== PINTAR ====================
 void paintCell(int x, int y) {
     if (x < 0 || y < 0 || x >= mapW || y >= mapH) return;
     touch(x, y);
+
     if (heightMode) {
         heights[y][x] = brushHeight;
     } else {
+        char prev = cells[y][x];
         cells[y][x] = brush;
+
+        // Limpiar entradas antiguas si dejamos de ser T / N
+        if (prev == 'T' && brush != 'T') {
+            SignEntry s = findSign(x, y);
+            if (s != null) signs.remove(s);
+        }
+        if (prev == 'N' && brush != 'N') {
+            NpcEntry n = findNpc(x, y);
+            if (n != null) npcs.remove(n);
+        }
+
+        // Asignar piso activo si el brush es transitable
+        if (activeFloor >= 0 && !isWallTile(brush)) {
+            heights[y][x] = activeFloor;
+        }
+
+        // Crear cartel / NPC si es la primera vez
+        if (brush == 'T' && findSign(x, y) == null) {
+            createSignAt(x, y);
+        } else if (brush == 'N' && findNpc(x, y) == null) {
+            createNpcAt(x, y);
+        }
     }
     dirty = true;
 }
@@ -180,8 +290,19 @@ void fillSelection() {
         for (int x = selMinX(); x <= selMaxX(); x++) {
             if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
             touch(x, y);
-            if (heightMode) heights[y][x] = brushHeight;
-            else cells[y][x] = brush;
+            if (heightMode) {
+                heights[y][x] = brushHeight;
+            } else {
+                char prev = cells[y][x];
+                cells[y][x] = brush;
+                if (prev == 'T' && brush != 'T') {
+                    SignEntry s = findSign(x, y); if (s != null) signs.remove(s);
+                }
+                if (prev == 'N' && brush != 'N') {
+                    NpcEntry n = findNpc(x, y); if (n != null) npcs.remove(n);
+                }
+                if (activeFloor >= 0 && !isWallTile(brush)) heights[y][x] = activeFloor;
+            }
         }
     }
     commitOp();
@@ -197,8 +318,18 @@ void deleteSelection() {
         for (int x = selMinX(); x <= selMaxX(); x++) {
             if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
             touch(x, y);
-            if (heightMode) heights[y][x] = 0;
-            else cells[y][x] = '.';
+            if (heightMode) {
+                heights[y][x] = 0;
+            } else {
+                char prev = cells[y][x];
+                cells[y][x] = '.';
+                if (prev == 'T') {
+                    SignEntry s = findSign(x, y); if (s != null) signs.remove(s);
+                }
+                if (prev == 'N') {
+                    NpcEntry n = findNpc(x, y); if (n != null) npcs.remove(n);
+                }
+            }
         }
     }
     commitOp();
@@ -207,19 +338,18 @@ void deleteSelection() {
     updateStatus();
 }
 
+// ==================== COPY / PASTE ====================
 void copySelection() {
     if (!selectionActive) return;
     int w = selW(), h = selH();
     clipboardCells = new char[h][w];
     clipboardHeights = new int[h][w];
-    for (int y = 0; y < h; y++) {
+    for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
-            int mx = selMinX() + x;
-            int my = selMinY() + y;
-            clipboardCells[y][x] = (mx < mapW && my < mapH) ? cells[my][mx] : '.';
+            int mx = selMinX() + x, my = selMinY() + y;
+            clipboardCells[y][x]   = (mx < mapW && my < mapH) ? cells[my][mx] : '.';
             clipboardHeights[y][x] = (mx < mapW && my < mapH) ? heights[my][mx] : 0;
         }
-    }
     status("Copiado: " + w + "x" + h);
 }
 
@@ -232,19 +362,24 @@ void cutSelection() {
 
 void pasteClipboard() {
     if (clipboardCells == null) { status("Nada en el portapapeles"); return; }
-    int w = clipboardCells[0].length;
-    int h = clipboardCells.length;
+    int w = clipboardCells[0].length, h = clipboardCells.length;
     beginOp();
-    for (int y = 0; y < h; y++) {
+    for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
-            int mx = cursorX + x;
-            int my = cursorY + y;
+            int mx = cursorX + x, my = cursorY + y;
             if (mx < 0 || my < 0 || mx >= mapW || my >= mapH) continue;
             touch(mx, my);
-            cells[my][mx] = clipboardCells[y][x];
+            cells[my][mx]   = clipboardCells[y][x];
             heights[my][mx] = clipboardHeights[y][x];
+            // Marcadores pegados desde el clipboard no traen texto; los
+            // eliminamos para no dejar huérfanos.
+            if (cells[my][mx] == 'T') {
+                SignEntry s = findSign(mx, my); if (s != null) signs.remove(s);
+            }
+            if (cells[my][mx] == 'N') {
+                NpcEntry n = findNpc(mx, my); if (n != null) npcs.remove(n);
+            }
         }
-    }
     commitOp();
     dirty = true;
     refreshBuffer();
@@ -253,22 +388,27 @@ void pasteClipboard() {
 }
 
 void selectAll() {
-    selX0 = 0; selY0 = 0;
-    selX1 = mapW - 1; selY1 = mapH - 1;
+    selX0 = 0; selY0 = 0; selX1 = mapW - 1; selY1 = mapH - 1;
     selectionActive = true;
     refreshBuffer();
     updateStatus();
 }
 
 void grabTile() {
-    if (heightMode) brushHeight = heights[cursorY][cursorX];
-    else brush = cells[cursorY][cursorX];
+    if (heightMode) {
+        brushHeight = heights[cursorY][cursorX];
+    } else {
+        brush = cells[cursorY][cursorX];
+    }
     updatePaletteVisuals();
     updateStatus();
-    status("Grab: " + (heightMode ? String.valueOf(brushHeight) : String.valueOf(brush)));
 }
 
 // ==================== FILE I/O ====================
+String escapeText(String s) {
+    return s.replace("\n", "\\n").replace(",", ";");
+}
+
 void loadFromPath(String path) {
     try {
         var rawLines = Files.readAllLines(Paths.get(path), StandardCharsets.UTF_8);
@@ -279,36 +419,75 @@ void loadFromPath(String path) {
         }
         if (lines.isEmpty()) { status("Archivo vacío"); return; }
 
+        // Encontrar dónde empiezan las secciones @
         int cellsEnd = lines.size();
-        int heightsStart = -1;
         for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).equals("@HEIGHTS")) {
-                cellsEnd = i;
-                heightsStart = i + 1;
-                break;
-            }
+            if (lines.get(i).startsWith("@")) { cellsEnd = i; break; }
         }
+        if (cellsEnd < 3) { status("Mapa demasiado pequeño"); return; }
 
         int nw = lines.get(0).length();
         int nh = cellsEnd;
         mapW = nw; mapH = nh;
         cells = new char[nh][nw];
         heights = new int[nh][nw];
+        signs.clear();
+        npcs.clear();
 
+        // Celdas
         for (int y = 0; y < nh; y++) {
             String l = lines.get(y);
             for (int x = 0; x < nw; x++)
                 cells[y][x] = (x < l.length()) ? l.charAt(x) : '.';
         }
 
-        if (heightsStart >= 0) {
-            for (int y = 0; y < nh && heightsStart + y < lines.size(); y++) {
-                String l = lines.get(heightsStart + y);
-                for (int x = 0; x < nw && x < l.length(); x++) {
-                    char c = l.charAt(x);
-                    if (c >= '0' && c <= '9')
-                        heights[y][x] = Math.min(c - '0', MAX_HEIGHT);
+        // Secciones
+        int i = cellsEnd;
+        while (i < lines.size()) {
+            String sec = lines.get(i);
+            if (sec.equals("@HEIGHTS")) {
+                i++;
+                for (int y = 0; y < nh && i < lines.size(); y++, i++) {
+                    String l = lines.get(i);
+                    if (l.startsWith("@")) { i--; break; }
+                    for (int x = 0; x < nw && x < l.length(); x++) {
+                        char c = l.charAt(x);
+                        if (c >= '0' && c <= '9')
+                            heights[y][x] = Math.min(c - '0', MAX_HEIGHT);
+                    }
                 }
+                i++;
+            } else if (sec.equals("@SIGNS")) {
+                i++;
+                while (i < lines.size() && !lines.get(i).startsWith("@")) {
+                    String[] parts = lines.get(i).split(",", 3);
+                    if (parts.length >= 3) {
+                        try {
+                            int sx = Integer.parseInt(parts[0].trim());
+                            int sy = Integer.parseInt(parts[1].trim());
+                            String txt = parts[2].replace("\\n", "\n");
+                            signs.add(new SignEntry(sx, sy, txt));
+                        } catch (Exception ignored) {}
+                    }
+                    i++;
+                }
+            } else if (sec.equals("@NPCS")) {
+                i++;
+                while (i < lines.size() && !lines.get(i).startsWith("@")) {
+                    String[] parts = lines.get(i).split(",", 4);
+                    if (parts.length >= 4) {
+                        try {
+                            int nx = Integer.parseInt(parts[0].trim());
+                            int ny = Integer.parseInt(parts[1].trim());
+                            String nm  = parts[2];
+                            String txt = parts[3].replace("\\n", "\n");
+                            npcs.add(new NpcEntry(nx, ny, nm, txt));
+                        } catch (Exception ignored) {}
+                    }
+                    i++;
+                }
+            } else {
+                i++;
             }
         }
 
@@ -341,11 +520,27 @@ boolean saveToPath(String path) {
         if (anyHeight) {
             w.write("@HEIGHTS\n");
             for (int y = 0; y < mapH; y++) {
-                for (int x = 0; x < mapW; x++) {
-                    int h = Math.min(heights[y][x], MAX_HEIGHT);
-                    w.write('0' + h);
-                }
+                for (int x = 0; x < mapW; x++)
+                    w.write('0' + Math.min(heights[y][x], MAX_HEIGHT));
                 w.write('\n');
+            }
+        }
+
+        if (!signs.isEmpty()) {
+            w.write("@SIGNS\n");
+            for (SignEntry s : signs) {
+                if (s.x() < 0 || s.x() >= mapW || s.y() < 0 || s.y() >= mapH) continue;
+                w.write(s.x() + "," + s.y() + "," + escapeText(s.text()) + "\n");
+            }
+        }
+
+        if (!npcs.isEmpty()) {
+            w.write("@NPCS\n");
+            for (NpcEntry n : npcs) {
+                if (n.x() < 0 || n.x() >= mapW || n.y() < 0 || n.y() >= mapH) continue;
+                w.write(n.x() + "," + n.y() + ","
+                        + escapeText(n.name()) + ","
+                        + escapeText(n.text()) + "\n");
             }
         }
 
@@ -360,7 +555,7 @@ boolean saveToPath(String path) {
     }
 }
 
-// ==================== UI ====================
+// ==================== STATUS / RENDER ====================
 void status(String msg) { if (statusLabel != null) statusLabel.setText(msg); }
 
 void updateStatus() {
@@ -371,28 +566,35 @@ void updateStatus() {
     String curName = (curT != null) ? curT.name() : String.valueOf(cur);
     String bruName = (bruT != null) ? bruT.name() : String.valueOf(brush);
     String mode = heightMode ? "ALTURAS" : "CELDAS";
+    String floor = (activeFloor < 0) ? "Todos" : ("P" + activeFloor);
     String sel = selectionActive
-        ? String.format("  SEL(%d,%d)-(%d,%d) %dx%d", selMinX(), selMinY(),
-                        selMaxX(), selMaxY(), selW(), selH())
-        : "";
+        ? String.format("  SEL %dx%d", selW(), selH()) : "";
+    String extra = "";
+    if (cur == 'T') {
+        SignEntry s = findSign(cursorX, cursorY);
+        if (s != null) extra = "  [cartel: " + s.text().replace("\n", " ").substring(0,
+            Math.min(20, s.text().replace("\n", " ").length())) + "...]";
+    } else if (cur == 'N') {
+        NpcEntry n = findNpc(cursorX, cursorY);
+        if (n != null) extra = "  [NPC: " + n.name() + "]";
+    }
     String dirtyMark = dirty ? "  *" : "";
     statusLabel.setText(String.format(
-        "[%s] Cursor: (%d,%d)  Cell: '%c'(%s)  H:%d  Brush: '%c'(%s)  H:%d%s  %s%s",
-        mode, cursorX, cursorY, cur, curName, heights[cursorY][cursorX],
-        brush, bruName, brushHeight, sel, currentPath, dirtyMark));
+        "[%s|%s] (%d,%d) '%c'(%s) H:%d  Brush '%c'(%s) H:%d%s%s  %s%s",
+        mode, floor, cursorX, cursorY, cur, curName,
+        heights[cursorY][cursorX], brush, bruName, brushHeight,
+        sel, extra, currentPath, dirtyMark));
 }
 
 void refreshBuffer() {
     int cp = cellPx();
-    int pw = mapW * cp;
-    int ph = mapH * cp;
+    int pw = mapW * cp, ph = mapH * cp;
     if (buffer == null || buffer.getWidth() != pw || buffer.getHeight() != ph)
         buffer = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_RGB);
 
     Graphics2D g2 = buffer.createGraphics();
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
     int fontSize = Math.max(8, cp - 12);
     g2.setFont(new Font("Monospaced", Font.BOLD, fontSize));
     FontMetrics fm = g2.getFontMetrics();
@@ -402,18 +604,24 @@ void refreshBuffer() {
             int px = x * cp, py = y * cp;
             Color bg, fg;
             String draw;
+            int cellH = heights[y][x];
 
             if (heightMode) {
-                int h = heights[y][x];
-                bg = heightColor(h);
-                fg = (h >= 3) ? Color.BLACK : Color.WHITE;
-                draw = String.valueOf(h);
+                bg = heightColor(cellH);
+                fg = (cellH >= 3) ? Color.BLACK : Color.WHITE;
+                draw = String.valueOf(cellH);
             } else {
                 char ch = cells[y][x];
                 TileDef t = tileFor(ch);
                 bg = (t != null) ? t.bg() : new Color(60, 60, 70);
                 fg = (t != null) ? t.fg() : Color.WHITE;
                 draw = String.valueOf(ch);
+            }
+
+            // Atenuar si no es del piso activo (solo en modo celdas)
+            if (!heightMode && activeFloor >= 0 && cellH != activeFloor) {
+                bg = bg.darker().darker();
+                fg = fg.darker();
             }
 
             g2.setColor(bg);
@@ -424,22 +632,35 @@ void refreshBuffer() {
             g2.setColor(fg);
             g2.drawString(draw, px + (cp - sw) / 2, py + (cp + asc) / 2 - 2);
 
+            // Indicador de altura si no estamos en modo altura
+            if (!heightMode && cellH > 0) {
+                g2.setColor(new Color(255, 220, 60));
+                g2.setFont(new Font("Monospaced", Font.BOLD, Math.max(8, cp / 4)));
+                g2.drawString(String.valueOf(cellH), px + 2, py + cp / 4 + 4);
+                g2.setFont(new Font("Monospaced", Font.BOLD, fontSize));
+            }
+
+            // Asterisco para T / N con texto asignado
             if (!heightMode) {
-                int h = heights[y][x];
-                if (h > 0) {
-                    g2.setColor(new Color(255, 220, 60));
-                    g2.setFont(new Font("Monospaced", Font.BOLD, Math.max(8, cp / 4)));
-                    g2.drawString(String.valueOf(h), px + 2, py + cp / 4 + 4);
+                char ch = cells[y][x];
+                boolean hasText = (ch == 'T' && findSign(x, y) != null) ||
+                                  (ch == 'N' && findNpc(x, y) != null);
+                if (hasText) {
+                    g2.setColor(new Color(255, 255, 0, 200));
+                    g2.setFont(new Font("Monospaced", Font.BOLD, Math.max(8, cp / 3)));
+                    g2.drawString("*", px + cp - cp / 3, py + cp / 3);
                     g2.setFont(new Font("Monospaced", Font.BOLD, fontSize));
                 }
             }
         }
     }
 
+    // Grid
     g2.setColor(new Color(20, 20, 30));
     for (int x = 0; x <= mapW; x++) g2.drawLine(x * cp, 0, x * cp, ph);
     for (int y = 0; y <= mapH; y++) g2.drawLine(0, y * cp, pw, y * cp);
 
+    // Selección
     if (selectionActive) {
         int sx = selMinX() * cp, sy = selMinY() * cp;
         int sw = selW() * cp, sh = selH() * cp;
@@ -450,6 +671,7 @@ void refreshBuffer() {
         g2.drawRect(sx, sy, sw - 1, sh - 1);
     }
 
+    // Cursor
     g2.setColor(Color.YELLOW);
     g2.setStroke(new BasicStroke(2.5f));
     g2.drawRect(cursorX * cp, cursorY * cp, cp - 1, cp - 1);
@@ -463,6 +685,7 @@ void refreshBuffer() {
     }
 }
 
+// ==================== UI ====================
 void buildUI() {
     try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
     catch (Exception ignored) {}
@@ -470,7 +693,7 @@ void buildUI() {
     frame = new JFrame("Map Editor - " + currentPath);
     frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-    // ===== Menú =====
+    // ----- Menú -----
     var menuBar = new JMenuBar();
 
     var fileMenu = new JMenu("Archivo");
@@ -515,6 +738,11 @@ void buildUI() {
     toolsMenu.addSeparator();
     toolsMenu.add(menuItem("Dibujar borde",        -1, this::doBorder));
     toolsMenu.add(menuItem("Rellenar todo...",     -1, this::doFill));
+    toolsMenu.addSeparator();
+    toolsMenu.add(menuItem("Editar cartel/NPC aquí", KeyEvent.VK_E,
+                           this::editMarkerAtCursor));
+    toolsMenu.add(menuItem("Eliminar cartel/NPC aquí", -1,
+                           this::removeMarkerAtCursor));
     menuBar.add(toolsMenu);
 
     var helpMenu = new JMenu("Ayuda");
@@ -523,23 +751,35 @@ void buildUI() {
 
     frame.setJMenuBar(menuBar);
 
-    // ===== Toolbar superior =====
+    // ----- Barra superior -----
     var topBar = new JPanel(new BorderLayout());
 
     var modeBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     modeBar.setBorder(BorderFactory.createTitledBorder("Modo"));
+
     btnCells = new JToggleButton("Celdas", !heightMode);
     btnHeights = new JToggleButton("Alturas", heightMode);
-    btnCells.setFocusable(false);
-    btnHeights.setFocusable(false);
+    btnCells.setFocusable(false); btnHeights.setFocusable(false);
     btnCells.addActionListener(e -> { heightMode = false; btnCells.setSelected(true); btnHeights.setSelected(false); updatePaletteVisuals(); refreshBuffer(); updateStatus(); });
     btnHeights.addActionListener(e -> { heightMode = true; btnHeights.setSelected(true); btnCells.setSelected(false); updatePaletteVisuals(); refreshBuffer(); updateStatus(); });
     var bgGroup = new ButtonGroup();
-    bgGroup.add(btnCells);
-    bgGroup.add(btnHeights);
-    modeBar.add(btnCells);
-    modeBar.add(btnHeights);
+    bgGroup.add(btnCells); bgGroup.add(btnHeights);
+    modeBar.add(btnCells); modeBar.add(btnHeights);
 
+    // Combo de piso
+    floorCombo = new JComboBox<>(new String[]{
+        "Piso 0", "Piso 1", "Piso 2", "Piso 3", "Piso 4", "Todos"});
+    floorCombo.setSelectedIndex(0);
+    floorCombo.addActionListener(e -> {
+        int idx = floorCombo.getSelectedIndex();
+        activeFloor = (idx == 5) ? -1 : idx;
+        refreshBuffer();
+        updateStatus();
+    });
+    modeBar.add(new JLabel("  Piso:"));
+    modeBar.add(floorCombo);
+
+    // Paleta de celdas
     palettePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     palettePanel.setBorder(BorderFactory.createTitledBorder("Paleta celdas"));
     paletteButtons = new JButton[TILES.length];
@@ -551,14 +791,14 @@ void buildUI() {
         btn.setBackground(t.bg());
         btn.setForeground(t.fg());
         btn.setFont(new Font("Monospaced", Font.BOLD, 18));
-        btn.setOpaque(true);
-        btn.setFocusable(false);
+        btn.setOpaque(true); btn.setFocusable(false);
         btn.setMargin(new Insets(0, 0, 0, 0));
         btn.addActionListener(e -> { brush = t.ch(); updatePaletteVisuals(); updateStatus(); });
         paletteButtons[i] = btn;
         palettePanel.add(btn);
     }
 
+    // Paleta de alturas
     heightPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     heightPanel.setBorder(BorderFactory.createTitledBorder("Alturas (0-" + MAX_HEIGHT + ")"));
     heightButtons = new JButton[MAX_HEIGHT + 1];
@@ -568,8 +808,7 @@ void buildUI() {
         btn.setBackground(heightColor(h));
         btn.setForeground((h >= 3) ? Color.BLACK : Color.WHITE);
         btn.setFont(new Font("Monospaced", Font.BOLD, 18));
-        btn.setOpaque(true);
-        btn.setFocusable(false);
+        btn.setOpaque(true); btn.setFocusable(false);
         btn.setMargin(new Insets(0, 0, 0, 0));
         final int hv = h;
         btn.addActionListener(e -> { brushHeight = hv; updatePaletteVisuals(); updateStatus(); });
@@ -583,7 +822,7 @@ void buildUI() {
     palettes.add(heightPanel);
     topBar.add(palettes, BorderLayout.WEST);
 
-    // ===== Mapa =====
+    // ----- Mapa -----
     mapLabel = new JLabel(new ImageIcon(buffer));
     mapLabel.setHorizontalAlignment(SwingConstants.LEFT);
     mapLabel.setVerticalAlignment(SwingConstants.TOP);
@@ -593,28 +832,52 @@ void buildUI() {
 
     mapLabel.addMouseListener(new MouseAdapter() {
         @Override public void mousePressed(MouseEvent e) {
-            if (!SwingUtilities.isLeftMouseButton(e)) return;
             int x = e.getX() / cellPx();
             int y = e.getY() / cellPx();
             if (x < 0 || y < 0 || x >= mapW || y >= mapH) return;
             mapLabel.requestFocusInWindow();
 
+            char existing = cells[y][x];
+
+            // Click derecho = editar cartel/NPC si existe
+            if (SwingUtilities.isRightMouseButton(e)) {
+                if (existing == 'T') { editSignAt(x, y); refreshBuffer(); updateStatus(); return; }
+                if (existing == 'N') { editNpcAt(x, y); refreshBuffer(); updateStatus(); return; }
+            }
+
+            if (!SwingUtilities.isLeftMouseButton(e)) return;
+
+            // Shift+click = selección
             if (e.isShiftDown()) {
                 if (!selectionActive) { anchorX = x; anchorY = y; }
                 selX0 = anchorX; selY0 = anchorY;
                 selX1 = x; selY1 = y;
                 selectionActive = true;
-                refreshBuffer();
-                updateStatus();
-            } else {
-                anchorX = x; anchorY = y;
-                cursorX = x; cursorY = y;
-                clearSelection();
-                beginOp();
-                paintCell(x, y);
-                refreshBuffer();
-                updateStatus();
+                refreshBuffer(); updateStatus();
+                return;
             }
+
+            // Click normal
+            anchorX = x; anchorY = y;
+            cursorX = x; cursorY = y;
+            clearSelection();
+
+            // Si el brush es distinto del tile y hay T/N, ¿editar?
+            // Regla: si pintas con brush normal encima de T/N existente,
+            // abre editor en vez de sustituir. Para sustituir, usa el
+            // brush correspondiente ('T' o 'N').
+            if ((existing == 'T' && brush != 'T' && brush != '.') ||
+                (existing == 'N' && brush != 'N' && brush != '.')) {
+                if (existing == 'T') editSignAt(x, y);
+                else                 editNpcAt(x, y);
+                refreshBuffer(); updateStatus();
+                return;
+            }
+
+            beginOp();
+            paintCell(x, y);
+            commitOp();
+            refreshBuffer(); updateStatus();
         }
         @Override public void mouseReleased(MouseEvent e) {
             commitOp();
@@ -631,15 +894,13 @@ void buildUI() {
             if (e.isShiftDown()) {
                 selX1 = x; selY1 = y;
                 selectionActive = true;
-                refreshBuffer();
-                updateStatus();
-            } else {
-                if (x == cursorX && y == cursorY) return;
-                cursorX = x; cursorY = y;
-                paintCell(x, y);
-                refreshBuffer();
-                updateStatus();
+                refreshBuffer(); updateStatus();
+                return;
             }
+            if (x == cursorX && y == cursorY) return;
+            cursorX = x; cursorY = y;
+            paintCell(x, y);
+            refreshBuffer(); updateStatus();
         }
     });
     mapLabel.addKeyListener(new KeyAdapter() {
@@ -670,7 +931,6 @@ void buildUI() {
         Math.max(950, mapW * cellPx() + 100),
         Math.max(720, mapH * cellPx() + 220));
     frame.setLocationRelativeTo(null);
-
     frame.addWindowListener(new WindowAdapter() {
         @Override public void windowClosing(WindowEvent e) { tryClose(); }
     });
@@ -679,6 +939,32 @@ void buildUI() {
     mapLabel.requestFocusInWindow();
     updatePaletteVisuals();
     updateStatus();
+}
+
+// ==================== EDICIÓN DE MARCADORES ====================
+void editMarkerAtCursor() {
+    char c = cells[cursorY][cursorX];
+    if (c == 'T') editSignAt(cursorX, cursorY);
+    else if (c == 'N') editNpcAt(cursorX, cursorY);
+    else status("No hay cartel/NPC aquí");
+    refreshBuffer(); updateStatus();
+}
+
+void removeMarkerAtCursor() {
+    char c = cells[cursorY][cursorX];
+    if (c == 'T') {
+        SignEntry s = findSign(cursorX, cursorY);
+        if (s != null) { signs.remove(s); status("Cartel eliminado"); }
+    } else if (c == 'N') {
+        NpcEntry n = findNpc(cursorX, cursorY);
+        if (n != null) { npcs.remove(n); status("NPC eliminado"); }
+    } else {
+        status("No hay cartel/NPC aquí");
+        return;
+    }
+    beginOp(); touch(cursorX, cursorY); cells[cursorY][cursorX] = '.'; commitOp();
+    dirty = true;
+    refreshBuffer(); updateStatus();
 }
 
 void clearSelectionAndRefresh() {
@@ -696,7 +982,6 @@ void updatePaletteVisuals() {
             else
                 b.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1));
         }
-        palettePanel.setEnabled(!heightMode);
     }
     if (heightButtons != null) {
         for (int h = 0; h < heightButtons.length; h++) {
@@ -706,7 +991,6 @@ void updatePaletteVisuals() {
             else
                 b.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1));
         }
-        heightPanel.setEnabled(heightMode);
     }
 }
 
@@ -743,18 +1027,18 @@ JMenuItem menuItem(String label, int vk, Runnable action) {
 void doNew() {
     String w = JOptionPane.showInputDialog(frame, "Ancho (5-200):", "25");
     if (w == null) return;
-    int nw;
-    try { nw = Integer.parseInt(w.trim()); } catch (Exception ex) { status("Ancho inválido"); return; }
+    int nw; try { nw = Integer.parseInt(w.trim()); } catch (Exception ex) { status("Ancho inválido"); return; }
     if (nw < 5 || nw > 200) { status("Ancho inválido"); return; }
 
     String h = JOptionPane.showInputDialog(frame, "Alto (5-200):", "20");
     if (h == null) return;
-    int nh;
-    try { nh = Integer.parseInt(h.trim()); } catch (Exception ex) { status("Alto inválido"); return; }
+    int nh; try { nh = Integer.parseInt(h.trim()); } catch (Exception ex) { status("Alto inválido"); return; }
     if (nh < 5 || nh > 200) { status("Alto inválido"); return; }
 
     if (dirty) {
-        int r = JOptionPane.showConfirmDialog(frame, "Hay cambios sin guardar. ¿Descartar?", "Nuevo", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        int r = JOptionPane.showConfirmDialog(frame,
+            "Hay cambios sin guardar. ¿Descartar?", "Nuevo",
+            JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (r != JOptionPane.YES_OPTION) return;
     }
     newMap(nw, nh);
@@ -771,7 +1055,9 @@ void doOpen() {
     chooser.setFileFilter(new FileNameExtensionFilter("Mapas (.dgn)", "dgn"));
     if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
     if (dirty) {
-        int r = JOptionPane.showConfirmDialog(frame, "Hay cambios sin guardar. ¿Descartar?", "Abrir", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        int r = JOptionPane.showConfirmDialog(frame,
+            "Hay cambios sin guardar. ¿Descartar?", "Abrir",
+            JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (r != JOptionPane.YES_OPTION) return;
     }
     loadFromPath(chooser.getSelectedFile().getPath());
@@ -802,15 +1088,16 @@ boolean doSaveAs() {
 }
 
 void doClear() {
-    int r = JOptionPane.showConfirmDialog(frame, "¿Seguro que quieres vaciar el mapa?", "Limpiar", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+    int r = JOptionPane.showConfirmDialog(frame,
+        "¿Seguro que quieres vaciar el mapa?", "Limpiar",
+        JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
     if (r != JOptionPane.YES_OPTION) return;
     beginOp();
-    for (int y = 0; y < mapH; y++)
-        for (int x = 0; x < mapW; x++)
-            touch(x, y);
-    for (int y = 0; y < mapH; y++)
-        for (int x = 0; x < mapW; x++)
-            cells[y][x] = '.';
+    for (int y = 0; y < mapH; y++) for (int x = 0; x < mapW; x++) touch(x, y);
+    for (int y = 0; y < mapH; y++) for (int x = 0; x < mapW; x++)
+        cells[y][x] = '.';
+    signs.clear();
+    npcs.clear();
     commitOp();
     dirty = true;
     refreshBuffer();
@@ -848,8 +1135,7 @@ void doEnemies() {
     }
     commitOp();
     dirty = true;
-    refreshBuffer();
-    updateStatus();
+    refreshBuffer(); updateStatus();
     status("Enemigos: " + placed + "/" + n);
 }
 
@@ -872,8 +1158,7 @@ void doItems() {
     }
     commitOp();
     dirty = true;
-    refreshBuffer();
-    updateStatus();
+    refreshBuffer(); updateStatus();
     status("Items: " + placed + "/" + n);
 }
 
@@ -907,19 +1192,23 @@ void doLockers() {
     }
     commitOp();
     dirty = true;
-    refreshBuffer();
-    updateStatus();
+    refreshBuffer(); updateStatus();
     status("Taquillas: " + placed + "/" + n);
 }
 
 void doBorder() {
     beginOp();
-    for (int x = 0; x < mapW; x++) { touch(x, 0); cells[0][x] = '#'; touch(x, mapH - 1); cells[mapH - 1][x] = '#'; }
-    for (int y = 0; y < mapH; y++) { touch(0, y); cells[y][0] = '#'; touch(mapW - 1, y); cells[y][mapW - 1] = '#'; }
+    for (int x = 0; x < mapW; x++) {
+        touch(x, 0); cells[0][x] = '#';
+        touch(x, mapH - 1); cells[mapH - 1][x] = '#';
+    }
+    for (int y = 0; y < mapH; y++) {
+        touch(0, y); cells[y][0] = '#';
+        touch(mapW - 1, y); cells[y][mapW - 1] = '#';
+    }
     commitOp();
     dirty = true;
-    refreshBuffer();
-    updateStatus();
+    refreshBuffer(); updateStatus();
     status("Borde dibujado");
 }
 
@@ -932,8 +1221,7 @@ void doFill() {
     for (int y = 0; y < mapH; y++) for (int x = 0; x < mapW; x++) cells[y][x] = ch;
     commitOp();
     dirty = true;
-    refreshBuffer();
-    updateStatus();
+    refreshBuffer(); updateStatus();
     status("Relleno con '" + ch + "'");
 }
 
@@ -942,26 +1230,29 @@ void doHelp() {
         <html><body style='font-family: monospace; padding: 10px;'>
         <h3>Atajos</h3>
         <b>Movimiento:</b> Flechas / WASD / HJKL<br>
-        <b>Pintar:</b> Espacio o click izquierdo (drag = pintar)<br>
+        <b>Pintar:</b> Espacio o click izquierdo<br>
         <b>Grab:</b> G — copia el tile bajo el cursor al brush<br>
         <b>Undo:</b> U o Ctrl+Z (grupos de operaciones)<br>
         <b>Brush:</b> 1-9 o click en la paleta<br>
-        <b>Alturas:</b> Tab para cambiar de modo, o botones Celdas/Alturas<br>
+        <b>Piso activo:</b> combo en la barra superior<br>
+        <b>Alturas:</b> Tab para cambiar de modo<br>
         <b>Selección:</b> Shift+click para anclar, Shift+drag para extender<br>
         <b>Copiar/Cortar/Pegar:</b> Ctrl+C / Ctrl+X / Ctrl+V<br>
         <b>Rellenar selección:</b> Espacio con selección activa<br>
         <b>Borrar selección:</b> Supr<br>
         <b>Deseleccionar:</b> Escape<br>
         <b>Seleccionar todo:</b> Ctrl+A<br>
-        <b>Zoom:</b> Ctrl+Wheel, Ctrl+= / Ctrl+-, o menú Vista<br>
-        <b>Guardar:</b> Ctrl+S · Abrir: Ctrl+O · Nuevo: Ctrl+N<br>
-        <b>Limpiar:</b> Ctrl+L · Ayuda: F1 o Shift+?<br>
+        <b>Zoom:</b> Ctrl+Wheel, Ctrl+= / Ctrl+-, menú Vista<br>
+        <b>Cartel / NPC:</b> pinta 'T' o 'N'. Click derecho sobre uno existente
+        para editar. Herramientas → Editar cartel/NPC aquí.<br>
+        <b>Rampas:</b> '^' sube al N, '>' al E, 'v' al S, '&lt;' al O.
+        El vecino en esa dirección debe ser MÁS ALTO para que la rampa funcione.<br>
         </body></html>
         """;
     JOptionPane.showMessageDialog(frame, msg, "Ayuda", JOptionPane.INFORMATION_MESSAGE);
 }
 
-// ==================== KEYBOARD ====================
+// ==================== TECLADO ====================
 void handleKey(KeyEvent e) {
     boolean ctrl = e.isControlDown();
     boolean shift = e.isShiftDown();
@@ -979,7 +1270,7 @@ void handleKey(KeyEvent e) {
         case KeyEvent.VK_H -> { if (!ctrl) moveCursor(-1, 0, shift); }
         case KeyEvent.VK_J -> { if (!ctrl) moveCursor(0, 1, shift); }
         case KeyEvent.VK_K -> { if (!ctrl) moveCursor(0, -1, shift); }
-        case KeyEvent.VK_L -> { if (ctrl) doClear(); else moveCursor(1, 0, shift); }
+        case KeyEvent.VK_L -> { if (ctrl) doClear(); else if (!shift) moveCursor(1, 0, shift); }
         case KeyEvent.VK_SPACE -> {
             if (selectionActive) {
                 fillSelection();
@@ -987,8 +1278,7 @@ void handleKey(KeyEvent e) {
                 beginOp();
                 paintCell(cursorX, cursorY);
                 commitOp();
-                refreshBuffer();
-                updateStatus();
+                refreshBuffer(); updateStatus();
             }
         }
         case KeyEvent.VK_G -> { if (!ctrl) grabTile(); }
@@ -1004,15 +1294,18 @@ void handleKey(KeyEvent e) {
                 deleteSelection();
             } else {
                 beginOp();
-                if (heightMode) {
-                    heights[cursorY][cursorX] = 0;
-                } else {
-                    cells[cursorY][cursorX] = '.';
+                char prev = cells[cursorY][cursorX];
+                if (prev == 'T') {
+                    SignEntry s = findSign(cursorX, cursorY); if (s != null) signs.remove(s);
+                }
+                if (prev == 'N') {
+                    NpcEntry n = findNpc(cursorX, cursorY); if (n != null) npcs.remove(n);
                 }
                 touch(cursorX, cursorY);
+                if (heightMode) heights[cursorY][cursorX] = 0;
+                else            cells[cursorY][cursorX] = '.';
                 commitOp();
-                refreshBuffer();
-                updateStatus();
+                refreshBuffer(); updateStatus();
             }
         }
         case KeyEvent.VK_ESCAPE -> clearSelectionAndRefresh();
@@ -1021,8 +1314,7 @@ void handleKey(KeyEvent e) {
             btnCells.setSelected(!heightMode);
             btnHeights.setSelected(heightMode);
             updatePaletteVisuals();
-            refreshBuffer();
-            updateStatus();
+            refreshBuffer(); updateStatus();
         }
         case KeyEvent.VK_EQUALS -> { if (ctrl) setZoom(zoomIdx + 1); }
         case KeyEvent.VK_MINUS -> { if (ctrl) setZoom(zoomIdx - 1); }
@@ -1032,11 +1324,13 @@ void handleKey(KeyEvent e) {
             char c = e.getKeyChar();
             if (c >= '1' && c <= '9') {
                 int idx = c - '1';
-                if (idx < TILES.length) { brush = TILES[idx].ch(); updatePaletteVisuals(); updateStatus(); }
+                if (idx < TILES.length) {
+                    brush = TILES[idx].ch();
+                    updatePaletteVisuals(); updateStatus();
+                }
             } else if (heightMode && c >= '0' && c <= (char)('0' + MAX_HEIGHT)) {
                 brushHeight = c - '0';
-                updatePaletteVisuals();
-                updateStatus();
+                updatePaletteVisuals(); updateStatus();
             }
         }
     }

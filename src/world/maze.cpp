@@ -36,6 +36,34 @@ static void addQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
   indices.push_back(base + 3);
 }
 
+static void addRampSideTri(std::vector<Vector3> &verts,
+                           std::vector<Vector2> &uvs,
+                           std::vector<Vector3> &normals,
+                           std::vector<unsigned short> &indices, Vector3 v0,
+                           Vector3 v1, Vector3 v2, Vector3 normal,
+                           float uOrigin, bool uAlongX, float fz,
+                           float heightSpan) {
+  unsigned short base = (unsigned short)verts.size();
+  verts.push_back(v0);
+  verts.push_back(v1);
+  verts.push_back(v2);
+
+  auto uvOf = [&](Vector3 v) -> Vector2 {
+    float u = uAlongX ? (v.x - uOrigin) / C::CELL : (v.z - uOrigin) / C::CELL;
+    float vv = (v.y - fz) / heightSpan;
+    return {u, 1.0f - vv};
+  };
+
+  uvs.push_back(uvOf(v0));
+  uvs.push_back(uvOf(v1));
+  uvs.push_back(uvOf(v2));
+  for (int i = 0; i < 3; ++i)
+    normals.push_back(normal);
+  indices.push_back(base + 0);
+  indices.push_back(base + 1);
+  indices.push_back(base + 2);
+}
+
 static void addWallQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
                         std::vector<Vector3> &normals,
                         std::vector<unsigned short> &indices, Vector3 bl,
@@ -53,11 +81,11 @@ static void addWallQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
   for (int i = 0; i < 4; ++i)
     normals.push_back(normal);
   indices.push_back(base + 0);
-  indices.push_back(base + 1);
+  indices.push_back(base + 3);
   indices.push_back(base + 2);
   indices.push_back(base + 0);
   indices.push_back(base + 2);
-  indices.push_back(base + 3);
+  indices.push_back(base + 1);
 }
 
 void Maze::generate(int mw, int mh, uint32_t seed) {
@@ -193,9 +221,7 @@ bool Maze::circleHitsRiser(float x, float z, float r, float fromZ) const {
     if (cx < 0 || cy < 0 || cx >= w || cy >= h)
       return false;
     if (wallAt(cx, cy))
-      return false; // muros ya los cubre circleHitsWall
-    if (stairAt(cx, cy) != 0)
-      return false; // rampas transitables
+      return false;
     return groundZAtWorld(px, pz) > threshold;
   };
   return check(x - r, z - r) || check(x + r, z - r) || check(x - r, z + r) ||
@@ -866,6 +892,76 @@ void Maze::buildChunks(Assets &assets) {
             }
 
             if (hasRamp) {
+              // -------------------------------------------------
+              //  Caras laterales triangulares de la rampa
+              //  Solo si el vecino en ese lado NO es pared.
+              // -------------------------------------------------
+              float hSpan = rampHighZ - fz;
+              if (hSpan < 0.001f)
+                hSpan = 0.001f;
+
+              switch (sdir) {
+              case 1: // ^ high at z0
+                // West (x0, normal -X)
+                if (!wallAt(x - 1, y))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x0, fz, z0}, {x0, fz, z1},
+                                 {x0, rampHighZ, z0}, {-1, 0, 0}, z0, false, fz,
+                                 hSpan);
+                // East (x1, normal +X)
+                if (!wallAt(x + 1, y))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x1, fz, z0},
+                                 {x1, rampHighZ, z0}, {x1, fz, z1}, {1, 0, 0},
+                                 z0, false, fz, hSpan);
+                break;
+
+              case 2: // > high at x1
+                // North (z0, normal -Z)
+                if (!wallAt(x, y - 1))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x0, fz, z0},
+                                 {x1, rampHighZ, z0}, {x1, fz, z0}, {0, 0, -1},
+                                 x0, true, fz, hSpan);
+                // South (z1, normal +Z)
+                if (!wallAt(x, y + 1))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x0, fz, z1}, {x1, fz, z1},
+                                 {x1, rampHighZ, z1}, {0, 0, 1}, x0, true, fz,
+                                 hSpan);
+                break;
+
+              case 3: // v high at z1
+                // West (x0, normal -X)
+                if (!wallAt(x - 1, y))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x0, fz, z0}, {x0, fz, z1},
+                                 {x0, rampHighZ, z1}, {-1, 0, 0}, z0, false, fz,
+                                 hSpan);
+                // East (x1, normal +X)
+                if (!wallAt(x + 1, y))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x1, fz, z0},
+                                 {x1, rampHighZ, z1}, {x1, fz, z1}, {1, 0, 0},
+                                 z0, false, fz, hSpan);
+                break;
+
+              case 4: // < high at x0
+                // North (z0, normal -Z)
+                if (!wallAt(x, y - 1))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x1, fz, z0}, {x0, fz, z0},
+                                 {x0, rampHighZ, z0}, {0, 0, -1}, x0, true, fz,
+                                 hSpan);
+                // South (z1, normal +Z)
+                if (!wallAt(x, y + 1))
+                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                                 bufFloor.indices, {x1, fz, z1},
+                                 {x0, rampHighZ, z1}, {x0, fz, z1}, {0, 0, 1},
+                                 x0, true, fz, hSpan);
+                break;
+              }
+
               // Quad inclinado con winding CCW (normal apunta arriba)
               switch (sdir) {
               case 1: // ^ alto al norte (z0)

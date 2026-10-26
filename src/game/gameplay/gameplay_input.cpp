@@ -12,6 +12,7 @@ void Game::handleInteraction(int p) {
   bool interactPressed = IsKeyPressed(cfg.binds[p].interact) ||
                          (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
 
+  // Salir de taquilla (si estamos escondidos)
   if (pl.hidden) {
     if (interactPressed) {
       pl.hidden = false;
@@ -30,15 +31,82 @@ void Game::handleInteraction(int p) {
   if (!interactPressed)
     return;
 
-  int idx = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
-  if (idx >= 0) {
-    ItemKind kind = worldItems[idx].kind;
+  // Distancia 2D (ignoramos la Y para que items elevados y carteles
+  // compitan en igualdad de condiciones).
+  auto distXZ = [](Vector3 a, Vector3 b) -> float {
+    float dx = a.x - b.x;
+    float dz = a.z - b.z;
+    return sqrtf(dx * dx + dz * dz);
+  };
+
+  enum IntType {
+    INT_NONE,
+    INT_PICKUP,
+    INT_SIGN,
+    INT_NPC,
+    INT_LOCKER,
+    INT_FOUNTAIN
+  };
+  int bestType = INT_NONE;
+  int bestIdx = -1;
+  float bestDist = 1e9f;
+
+  // ----- Pickups -----
+  int pk = Inventory::nearestPickup(pl.pos, worldItems, C::PICKUP_RANGE);
+  if (pk >= 0) {
+    float d = distXZ(pl.pos, worldItems[pk].pos);
+    if (d < bestDist) {
+      bestDist = d;
+      bestType = INT_PICKUP;
+      bestIdx = pk;
+    }
+  }
+
+  // ----- Carteles -----
+  for (size_t i = 0; i < currentSigns.size(); ++i) {
+    float d = distXZ(pl.pos, currentSigns[i].pos);
+    if (d < C::SIGN_INTERACT_RANGE && d < bestDist) {
+      bestDist = d;
+      bestType = INT_SIGN;
+      bestIdx = (int)i;
+    }
+  }
+
+  // ----- NPCs -----
+  for (size_t i = 0; i < currentNpcs.size(); ++i) {
+    float d = distXZ(pl.pos, currentNpcs[i].pos);
+    if (d < C::SIGN_INTERACT_RANGE && d < bestDist) {
+      bestDist = d;
+      bestType = INT_NPC;
+      bestIdx = (int)i;
+    }
+  }
+
+  // ----- Taquilla / fuente -----
+  int interactCx = -1, interactCy = -1;
+  {
+    bool isLocker;
+    int what = findInteractable(pl, interactCx, interactCy, isLocker);
+    if (what == 1 || what == 2) {
+      Vector3 target = maze.cellCenter(interactCx, interactCy);
+      float d = distXZ(pl.pos, target);
+      if (d < C::INTERACT_RANGE && d < bestDist) {
+        bestDist = d;
+        bestType = (what == 1) ? INT_LOCKER : INT_FOUNTAIN;
+      }
+    }
+  }
+
+  // ================================================================
+  //  Ejecutar el ganador
+  // ================================================================
+  if (bestType == INT_PICKUP) {
+    ItemKind kind = worldItems[bestIdx].kind;
 
     if (kind == ITEM_KEY) {
-      worldItems.erase(worldItems.begin() + idx);
+      worldItems.erase(worldItems.begin() + bestIdx);
       players[0].hasKey = true;
       players[1].hasKey = true;
-
       if (assets.sfxPickup.frameCount > 0) {
         SetSoundPitch(assets.sfxPickup, 1.4f);
         PlaySound(assets.sfxPickup);
@@ -49,7 +117,7 @@ void Game::handleInteraction(int p) {
       return;
     }
 
-    if (Inventory::collectPickup(pl, worldItems, idx)) {
+    if (Inventory::collectPickup(pl, worldItems, bestIdx)) {
       if (assets.sfxPickup.frameCount > 0)
         PlaySound(assets.sfxPickup);
       if (p == 0)
@@ -61,18 +129,24 @@ void Game::handleInteraction(int p) {
     return;
   }
 
-  int cx, cy;
-  bool isLocker;
-  int what = findInteractable(pl, cx, cy, isLocker);
-  if (what == 0)
+  if (bestType == INT_SIGN) {
+    openDialog(L("dialog.sign", "Cartel"), currentSigns[bestIdx].text, true);
     return;
+  }
 
-  if (what == 1) {
+  if (bestType == INT_NPC) {
+    const auto &n = currentNpcs[bestIdx];
+    std::string title = n.name.empty() ? L("dialog.npc", "NPC") : n.name;
+    openDialog(title, n.text, false);
+    return;
+  }
+
+  if (bestType == INT_LOCKER) {
     pl.hidden = true;
     pl.hiddenExitPos = pl.pos;
     pl.hiddenExitYaw = pl.yaw;
-    pl.hiddenCellX = cx;
-    pl.hiddenCellY = cy;
+    pl.hiddenCellX = interactCx;
+    pl.hiddenCellY = interactCy;
     pl.yaw += PI;
     while (pl.yaw > PI)
       pl.yaw -= 2.0f * PI;
@@ -83,7 +157,10 @@ void Game::handleInteraction(int p) {
       showToast(
           TextFormat(L("toast.locker.hidden", "Escondido. [%s/RMB] salir"),
                      Config::keyName(cfg.binds[p].interact)));
-  } else if (what == 2) {
+    return;
+  }
+
+  if (bestType == INT_FOUNTAIN) {
     if (pl.stamina < C::STAM_WATER_MAX - 0.01f) {
       pl.stamina = C::STAM_WATER_MAX;
       pl.exhausted = false;
@@ -96,22 +173,7 @@ void Game::handleInteraction(int p) {
         showToast(L("toast.energy.alreadyfull", "Ya tienes la energia llena"));
       fountainCooldown[p] = 0.3f;
     }
-  }
-
-  // 2) Cartel cercano
-  for (auto &s : currentSigns) {
-    if (Vector3Distance(pl.pos, s.pos) < C::SIGN_INTERACT_RANGE) {
-      openDialog(L("dialog.sign", "Cartel"), s.text, true);
-      return;
-    }
-  }
-  // 3) NPC cercano
-  for (auto &n : currentNpcs) {
-    if (Vector3Distance(pl.pos, n.pos) < C::SIGN_INTERACT_RANGE) {
-      std::string title = n.name.empty() ? L("dialog.npc", "NPC") : n.name;
-      openDialog(title, n.text, false);
-      return;
-    }
+    return;
   }
 }
 

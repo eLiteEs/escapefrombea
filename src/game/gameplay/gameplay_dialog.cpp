@@ -2,23 +2,16 @@
 
 #include "game.hpp"
 
-#include "ui.hpp"
 #include "lang.hpp"
+#include "ui.hpp"
 
 void Game::openDialog(const std::string &title, const std::string &text,
                       bool isSign) {
-  dialogTitle = title;
-  dialogText = text;
+  dialogTitle = resolveDialogText(title);
+  dialogText = resolveDialogText(text);
   dialogHasSignTex = isSign;
   state = ST_DIALOG;
   EnableCursor();
-}
-
-void Game::closeDialog() {
-  dialogTitle.clear();
-  dialogText.clear();
-  DisableCursor();
-  state = ST_PLAYING;
 }
 
 void Game::drawDialog() {
@@ -94,4 +87,11 @@ void Game::drawDialog() {
   int hs = 14;
   int hw = UI::M(hint, hs);
   UI::T(hint, panelX + (panelW - hw) / 2, panelY + panelH - 26, hs, GRAY);
+}
+
+void Game::closeDialog() {
+  dialogTitle.clear();
+  dialogText.clear();
+  DisableCursor();
+  state = ST_PLAYING;
 }

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <string>
 
 namespace Paths {
@@ -33,4 +34,11 @@ inline std::string levelDetailsIn(const char *langCode, const char *n) {
 }
 
 inline std::string story(const char *n) { return std::string(STORIES) + n; }
+
+inline std::string levelTranslation(const char *langCode, int level) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "level_%02d_%s.txt", level, langCode);
+  return std::string(TRANSLATIONS) + buf;
+}
+
 } // namespace Paths
