@@ -727,6 +727,8 @@ bool Maze::loadFromFile(const char *path, LevelExtras &extras) {
     applyHeight(p);
   for (auto &s : extras.signs)
     applyHeight(s.pos);
+  for (auto &k : extras.keys)
+    applyHeight(k);
   for (auto &n : extras.npcs)
     applyHeight(n.pos);
   applyHeight(extras.exit);
