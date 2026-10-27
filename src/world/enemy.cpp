@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <random>
+#include <raymath.h>
 #include <vector>
 #include <algorithm>
 
@@ -58,6 +59,8 @@ static void separateEnemies(std::vector<Enemy> &enemies, size_t i, float dt) {
   for (size_t j = 0; j < enemies.size(); ++j) {
     if (i == j)
       continue;
+    if (!enemies[j].alive || enemies[j].dyingT > 0.0f) continue;
+
     float dx = enemies[i].pos.x - enemies[j].pos.x;
     float dz = enemies[i].pos.z - enemies[j].pos.z;
     float d2 = dx * dx + dz * dz;
@@ -78,6 +81,7 @@ void updateEnemies(std::vector<Enemy> &enemies, const Maze &maze,
   (void)seeDist;
   for (size_t i = 0; i < enemies.size(); ++i) {
     Enemy &e = enemies[i];
+    if (!e.alive || e.dyingT > 0.0f) continue;
     e.prevPos = e.pos;
     e.repathT -= dt;
 
@@ -213,6 +217,9 @@ void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
     e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
     e.turnT = 0.0f;
     e.prevPos = p;
+    e.hp = e.maxHp;
+    e.shield = e.maxShield;
+    e.alive = true;
 
     int r = (int)(rng() % 100);
     if (lvl >= 5 && r > 10)
@@ -232,5 +239,90 @@ void Game::spawnEnemiesFromPositions(const std::vector<Vector3> &positions,
 
     e.kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
     enemies.push_back(e);
+  }
+}
+
+void Game::drawEnemyHealthBars(const Player& pl, int vw, int vh) {
+  if (!cfg.useRenderer3D) return;
+
+  // Cámara equivalente a la del renderer 3D
+  Camera3D cam = {};
+  cam.position = { pl.pos.x, pl.pos.y + C::EYE_H, pl.pos.z };
+  float cp = cosf(pl.pitch);
+  float sp = sinf(pl.pitch);
+  cam.target = {
+    cam.position.x + sinf(pl.yaw) * cp,
+    cam.position.y + sp,
+    cam.position.z - cosf(pl.yaw) * cp
+  };
+  cam.up = { 0, 1, 0 };
+  cam.fovy = (float)cfg.fov;
+  cam.projection = CAMERA_PERSPECTIVE;
+
+  // Vector forward normalizado para el dot product
+  Vector3 fwd = {
+    cam.target.x - cam.position.x,
+    cam.target.y - cam.position.y,
+    cam.target.z - cam.position.z
+  };
+  float fwdLen = sqrtf(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+  if (fwdLen > 0.0001f) {
+    fwd.x /= fwdLen; fwd.y /= fwdLen; fwd.z /= fwdLen;
+  }
+
+  float maxDist = renderDist() * 0.6f;
+
+  for (auto& e : enemies) {
+    if (!e.alive || e.dyingT > 0.0f) continue;
+
+    float dist = Vector3Distance(pl.pos, e.pos);
+    if (dist > maxDist) continue;
+
+    // 1) Enemigo delante de la cámara
+    Vector3 toEnemy = { e.pos.x - cam.position.x,
+      e.pos.y - cam.position.y,
+      e.pos.z - cam.position.z };
+      float dot = toEnemy.x * fwd.x + toEnemy.y * fwd.y + toEnemy.z * fwd.z;
+      if (dot <= 0.1f) continue;
+
+      // 2) Sin pared en medio (lineOfSight ya comprueba la rejilla del maze)
+      Vector3 eye = { pl.pos.x, pl.pos.y + C::EYE_H, pl.pos.z };
+    Vector3 target = { e.pos.x, e.pos.y + 1.35f, e.pos.z };
+    if (!lineOfSight(maze, eye, target)) continue;
+
+    // Proyectar la posición de la barra (justo encima del enemigo)
+    Vector3 barWorld = { e.pos.x, e.pos.y + 2.9f, e.pos.z };
+    Vector2 screen = GetWorldToScreen(barWorld, cam);
+
+    if (screen.x < -50 || screen.x > vw + 50 ||
+      screen.y < -20 || screen.y > vh + 20) continue;
+
+    float scale = std::clamp(1.0f - dist / maxDist, 0.4f, 1.0f);
+    float barW = 70.0f * scale;
+    float barH = 7.0f * scale;
+    float bx = screen.x - barW * 0.5f;
+    float by = screen.y - barH;
+
+    DrawRectangle((int)bx - 1, (int)by - 1, (int)barW + 2, (int)barH + 2,
+                  (Color){ 0, 0, 0, 200 });
+    DrawRectangle((int)bx, (int)by, (int)barW, (int)barH,
+                  (Color){ 40, 40, 60, 220 });
+
+    float hpFrac = (e.maxHp > 0.0f) ? (e.hp / e.maxHp) : 0.0f;
+    Color hpCol = (hpFrac > 0.5f)  ? (Color){ 80, 220, 80, 255 }
+    : (hpFrac > 0.25f) ? (Color){ 240, 160, 40, 255 }
+    : (Color){ 230, 60, 60, 255 };
+    DrawRectangle((int)bx, (int)by, (int)(barW * hpFrac), (int)barH, hpCol);
+
+    float shFrac = (e.maxShield > 0.0f) ? (e.shield / e.maxShield) : 0.0f;
+    if (shFrac > 0.0f) {
+      float shH = std::max(2.0f, 3.0f * scale);
+      DrawRectangle((int)bx, (int)(by - shH - 1),
+                    (int)(barW * shFrac), (int)shH,
+                    (Color){ 80, 180, 255, 255 });
+    }
+
+    DrawRectangleLines((int)bx, (int)by, (int)barW, (int)barH,
+                       (Color){ 220, 220, 220, 200 });
   }
 }

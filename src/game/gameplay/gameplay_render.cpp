@@ -78,25 +78,42 @@ void Game::renderPlayerView(const Player &pl) {
 
     // 1. Enemigos
     for (auto &e : enemies) {
+      if (!e.alive) continue;
+
       int kind = std::clamp(e.kind, 0, ENEMY_KIND_COUNT - 1);
-      Color tint = {255, 255, 255, 255};
-      if (e.hitFlash > 0.0f)
-        tint = {255, 80, 80, 255};
-      else if (e.rageT > 0.0f)
-        tint = {255, 140, 90, 255};
+      Color tint = { 255, 255, 255, 255 };
+
+      // Altura de referencia para calcular el ANCHO del sprite
+      // (siempre la misma, para que no se encoja en el eje X)
+      const float baseHeight = 2.6f;
+
+      // Altura que se DIBUJA (se reduce solo al morir)
+      float drawnHeight = baseHeight;
+      bool flipY = false;
+
+      if (e.dyingT > 0.0f) {
+        tint = { 255, 60, 60, 255 };
+        drawnHeight = 0.4f;   // aplastado solo en Y
+        flipY = true;         // volteado verticalmente
+      } else {
+        if (e.hitFlash > 0.0f)   tint = { 255,  80,  80, 255 };
+        else if (e.rageT > 0.0f) tint = { 255, 140,  90, 255 };
+      }
 
       Texture2D tex = assets.enemyTex[kind];
       float aspect = (tex.id != 0 && tex.height > 0)
-                         ? (float)tex.width / (float)tex.height
-                         : 1.0f;
-      float height = 2.6f;
-      float width = height * aspect;
+      ? (float)tex.width / (float)tex.height
+      : 1.0f;
+
+      // ANCHO: calculado siempre con la altura normal → no se encoje
+      float width = baseHeight * aspect;
 
       WorldSprite3D s;
-      s.pos = {e.pos.x, e.pos.y, e.pos.z}; // ← era {e.pos.x, 0.0f, e.pos.z}
-      s.size = {width, height};
+      s.pos = { e.pos.x, e.pos.y, e.pos.z };
+      s.size = { width, drawnHeight };   // ← ancho intacto, alto reducido
       s.tex = tex;
       s.tint = tint;
+      s.flipY = flipY;
       sprites.push_back(s);
     }
 
@@ -330,8 +347,10 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
 
   // 5) Stamina, inventario, ítem en mano (todo 2D)
   drawStaminaBar(pl, vw, vh);
+  drawHealthAndShieldBars(pl, vw, vh);
   drawInventory(pl, vw, vh);
   drawHandItem2D(pl, vw, vh);
+  drawEnemyHealthBars(pl, vw, vh);
 
   // 6) Crosshair
   if (assets.crosshair.id != 0) {
@@ -346,6 +365,7 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
           {cx, cy, cw, ch}, {0, 0}, 0.0f, (Color){255, 255, 255, 200});
     }
   }
+  drawCooldownBar(pl, vw, vh);
 
   // 7) Overlays de estado del jugador
   if (pl.caught) {

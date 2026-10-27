@@ -212,3 +212,6 @@ create.confirm=Create world
 dialog.sign=Sign
 dialog.npc=NPC
 dialog.close=[E / RMB / ENTER] close
+
+hud.health=Health
+hud.shield=Shield

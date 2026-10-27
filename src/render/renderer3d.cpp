@@ -401,18 +401,21 @@ void Renderer3D::render(Maze &maze, Vector3 eye, float yaw, float pitch,
     }
   }
 
-  // Sprites
   for (const auto &s : sprites) {
     if (s.crossedQuads) {
       drawCrossQuads(s.pos, s.size, s.tex, s.tint);
       continue;
     }
     Texture2D tex = (s.tex.id != 0) ? s.tex : m_white;
-    if (tex.id == 0)
-      continue;
-    const Rectangle src = {0.0f, 0.0f, static_cast<float>(tex.width),
-                           static_cast<float>(tex.height)};
-    const Vector3 center = {s.pos.x, s.pos.y + s.size.y * 0.5f, s.pos.z};
+    if (tex.id == 0) continue;
+
+    Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+    if (s.flipY) {
+      src.y      = (float)tex.height;
+      src.height = -(float)tex.height;
+    }
+
+    const Vector3 center = { s.pos.x, s.pos.y + s.size.y * 0.5f, s.pos.z };
     DrawBillboardRec(cam, tex, src, center, s.size, s.tint);
     ++m_drawCalls;
   }

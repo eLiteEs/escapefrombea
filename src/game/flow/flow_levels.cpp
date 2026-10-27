@@ -8,6 +8,51 @@
 #include "util_format.hpp"
 
 #include <algorithm>
+#include <raymath.h>
+
+enum ItemCategory { CAT_WEAPONS, CAT_TOOLS, CAT_CONSUMABLES };
+
+static ItemCategory rollItemCategory(std::mt19937 &rng) {
+  // 50% armas, 15% herramientas, 35% consumibles
+  int r = (int)(rng() % 100);
+  if (r < 50)
+    return CAT_WEAPONS;
+  if (r < 65)
+    return CAT_TOOLS;
+  return CAT_CONSUMABLES;
+}
+
+static ItemKind rollItemKind(ItemCategory cat, std::mt19937 &rng) {
+  switch (cat) {
+  case CAT_WEAPONS: {
+    // Rock 40, Box 25, Lime 20, Bicimad 15
+    int r = (int)(rng() % 100);
+    if (r < 40)
+      return ITEM_ROCK;
+    if (r < 65)
+      return ITEM_BOX;
+    if (r < 85)
+      return ITEM_LIME;
+    return ITEM_BICIMAD;
+  }
+  case CAT_TOOLS:
+    return ITEM_WALL; // única herramienta actual
+  case CAT_CONSUMABLES: {
+    // Monster 30, Bifruta 35, Ensaimada 35
+    int r = (int)(rng() % 100);
+    if (r < 30)
+      return ITEM_MONSTER;
+    if (r < 65)
+      return ITEM_BIFRUTAS;
+    return ITEM_ENSAIMADA;
+  }
+  }
+  return ITEM_ROCK;
+}
+
+static ItemKind rollItemAnyCategory(std::mt19937 &rng) {
+  return rollItemKind(rollItemCategory(rng), rng);
+}
 
 static Vector3 findFreeSpawnNear(const Maze &maze, int cx, int cy,
                                  Vector3 fallback) {
@@ -28,7 +73,7 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   if (p.caught) {
     for (int i = 0; i < C::INV_SLOTS; ++i) {
       p.inventory[i].count = p.inventory[i].count / 2;
-      if(p.inventory[i].count < 1) {
+      if (p.inventory[i].count < 1) {
         p.inventory[i].count = 0;
         p.inventory[i].kind = ITEM_NONE;
       }
@@ -40,6 +85,10 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.pos.y = 0.0f; // asegurar que aterriza en el suelo
   p.yaw = 0.0f;
   p.pitch = 0.0f;
+
+  p.hp = p.maxHp;
+  p.shield = p.maxShield;
+  p.damageFlashT = 0.0f;
 
   // Estado general
   p.caught = false;
@@ -70,6 +119,19 @@ static void resetPlayerState(Player &p, Vector3 spawn) {
   p.onGround = true;
   p.jumpHeld = false;
   p.groundZ = 0.0f;
+}
+
+void Game::spawnItemsFromPositions(const std::vector<Vector3> &positions,
+                                   std::mt19937 &rng) {
+  for (const auto &p : positions) {
+    if (maze.wallAtWorld(p.x, p.z))
+      continue;
+    WorldPickup wp;
+    wp.kind = rollItemAnyCategory(rng);
+    wp.pos = {p.x, p.y + 0.35f, p.z};
+    wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
+    worldItems.push_back(wp);
+  }
 }
 
 void Game::startLevel(int lvl) {
@@ -193,11 +255,14 @@ void Game::startLevel(int lvl) {
         continue;
 
       Enemy e;
-      e.pos = p;
       e.dir = {0, 0};
       e.speed = spd * (0.9f + 0.2f * (float)(rng() % 100) / 100.0f);
       e.turnT = 0.0f;
       e.prevPos = p;
+      e.pos = p;
+      e.hp = e.maxHp;
+      e.shield = e.maxShield;
+      e.alive = true;
 
       int r = (int)(rng() % 100);
       if (lvl >= 5 && r > 10)
@@ -298,29 +363,6 @@ void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
 
   float minDistFromSpawn = size * C::CELL * 0.20f;
 
-  struct Weighted {
-    ItemKind kind;
-    int weight;
-  };
-  const Weighted pool[] = {{ITEM_ROCK, 30},    {ITEM_BOX, 20},
-                           {ITEM_MONSTER, 20}, {ITEM_LIME, 15},
-                           {ITEM_BICIMAD, 10}, {ITEM_WALL, 5}};
-  const int POOL_SIZE = sizeof(pool) / sizeof(pool[0]);
-  int totalWeight = 0;
-  for (int i = 0; i < POOL_SIZE; ++i)
-    totalWeight += pool[i].weight;
-
-  auto rollKind = [&]() -> ItemKind {
-    int r = (int)(rng() % totalWeight);
-    int acc = 0;
-    for (int i = 0; i < POOL_SIZE; ++i) {
-      acc += pool[i].weight;
-      if (r < acc)
-        return pool[i].kind;
-    }
-    return ITEM_ROCK;
-  };
-
   int attempts = 0;
   while ((int)worldItems.size() < count && attempts < 800) {
     ++attempts;
@@ -345,7 +387,7 @@ void Game::spawnWorldItems(int lvl, int size, std::mt19937 &rng) {
       continue;
 
     WorldPickup wp;
-    wp.kind = rollKind();
+    wp.kind = rollItemAnyCategory(rng);
     wp.pos = {p.x, 0.35f, p.z};
     wp.bobT = (float)(rng() % 100) / 100.0f * 6.28f;
     worldItems.push_back(wp);

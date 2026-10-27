@@ -29,19 +29,20 @@ int nearestPickup(const Vector3 &pos, const std::vector<WorldPickup> &world,
 // Recoge el pickup `idx` y lo mete en el inventario.
 bool collectPickup(Player &p, std::vector<WorldPickup> &world, int idx);
 
-// --- Uso ---
-// Lanza el item seleccionado (si es lanzable).
-bool useSelected(Player &p, const Maze &maze,
-                 std::vector<Projectile> &projectiles, Assets assets);
-
-// --- Proyectiles ---
-void updateProjectiles(std::vector<Projectile> &projs, Maze &maze,
-                       std::vector<Enemy> &enemies, float dt);
-
 void updateEnemyStatus(std::vector<Enemy> &enemies, float dt);
 
 // --- Render helpers ---
 Color itemColor(ItemKind kind);
 const char *itemName(ItemKind kind);
+float cooldownFor(ItemKind kind);
+
+bool useSelected(Player& p, const Maze& maze,
+                 std::vector<Projectile>& projectiles, Assets assets,
+                 int ownerId = 0);
+
+void updateProjectiles(std::vector<Projectile>& projs, Maze& maze,
+                       std::vector<Enemy>& enemies,
+                       Player* players, int numPlayers,
+                       float dt);
 
 } // namespace Inventory

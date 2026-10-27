@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include <cmath>
 #include <cstdio>
 
 namespace UI {

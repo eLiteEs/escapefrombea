@@ -35,6 +35,8 @@
 * stickpng
 * upstairsrails
 * npc.com
+* nznoaaa1
+* condisline.cat
 
 -Fuente
 * NaN

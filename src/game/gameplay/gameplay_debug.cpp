@@ -4,6 +4,7 @@
 #include "enemy.hpp"
 #include "game.hpp"
 #include "inventory.hpp"
+#include <raymath.h>
 
 void Game::handleDebugHotkeys() {
     if (state == ST_PLAYING || state == ST_PAUSED) {
@@ -88,7 +89,10 @@ void Game::debugSpawnEnemy() {
 
 void Game::debugKillAll() {
     int n = (int)enemies.size();
-    enemies.clear();
+    for(Enemy& e : enemies) {
+        e.hp = 0;
+        e.shield = 0;
+    }
     showToast(TextFormat("Eliminados %d enemigos", n));
 }
 

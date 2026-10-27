@@ -14,6 +14,7 @@ struct WorldSprite3D {
   Texture2D tex = {};
   Color tint = {255, 255, 255, 255};
   bool crossedQuads = false;
+  bool flipY = false;
 };
 
 // Renderer 3D por chunks. No posee los modelos: son propiedad de Maze.

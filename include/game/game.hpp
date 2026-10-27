@@ -150,8 +150,11 @@ struct Game {
   void drawHandItem2D(const Player &pl, int vw, int vh);
   void drawMinimap(const Player &pl, int vw);
   void drawStaminaBar(const Player &pl, int vw, int vh);
+  void drawHealthAndShieldBars(const Player &pl, int vw, int vh);
   void drawCinematic();
   void drawToast();
+  void drawEnemyHealthBars(const Player& pl, int vw, int vh);
+  void drawCooldownBar(const Player& pl, int vw, int vh);
 
   // Menus
   void drawMenus();

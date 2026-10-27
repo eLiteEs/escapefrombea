@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <raymath.h>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -381,7 +382,7 @@ void Game::update(float dt) {
 
     updateEnemies(enemies, maze, players, numPlayers, gdt, C::SEE_DIST,
                   C::MEMORY_T);
-    Inventory::updateProjectiles(projectiles, maze, enemies, gdt);
+    Inventory::updateProjectiles(projectiles, maze, enemies, players, numPlayers, gdt);
     Inventory::updateEnemyStatus(enemies, gdt);
     updateWorldItems(gdt);
 

@@ -209,9 +209,7 @@ void Game::handleItemInput(int p) {
   bool usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) ||
                     IsKeyPressed(KEY_E);
   if (usePressed) {
-    if (Inventory::useSelected(pl, maze, projectiles, assets)) {
-      // sonido se maneja dentro
-    }
+    if (Inventory::useSelected(pl, maze, projectiles, assets)) {}
   }
 }
 

@@ -17,3 +17,9 @@
 - Fixed a bug on stamina bar: now overflow is handled properly
 - Fixed a bug on inventory: now when you change the save, the inventory is updated correctly
 - Updated level designer
+- Added health and shield systems for enemies and players
+- Added items to recover health and shield (Bifrutas and Ensaimadas)
+- Fixed another bug in the inventory: now when you die you get 0 items in the inventory, not 0.5
+- Added NPCs and dialogs
+- Implemented proper 3D maps
+- Added a cooldown indicator

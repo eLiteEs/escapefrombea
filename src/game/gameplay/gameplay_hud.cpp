@@ -7,6 +7,10 @@
 #include "ui.hpp"
 #include "util_format.hpp"
 
+#include <raylib.h>
+#include <raymath.h>
+#include <algorithm>
+
 void Game::drawStaminaBar(const Player &pl, int vw, int vh) {
   int barW = std::max(120, vw / 3);
   int barH = 14;
@@ -37,22 +41,64 @@ void Game::drawStaminaBar(const Player &pl, int vw, int vh) {
   Color cOver = (Color){80, 180, 255, 255}; // azul
 
   if (baseW > 0)
-    DrawRectangle(bx, by, baseW, barH, cBase);
+    DrawRectangle(bx, by, baseW * 2, barH, cBase);
 
   if (overW > 0)
-    DrawRectangle(bx + halfW, by, overW, barH, cOver);
-
-  if (pl.stamina > 0.05f || pl.stamina < 0.05f) {
-    DrawLine(bx + halfW, by, bx + halfW, by + barH, (Color){30, 30, 40, 200});
-  }
+    DrawRectangle(bx, by, overW * 2, barH, cOver);
 
   DrawRectangleLines(bx, by, barW, barH, RAYWHITE);
 
   const char *label = pl.exhausted ? L("hud.stamina.exhausted", "Sin aliento")
-                                   : L("hud.stamina", "Energía");
+  : L("hud.stamina", "Energía");
   int lw = UI::M(label, 14);
   Color lc = pl.exhausted ? RED : (pl.stamina > 1.0f ? cOver : LIGHTGRAY);
   UI::T(label, vw / 2 - lw / 2, by - 18, 14, lc);
+}
+
+void Game::drawHealthAndShieldBars(const Player &pl, int vw, int vh) {
+  int barW = std::max(120, vw / 3);
+  int barH = 14;
+  int bx = 10;
+  int by = vh - 20 - barH * 2;
+
+  float maxHealth = C::PLAYER_MAX_HP;
+  float healthClamped = std::min(pl.hp, maxHealth);
+
+  float maxShield = C::PLAYER_MAX_SHIELD;
+  float shieldClamped = std::min(pl.hp, maxShield);
+
+  Color healthColor;
+  if (pl.hp< 0.3f)
+    healthColor = ORANGE;
+  else
+    healthColor = GREEN;
+
+  Color shieldColor = (Color){80, 180, 255, 255}; // azul
+
+  const char *healthLabel = L("hud.health", "Vida");
+  const char *shieldLabel = L("hud.shield", "Escudo");
+
+  int hlw = UI::M(healthLabel, 14);
+  UI::T(healthLabel, 10, by, 14, LIGHTGRAY);
+
+  int slw = UI::M(shieldLabel, 14);
+  UI::T(shieldLabel, 10, by + barH + 10, 14, LIGHTGRAY);
+
+  // health bar background and border
+  DrawRectangle(hlw + 10 + bx - 2, by - 2, barW + 4, barH + 4, (Color){0, 0, 0, 160});
+  DrawRectangle(hlw + 10 + bx, by, barW, barH, (Color){40, 40, 55, 255});
+
+  // shield background and border
+  DrawRectangle(slw + 10 + bx - 2, by - 2 + 10 + barH, barW + 4, barH + 4, (Color){0, 0, 0, 160});
+  DrawRectangle(slw + 10 + bx, by + 10 + barH, barW, barH, (Color){40, 40, 55, 255});
+
+  // health and shield progress bars
+  DrawRectangle(bx + hlw + 10, by, (int) barW / C::PLAYER_MAX_HP * healthClamped, barH, healthColor);
+  DrawRectangle(bx + slw + 10, by + 10 + barH, (int) barW / C::PLAYER_MAX_SHIELD* shieldClamped, barH, shieldColor);
+
+  // progress bars outlines
+  DrawRectangleLines(hlw + 10 + bx, by, barW, barH, RAYWHITE);
+  DrawRectangleLines(slw + 10 + bx, by + 10 + barH, barW, barH, RAYWHITE);
 }
 
 float Game::nearestEnemyDist(Vector3 p) const {
@@ -127,7 +173,7 @@ void Game::drawInventory(const Player &pl, int vw, int vh) {
     bool selected = (i == pl.selectedSlot);
     Color bg = selected ? (Color){60, 70, 100, 200} : (Color){20, 22, 32, 170};
     Color border =
-    selected ? (Color){255, 240, 140, 230} : (Color){90, 100, 130, 180};
+        selected ? (Color){255, 240, 140, 230} : (Color){90, 100, 130, 180};
     DrawRectangleRec(r, bg);
     DrawRectangleLinesEx(r, selected ? 2.0f : 1.0f, border);
     DrawText(TextFormat("%d", i + 1), x + 4, y + 2, 12,
@@ -186,24 +232,30 @@ void Game::drawHandItem2D(const Player &pl, int vw, int vh) {
 
   float size = baseSize;
   switch (it.kind) {
-    case ITEM_ROCK:
-      size = baseSize * 0.6f;
-      break;
-    case ITEM_BOX:
-      size = baseSize * 1.0f;
-      break;
-    case ITEM_LIME:
-      size = baseSize * 1.1f;
-      break;
-    case ITEM_BICIMAD:
-      size = baseSize * 1.3f;
-      break;
-    case ITEM_KEY:
-      size = baseSize * 0.9f;
-      break;
-    default:
-      size = baseSize;
-      break;
+  case ITEM_ROCK:
+    size = baseSize * 0.6f;
+    break;
+  case ITEM_BOX:
+    size = baseSize * 1.0f;
+    break;
+  case ITEM_LIME:
+    size = baseSize * 1.1f;
+    break;
+  case ITEM_BICIMAD:
+    size = baseSize * 1.3f;
+    break;
+  case ITEM_KEY:
+    size = baseSize * 0.9f;
+    break;
+  case ITEM_BIFRUTAS:
+    size = baseSize * 0.7f;
+    break;
+  case ITEM_ENSAIMADA:
+    size = baseSize * 0.8f;
+    break;
+  default:
+    size = baseSize;
+    break;
   }
 
   float x = vw * 0.80f;
@@ -212,6 +264,37 @@ void Game::drawHandItem2D(const Player &pl, int vw, int vh) {
   Texture2D tex = assets.itemTex[k];
   DrawTexturePro(tex, {0, 0, (float)tex.width, (float)tex.height},
                  {x, y - 200, size, size}, {0, 0}, -10.0f, WHITE);
+}
+
+void Game::drawCooldownBar(const Player& pl, int vw, int vh) {
+  if (pl.throwCooldown <= 0.0f)    return;
+  if (pl.throwCooldownMax <= 0.0f) return;
+
+  float frac = std::clamp(pl.throwCooldown / pl.throwCooldownMax, 0.0f, 1.0f);
+
+  int barW = std::max(6, vw / 260);
+  int barH = std::max(48, vh / 12);
+  int gap  = std::max(18, vw / 90);
+  int bx = vw / 2 + gap;
+  int by = vh / 2 - barH / 2;
+
+  DrawRectangle(bx - 2, by - 2, barW + 4, barH + 4, (Color){ 0, 0, 0, 160 });
+  DrawRectangle(bx, by, barW, barH, (Color){ 40, 40, 55, 200 });
+
+  int fillH = (int)(barH * frac);
+  int fillY = by + (barH - fillH);
+
+  Color c;
+  if (frac > 0.5f)       c = (Color){ 210,  60,  60, 255 };
+  else if (frac > 0.2f)  c = (Color){ 240, 150,  50, 255 };
+  else                   c = (Color){ 240, 220,  60, 255 };
+
+  if (fillH > 0)
+    DrawRectangle(bx, fillY, barW, fillH, c);
+
+  DrawRectangleLines(bx, by, barW, barH, (Color){ 220, 220, 220, 180 });
+  DrawRectangle(bx - 1, by + barH / 2, barW + 2, 1,
+                (Color){ 220, 220, 220, 80 });
 }
 
 void Game::drawSpeedrunOverlay(int vw, int vh) {
@@ -223,18 +306,18 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   // --- Tamaño de la caja ---
   int boxW, boxH;
   switch (cfg.srOverlaySize) {
-    case 0:
-      boxW = 220;
-      boxH = 86;
-      break; // Pequeño
-    case 1:
-      boxW = 320;
-      boxH = 150;
-      break; // Medio
-    default:
-      boxW = 420;
-      boxH = 280;
-      break; // Grande
+  case 0:
+    boxW = 220;
+    boxH = 86;
+    break; // Pequeño
+  case 1:
+    boxW = 320;
+    boxH = 150;
+    break; // Medio
+  default:
+    boxW = 420;
+    boxH = 280;
+    break; // Grande
   }
 
   // --- Posición según anchor (3x3) + offsets ---
@@ -262,7 +345,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
   int idx = (int)sr.splits.size(); // índice del nivel actual
   float cur = totalPlaytime - sr.lastLevelStart;
   float curLevelPB =
-  (idx < (int)sr.bestSplits.size()) ? sr.bestSplits[idx] : 0.0f;
+      (idx < (int)sr.bestSplits.size()) ? sr.bestSplits[idx] : 0.0f;
 
   float totalCompleted = 0.0f;
   for (float s : sr.splits)
@@ -359,7 +442,7 @@ void Game::drawSpeedrunOverlay(int vw, int vh) {
       Util::formatSplitTime(sr.splits[i], tbuf, sizeof(tbuf));
 
       bool hasDelta =
-      (i < (int)sr.bestSplits.size() && sr.bestSplits[i] > 0.0f);
+          (i < (int)sr.bestSplits.size() && sr.bestSplits[i] > 0.0f);
       Color c = colGray;
       if (hasDelta) {
         float delta = sr.splits[i] - sr.bestSplits[i];
