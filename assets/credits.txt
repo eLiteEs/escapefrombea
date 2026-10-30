@@ -33,10 +33,11 @@
 * DifBetween
 * Makro
 * stickpng
-* upstairsrails
 * npc.com
 * nznoaaa1
 * condisline.cat
+* clipartcraft
+* vecteezy
 
 -Fuente
 * NaN

@@ -145,21 +145,10 @@ void Game::drawConfigVideo() {
       save();
   }
   {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%.2fx", cfg.guiScale);
-    UIAction a =
-        uiOptionEx(4, items, 30, L("video.guiscale", "Tamaño de la interfaz"),
-                   buf, &navIndex, nullptr, navIndex == 4 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.guiScale = std::max(0.75f, cfg.guiScale - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.guiScale = std::min(2.00f, cfg.guiScale + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.guiScale = 1.0f;
-    if (a != UI_NONE) {
-      UI::scale = cfg.guiScale;
-      save();
-    }
+    UIAction a = uiSlider(4, items, 30, L("video.guiscale", "Tamaño de la interfaz"),
+                      &cfg.guiScale, 0.75f, 2.00f, 0.05f, &navIndex, nullptr,
+                      navIndex == 4 ? lr : 0, "x");
+    if (a != UI_NONE) { UI::scale = cfg.guiScale; save(); }
   }
   if (uiOptionEx(5, items, 30, L("video.vsync", "VSync"),
                  Util::yesNo(cfg.vsync), &navIndex, nullptr,
@@ -194,53 +183,30 @@ void Game::drawConfigAudio() {
   handleGamepadMenuNav(items);
   int lr = gamepadLeftRight();
 
-  auto applyAndSave = [&]() {
+  auto apply = [&]() {
     assets.applyVolumes(cfg.masterVol, cfg.musicVol, cfg.sfxVol);
     cfg.save();
   };
 
-  {
-    UIAction a = uiOptionEx(0, items, 40, L("audio.master", "Volumen maestro"),
-                            Util::pctStr(cfg.masterVol), &navIndex, nullptr,
-                            navIndex == 0 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.masterVol = std::max(0.0f, cfg.masterVol - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.masterVol = std::min(1.0f, cfg.masterVol + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.masterVol = 1.0f;
-    if (a != UI_NONE)
-      applyAndSave();
-  }
-  {
-    UIAction a = uiOptionEx(1, items, 40, L("audio.music", "Música"),
-                            Util::pctStr(cfg.musicVol), &navIndex, nullptr,
-                            navIndex == 1 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.musicVol = std::max(0.0f, cfg.musicVol - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.musicVol = std::min(1.0f, cfg.musicVol + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.musicVol = 0.55f;
-    if (a != UI_NONE)
-      applyAndSave();
-  }
-  {
-    UIAction a = uiOptionEx(2, items, 40, L("audio.sfx", "Efectos"),
-                            Util::pctStr(cfg.sfxVol), &navIndex, nullptr,
-                            navIndex == 2 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.sfxVol = std::max(0.0f, cfg.sfxVol - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.sfxVol = std::min(1.0f, cfg.sfxVol + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.sfxVol = 0.90f;
-    if (a != UI_NONE)
-      applyAndSave();
-  }
+  UIAction a;
+
+  a = uiSlider(0, items, 40, L("audio.master", "Volumen maestro"),
+               &cfg.masterVol, 0.0f, 1.0f, 0.05f, &navIndex, nullptr,
+               navIndex == 0 ? lr : 0, "%");
+  if (a != UI_NONE) apply();
+
+  a = uiSlider(1, items, 40, L("audio.music", "Música"),
+               &cfg.musicVol, 0.0f, 1.0f, 0.05f, &navIndex, nullptr,
+               navIndex == 1 ? lr : 0, "%");
+  if (a != UI_NONE) apply();
+
+  a = uiSlider(2, items, 40, L("audio.sfx", "Efectos"),
+               &cfg.sfxVol, 0.0f, 1.0f, 0.05f, &navIndex, nullptr,
+               navIndex == 2 ? lr : 0, "%");
+  if (a != UI_NONE) apply();
+
   if (uiOptionEx(3, items, 40, L("common.back", "Volver"), "", &navIndex,
-                 nullptr, 0) != UI_NONE ||
-      IsKeyPressed(KEY_ESCAPE))
+    nullptr, 0) != UI_NONE || IsKeyPressed(KEY_ESCAPE))
     state = ST_CONFIG;
 }
 
@@ -258,19 +224,10 @@ void Game::drawConfigGameplay() {
     save();
   }
   {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%.2f", cfg.mouseSens);
-    UIAction a = uiOptionEx(1, items, 40,
-                            L("gameplay.mousesens", "Sensibilidad del ratón"),
-                            buf, &navIndex, nullptr, navIndex == 1 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.mouseSens = std::max(0.10f, cfg.mouseSens - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.mouseSens = std::min(5.00f, cfg.mouseSens + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.mouseSens = 1.0f;
-    if (a != UI_NONE)
-      save();
+    UIAction a = uiSlider(1, items, 40, L("gameplay.mousesens", "Sensibilidad del ratón"),
+                      &cfg.mouseSens, 0.10f, 5.00f, 0.05f, &navIndex, nullptr,
+                      navIndex == 1 ? lr : 0, "");
+    if (a != UI_NONE) save();
   }
   {
     char buf[16];
@@ -278,14 +235,7 @@ void Game::drawConfigGameplay() {
     UIAction a = uiOptionEx(2, items, 40,
                             L("gameplay.padsens", "Sensibilidad del mando"),
                             buf, &navIndex, nullptr, navIndex == 2 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.stickSens = std::max(0.10f, cfg.stickSens - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.stickSens = std::min(5.00f, cfg.stickSens + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.stickSens = 1.0f;
-    if (a != UI_NONE)
-      save();
+    if (a != UI_NONE) save();
   }
   if (uiOptionEx(3, items, 40, L("gameplay.minimap", "Minimapa"),
                  Util::yesNo(cfg.showMinimap), &navIndex, nullptr,
@@ -294,34 +244,16 @@ void Game::drawConfigGameplay() {
     save();
   }
   {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%.2f", cfg.sprintDrain);
-    UIAction a =
-        uiOptionEx(4, items, 40, L("gameplay.sprintdrain", "Consumo de sprint"),
-                   buf, &navIndex, nullptr, navIndex == 4 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.sprintDrain = std::max(0.10f, cfg.sprintDrain - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.sprintDrain = std::min(0.80f, cfg.sprintDrain + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.sprintDrain = C::STAM_DRAIN_DEF;
-    if (a != UI_NONE)
-      save();
+    UIAction a = uiSlider(4, items, 40, L("gameplay.sprintdrain", "Consumo de sprint"),
+                          &cfg.sprintDrain, 0.10f, 0.80f, 0.05f, &navIndex, nullptr,
+                          navIndex == 4 ? lr : 0, "");
+    if (a != UI_NONE) save();
   }
   {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%.2f", cfg.sprintRegen);
-    UIAction a = uiOptionEx(5, items, 40,
-                            L("gameplay.sprintregen", "Regeneración de sprint"),
-                            buf, &navIndex, nullptr, navIndex == 5 ? lr : 0);
-    if (a == UI_LEFT)
-      cfg.sprintRegen = std::max(0.05f, cfg.sprintRegen - 0.05f);
-    if (a == UI_RIGHT)
-      cfg.sprintRegen = std::min(0.60f, cfg.sprintRegen + 0.05f);
-    if (a == UI_CONFIRM)
-      cfg.sprintRegen = C::STAM_REGEN_DEF;
-    if (a != UI_NONE)
-      save();
+    UIAction a = uiSlider(5, items, 40, L("gameplay.sprintregen", "Regeneración de sprint"),
+                          &cfg.sprintRegen, 0.05f, 0.60f, 0.05f, &navIndex, nullptr,
+                          navIndex == 5 ? lr : 0, "");
+    if (a != UI_NONE) save();
   }
   if (uiOptionEx(6, items, 40, L("gameplay.cinematics", "Cinemáticas"),
                  Util::yesNo(cfg.playCinematics), &navIndex, nullptr,

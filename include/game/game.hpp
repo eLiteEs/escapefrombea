@@ -11,6 +11,7 @@
 #include "raylib.h"
 #include "renderer3d.hpp"
 #include "save.hpp"
+#include "ui.hpp"
 
 #include <cstdint>
 #include <string>
@@ -251,12 +252,16 @@ struct Game {
                        bool &isLocker) const;
   void renderPlayerView(const Player &pl);
 
-  // Buffer de texto para editar la seed en la creación de partida
-  char seedEditBuf[16] = {0};
-
   // Handle double clicking on save list
   int saveListLastClickIdx = -1;
   double saveListLastClickTime = 0.0;
+
+  // Estado de los inputs de texto del formulario de creación
+  TextInputState createNameState;
+  TextInputState createSeedState;
+
+  // Seed como string (reemplaza el antiguo char seedEditBuf[16])
+  std::string        createSeedBuf;
 
   // NPCs, Signs, Dialogs
   std::vector<LevelExtras::SignData> currentSigns;

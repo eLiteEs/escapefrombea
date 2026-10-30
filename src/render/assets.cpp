@@ -65,6 +65,18 @@ static Music loadMusicSmart(const char *name) {
   return LoadMusicStream(np.c_str());
 }
 
+void Assets::loadUiTextures() {
+  auto loadIfPresent = [](const char* name, Texture2D& tex, bool& has) {
+    std::string p = Paths::sprite(name);
+    tex = LoadTexture(p.c_str());
+    has = (tex.id != 0);
+    if (has) SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+  };
+    loadIfPresent("ui_skull.png",       uiSkull,      hasUiSkull);
+    loadIfPresent("ui_arrow_left.png",  uiArrowLeft,  hasUiArrowLeft);
+    loadIfPresent("ui_arrow_right.png", uiArrowRight, hasUiArrowRight);
+}
+
 void Assets::loadEnemyTextures() {
   std::string p;
 
@@ -272,6 +284,10 @@ void Assets::unload() {
   if (font.texture.id != 0 && font.texture.id != GetFontDefault().texture.id) {
     UnloadFont(font);
   }
+
+  if (hasUiSkull      && uiSkull.id      != 0) UnloadTexture(uiSkull);
+  if (hasUiArrowLeft  && uiArrowLeft.id  != 0) UnloadTexture(uiArrowLeft);
+  if (hasUiArrowRight && uiArrowRight.id != 0) UnloadTexture(uiArrowRight);
 }
 
 void Assets::applyVolumes(float master, float music, float sfx) {

@@ -9,7 +9,11 @@ void Game::drawPauseMenu() {
   DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 200});
 
   const char *t = L("pause.title", "Pausa");
-  UI::T(t, W / 2 - UI::M(t, 64) / 2, (int)(H * 0.12f), 64, RAYWHITE);
+  int tFs = 56;
+  int tw = UI::M(t, tFs);
+  int ty = (int)(H * 0.12f);
+  UI::T(t, W / 2 - tw / 2, ty, tFs, UI::TEXT_PRI);
+  DrawRectangle(W / 2 - 40, ty + tFs + 12, 80, 2, UI::ACCENT_SOFT);
 
   bool canSave = !currentSaveId.empty();
 
@@ -58,5 +62,7 @@ void Game::drawPauseMenu() {
   char info[128];
   snprintf(info, sizeof(info), L("pause.info", "Nivel %d  -  %.1fs"), level,
            levelTime);
-  UI::T(info, W / 2 - UI::M(info, 16) / 2, H - 60, 16, LIGHTGRAY);
+  int fs = 15;
+  int iw = UI::M(info, fs);
+  UI::T(info, W / 2 - iw / 2, H - 56, fs, UI::TEXT_MUT);
 }

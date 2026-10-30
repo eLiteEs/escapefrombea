@@ -23,3 +23,5 @@
 - Added NPCs and dialogs
 - Implemented proper 3D maps
 - Added a cooldown indicator
+- Reworked UI and fixed bugs on it
+- Now GUI Scale works how it should

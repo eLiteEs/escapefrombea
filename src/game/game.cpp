@@ -10,7 +10,6 @@
 #include "paths.hpp"
 #include "player.hpp"
 #include "rlgl.h"
-#include "ui.hpp"
 #include "util_format.hpp"
 
 #include <algorithm>
@@ -125,6 +124,14 @@ void Game::init() {
     case 6:
       assets.loadFonts();
       UI::font = assets.font;
+
+      assets.loadUiTextures();
+      UI::skullTex         = assets.uiSkull;
+      UI::hasSkullTex      = assets.hasUiSkull;
+      UI::arrowLeftTex     = assets.uiArrowLeft;
+      UI::hasArrowLeftTex  = assets.hasUiArrowLeft;
+      UI::arrowRightTex    = assets.uiArrowRight;
+      UI::hasArrowRightTex = assets.hasUiArrowRight;
       break;
     }
   };

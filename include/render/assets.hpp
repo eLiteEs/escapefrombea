@@ -23,6 +23,14 @@ struct Assets {
   Texture2D itemTex[ITEM_KIND_COUNT] = {};
   bool hasItemTex[ITEM_KIND_COUNT] = {};
 
+  // UI custom assets
+  Texture2D uiSkull      = {};
+  Texture2D uiArrowLeft  = {};
+  Texture2D uiArrowRight = {};
+  bool hasUiSkull      = false;
+  bool hasUiArrowLeft  = false;
+  bool hasUiArrowRight = false;
+
   // Level wall decorations textures
   Texture2D wallTile = {};
   Texture2D wallLocker = {};
@@ -62,6 +70,7 @@ struct Assets {
   void loadEnemyTextures();
   void loadWallTextures();
   void loadItemTextures();
+  void loadUiTextures();
   void loadMusic();
   void loadSounds();
   void loadFonts();

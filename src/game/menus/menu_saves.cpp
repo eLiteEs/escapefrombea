@@ -74,13 +74,20 @@ void Game::drawSaveList() {
       bool selected = (idx == saveListCursor);
       bool clicked = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 
-      Color bg =
-          selected ? (Color){60, 70, 105, 230} : (Color){30, 34, 48, 200};
-      Color brd = selected ? SKYBLUE : (Color){70, 80, 110, 200};
-      DrawRectangleRec(row, bg);
-      DrawRectangleLinesEx(row, 2, brd);
+      // Dibujo de la fila con la nueva paleta
+      if (selected)
+        DrawRectangleRec(row, UI::BG_FOCUS);
+      else if (hover)
+        DrawRectangleRec(row, UI::BG_HOVER);
+      else
+        DrawRectangleRec(row, UI::BG_PANEL);
 
-      UI::T(e.name.c_str(), listX + 20, y + 12, 22, RAYWHITE);
+      if (selected)
+        DrawRectangle(listX + 2, y + 8, 3, rowH - 22, UI::ACCENT);
+
+      // Texto
+      UI::T(e.name.c_str(), listX + 20, y + 12, 22,
+            selected ? UI::TEXT_PRI : UI::TEXT_SEC);
 
       char info[256];
       const char *modeStr = (e.mode == MODE_STORY)
@@ -88,7 +95,7 @@ void Game::drawSaveList() {
                                 : L("mode.endless", "Infinito");
       snprintf(info, sizeof(info), "%s · Nivel %d · %s", modeStr, e.level,
                e.speedrun ? L("saves.tag.sr", "Speedrun") : "");
-      UI::T(info, listX + 20, y + 34, 14, LIGHTGRAY);
+      UI::T(info, listX + 20, y + 34, 14, UI::TEXT_MUT);
 
       int totalSec = (int)e.playtime;
       int hh = totalSec / 3600;
@@ -98,13 +105,13 @@ void Game::drawSaveList() {
         snprintf(pt, sizeof(pt), "%dh %02dm", hh, mm);
       else
         snprintf(pt, sizeof(pt), "%dm", mm);
-
       int ptW = UI::M(pt, 16);
-      UI::T(pt, listX + listW - ptW - 20, y + 12, 16, RAYWHITE);
+      UI::T(pt, listX + listW - ptW - 20, y + 12, 16,
+            selected ? UI::TEXT_PRI : UI::TEXT_SEC);
 
       const char *dateStr = Util::formatDate(e.timestamp);
       int dtW = UI::M(dateStr, 14);
-      UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, GRAY);
+      UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, UI::TEXT_MUT);
 
       if (clicked) {
         double now = GetTime();
@@ -136,15 +143,14 @@ void Game::drawSaveList() {
     bool hover = CheckCollisionPointRec(mp, r);
     bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 
-    Color bg = hover ? (Color){70, 80, 120, 255} : (Color){40, 45, 65, 255};
-    Color brd = hover ? SKYBLUE : (Color){90, 100, 140, 255};
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 2, brd);
+    DrawRectangleRec(r, hover ? UI::BG_HOVER : UI::BG_PANEL);
+    if (hover)
+      DrawRectangle(bx, by + bh - 2, bw, 2, UI::ACCENT);
 
-    int fs = 20;
+    int fs = 18;
     int tw = UI::M(label, fs);
     UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs,
-          hover ? WHITE : RAYWHITE);
+          hover ? UI::TEXT_PRI : UI::TEXT_SEC);
     return click;
   };
 
@@ -160,8 +166,8 @@ void Game::drawSaveList() {
     DrawRectangle(0, 0, W, H, (Color){0, 0, 0, 180});
 
     const char *q = L("saves.delete.confirm", "¿Eliminar esta partida?");
-    int qw = UI::M(q, 30);
-    UI::T(q, W / 2 - qw / 2, H / 2 - 40, 30, RAYWHITE);
+    int qw = UI::M(q, 26);
+    UI::T(q, W / 2 - qw / 2, H / 2 - 40, 26, UI::TEXT_PRI);
 
     auto confirmBtn = [&](int idx, const char *label) -> bool {
       int bw = 160, bh = 50, gap = 30;
@@ -171,14 +177,22 @@ void Game::drawSaveList() {
       Vector2 mp = GetMousePosition();
       bool hover = CheckCollisionPointRec(mp, r);
       bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-      Color bg = hover ? (idx == 0 ? (Color){140, 60, 60, 255}
-                                   : (Color){60, 90, 140, 255})
-                       : (Color){40, 45, 65, 255};
+
+      Color bg;
+      if (idx == 0)
+        bg = hover ? (Color){130, 50, 50, 255} : (Color){90, 35, 35, 255};
+      else
+        bg = hover ? UI::BG_HOVER : UI::BG_PANEL;
+
       DrawRectangleRec(r, bg);
-      DrawRectangleLinesEx(r, 2, RAYWHITE);
-      int fs = 22;
+      if (idx == 0)
+        DrawRectangle(bx, by + bh - 2, bw, 2, (Color){230, 80, 80, 255});
+      else
+        DrawRectangle(bx, by + bh - 2, bw, 2, UI::ACCENT);
+
+      int fs = 20;
       int tw = UI::M(label, fs);
-      UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs, WHITE);
+      UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs, UI::TEXT_PRI);
       return click;
     };
 
@@ -214,7 +228,7 @@ void Game::drawSaveList() {
     createBuffer.twoPlayers = false;
     // Buffer de seed EMPTY: el usuario puede teclear una nueva, o dejar
     // vacío para que se genere aleatoria al confirmar.
-    seedEditBuf[0] = '\0';
+    createSeedBuf.clear();
     state = ST_SAVE_CREATE;
     navIndex = 0;
   }
@@ -236,6 +250,9 @@ void Game::drawSaveList() {
 }
 
 void Game::drawSaveCreate() {
+  int W = GetScreenWidth();
+  int H = GetScreenHeight();
+
   drawConfigHeader(L("create.title", "Nueva partida"));
 
   bool endless = (createBuffer.mode == MODE_ENDLESS);
@@ -255,344 +272,187 @@ void Game::drawSaveCreate() {
   handleGamepadMenuNav(totalRows);
 
   int lr = gamepadLeftRight();
-  if (IsKeyPressed(KEY_LEFT))
-    lr = -1;
-  if (IsKeyPressed(KEY_RIGHT))
-    lr = +1;
+  if (IsKeyPressed(KEY_LEFT))  lr = -1;
+  if (IsKeyPressed(KEY_RIGHT)) lr = +1;
 
   bool confirm = consumeConfirm();
 
-  auto rowY = [&](int row) {
-    return GetScreenHeight() / 2 - (totalRows * 60) / 2 + row * 60;
-  };
-
-  auto drawRow = [&](int row, const char *label, const char *value,
-                     bool *outSelected, bool *outHover) {
-    int x = GetScreenWidth() / 2 - 340;
-    int y = rowY(row);
-    Rectangle r = {(float)x, (float)y, 680, 52};
-    Vector2 mp = GetMousePosition();
-    bool hover = CheckCollisionPointRec(mp, r);
-    Vector2 md = GetMouseDelta();
-    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-      navIndex = row;
-    bool selected = (navIndex == row);
-    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                   : (Color){35, 40, 58, 255};
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){80, 90, 125, 255});
-    UI::T(label, x + 22, y + 14, 24, RAYWHITE);
-    if (value && value[0]) {
-      char full[160];
-      snprintf(full, sizeof(full), "< %s >", value);
-      int vw = UI::M(full, 24);
-      UI::T(full, x + 680 - vw - 22, y + 14, 24, GOLD);
-    }
-    *outSelected = selected;
-    *outHover = hover;
-  };
-
-  // ============================================================
-  // Fila 0 — Nombre (input editable)
-  // ============================================================
+  // --- Fila 0: Nombre (input de texto) ---
   {
-    int x = GetScreenWidth() / 2 - 340;
-    int y = rowY(0);
-    Rectangle r = {(float)x, (float)y, 680, 52};
-    Vector2 mp = GetMousePosition();
-    bool hover = CheckCollisionPointRec(mp, r);
-    Vector2 md = GetMouseDelta();
-    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-      navIndex = 0;
-    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      navIndex = 0;
-    bool selected = (navIndex == 0);
-    Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                   : (Color){35, 40, 58, 255};
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){80, 90, 125, 255});
-    UI::T(L("create.name", "Nombre"), x + 22, y + 14, 24, RAYWHITE);
+    bool active = (navIndex == 0);
+    uiTextInput(0, totalRows, 40, L("create.name", "Nombre"),
+                createBuffer.name, createNameState, 40, &navIndex, active);
 
-    int tw = UI::M(createBuffer.name.c_str(), 24);
-    int tx = x + 680 - tw - 22;
-    UI::T(createBuffer.name.c_str(), tx, y + 14, 24, GOLD);
-
-    // Input SOLO si está seleccionado: así no roba caracteres a otros campos
-    if (selected) {
-      int k = GetCharPressed();
-      while (k > 0) {
-        if (k >= 32 && k < 127 && createBuffer.name.size() < 40)
-          createBuffer.name += (char)k;
-        k = GetCharPressed();
-      }
-      if (IsKeyPressed(KEY_BACKSPACE) && !createBuffer.name.empty())
-        createBuffer.name.pop_back();
+    // Enter sobre el nombre → siguiente fila
+    if (active && confirm) {
+      confirm = false;
+      navIndex = 1;
     }
-    if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
-      UI::T("_", tx + tw, y + 14, 24, GOLD);
   }
 
-  // ============================================================
-  // Fila 1 — Modo
-  // ============================================================
+  // --- Fila 1: Modo ---
   {
-    bool sel = false, hov = false;
     const char *modeStr = (createBuffer.mode == MODE_STORY)
-                              ? L("mode.story", "Historia")
-                              : L("mode.endless", "Infinito");
-    drawRow(1, L("create.mode", "Modo"), modeStr, &sel, &hov);
-    if (sel) {
-      int x = GetScreenWidth() / 2 - 340;
-      Vector2 mp = GetMousePosition();
-      bool hitL =
-          hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && mp.x < x + 340;
-      bool hitR =
-          hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && mp.x >= x + 340;
-      if (confirm || lr != 0 || hitL || hitR) {
-        createBuffer.mode = (createBuffer.mode + 1) % 2;
-        if (confirm)
-          confirm = false;
-      }
-    }
+    ? L("mode.story", "Historia")
+    : L("mode.endless", "Infinito");
+    UIAction a = uiOptionEx(1, totalRows, 40,
+                            L("create.mode", "Modo"),
+                            modeStr, &navIndex, &confirm,
+                            navIndex == 1 ? lr : 0);
+    if (a == UI_LEFT || a == UI_RIGHT || a == UI_CONFIRM)
+      createBuffer.mode = (createBuffer.mode + 1) % 2;
   }
 
-  // ============================================================
-  // Fila 2 — Dificultad
-  // ============================================================
+  // --- Fila 2: Dificultad ---
   {
     const char *diffStr;
     switch (createBuffer.difficulty) {
-    case DIFF_EXPERT:
-      diffStr = "EXPERTO";
-      break;
-    case DIFF_NIGHTMARE:
-      diffStr = "PESADILLA";
-      break;
-    default:
-      diffStr = "NORMAL";
-      break;
+      case DIFF_EXPERT:    diffStr = "EXPERTO";   break;
+      case DIFF_NIGHTMARE: diffStr = "PESADILLA"; break;
+      default:             diffStr = "NORMAL";    break;
     }
-    bool sel = false, hov = false;
-    drawRow(2, L("create.difficulty", "Dificultad"), diffStr, &sel, &hov);
-    if (sel) {
-      int x = GetScreenWidth() / 2 - 340;
-      Vector2 mp = GetMousePosition();
-      int delta = 0;
-      if (lr < 0)
-        delta = -1;
-      if (lr > 0)
-        delta = +1;
-      if (hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-        delta = (mp.x < x + 340) ? -1 : +1;
+    UIAction a = uiOptionEx(2, totalRows, 40,
+                            L("create.difficulty", "Dificultad"),
+                            diffStr, &navIndex, &confirm,
+                            navIndex == 2 ? lr : 0);
+    if (a == UI_LEFT)
       createBuffer.difficulty =
-          (createBuffer.difficulty + delta + DIFF_COUNT) % DIFF_COUNT;
-    }
+      (createBuffer.difficulty + DIFF_COUNT - 1) % DIFF_COUNT;
+    if (a == UI_RIGHT)
+      createBuffer.difficulty =
+      (createBuffer.difficulty + 1) % DIFF_COUNT;
   }
 
-  // ============================================================
-  // Fila 3 — Jugadores
-  // ============================================================
+  // --- Fila 3: Jugadores ---
   {
     char buf[8];
     snprintf(buf, sizeof(buf), "%s", createBuffer.twoPlayers ? "2" : "1");
-    bool sel = false, hov = false;
-    drawRow(3, L("create.players", "Jugadores"), buf, &sel, &hov);
-    if (sel) {
-      bool hit = hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-      if (confirm || hit || lr != 0) {
-        createBuffer.twoPlayers = !createBuffer.twoPlayers;
-        if (confirm)
-          confirm = false;
-      }
-    }
+    UIAction a = uiOptionEx(3, totalRows, 40,
+                            L("create.players", "Jugadores"),
+                            buf, &navIndex, &confirm,
+                            navIndex == 3 ? lr : 0);
+    if (a != UI_NONE) createBuffer.twoPlayers = !createBuffer.twoPlayers;
   }
 
-  // ============================================================
-  // Fila 4 — Speedrun
-  // ============================================================
+  // --- Fila 4: Speedrun ---
   {
     const char *sr =
-        createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
-    bool sel = false, hov = false;
-    drawRow(4, L("create.speedrun", "Modo speedrun"), sr, &sel, &hov);
-    if (sel) {
-      bool hit = hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-      if (confirm || hit || lr != 0) {
-        createBuffer.speedrun = !createBuffer.speedrun;
-        if (confirm)
-          confirm = false;
-      }
-    }
+    createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
+    UIAction a = uiOptionEx(4, totalRows, 40,
+                            L("create.speedrun", "Modo speedrun"),
+                            sr, &navIndex, &confirm,
+                            navIndex == 4 ? lr : 0);
+    if (a != UI_NONE) createBuffer.speedrun = !createBuffer.speedrun;
   }
 
-  // ============================================================
-  // Sección infinito — Seed, Aleatorizar, Multiplicadores
-  // ============================================================
+  // --- Sección infinito ---
   if (endless) {
-    // --- Seed (input editable con seedEditBuf) ---
+    // Seed
     {
-      int x = GetScreenWidth() / 2 - 340;
-      int y = rowY(seedRow);
-      Rectangle r = {(float)x, (float)y, 680, 52};
-      Vector2 mp = GetMousePosition();
-      bool hover = CheckCollisionPointRec(mp, r);
-      if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-        navIndex = seedRow;
-      bool selected = (navIndex == seedRow);
-      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                     : (Color){35, 40, 58, 255};
-      DrawRectangleRec(r, bg);
-      DrawRectangleLinesEx(r, 2,
-                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
-      UI::T(L("endless.seed", "Seed"), x + 22, y + 14, 24, RAYWHITE);
+      bool active = (navIndex == seedRow);
+      uiTextInput(seedRow, totalRows, 40, L("endless.seed", "Seed"),
+                  createSeedBuf, createSeedState, 10, &navIndex, active);
 
-      // Texto a mostrar: la seed tecleada, o un hint si está vacía
-      const char *display = seedEditBuf;
-      Color dispCol = GOLD;
-      if (seedEditBuf[0] == '\0') {
-        display = L("endless.seed.random", "(vacío = aleatoria)");
-        dispCol = GRAY;
-      }
-      int vw = UI::M(display, 24);
-      int vx = x + 680 - vw - 22;
-      UI::T(display, vx, y + 14, 24, dispCol);
-
-      // Input SOLO si está seleccionado
-      if (selected) {
-        int k = GetCharPressed();
-        while (k > 0) {
-          if (k >= '0' && k <= '9' && strlen(seedEditBuf) < 10) {
-            size_t len = strlen(seedEditBuf);
-            seedEditBuf[len] = (char)k;
-            seedEditBuf[len + 1] = '\0';
-          }
-          k = GetCharPressed();
-        }
-        if (IsKeyPressed(KEY_BACKSPACE)) {
-          size_t len = strlen(seedEditBuf);
-          if (len > 0)
-            seedEditBuf[len - 1] = '\0';
-        }
-      }
-      if (selected && fmodf((float)GetTime(), 1.0f) < 0.5f)
-        UI::T("_", vx + vw, y + 14, 24, GOLD);
-    }
-
-    // --- Aleatorizar seed ---
-    {
-      int x = GetScreenWidth() / 2 - 340;
-      int y = rowY(randomRow);
-      Rectangle r = {(float)x, (float)y, 680, 52};
-      Vector2 mp = GetMousePosition();
-      bool hover = CheckCollisionPointRec(mp, r);
-      Vector2 md = GetMouseDelta();
-      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-        navIndex = randomRow;
-      bool selected = (navIndex == randomRow);
-      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                     : (Color){35, 40, 58, 255};
-      DrawRectangleRec(r, bg);
-      DrawRectangleLinesEx(r, 2,
-                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
-      UI::T(L("endless.randomize", "Aleatorizar seed"), x + 22, y + 14, 24,
-            RAYWHITE);
-
-      bool clicked = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-      if ((selected && confirm) || clicked) {
-        uint32_t s = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
-        if (s == 0)
-          s = 1;
-        snprintf(seedEditBuf, sizeof(seedEditBuf), "%u", s);
-        if (selected)
-          confirm = false;
+      // Cuando está vacío, mostrar hint visual (sin modificar el buffer)
+      if (createSeedBuf.empty() && active) {
+        // hack: dibujamos un ghost text encima del campo
+        int x = GetScreenWidth() / 2 - 340;
+        int y = GetScreenHeight() / 2 - (totalRows * 70) / 2 + 40
+        + seedRow * 70;  // nota: el layout de uiTextInput es 70
+        UI::T(L("endless.seed.random", "(vacío = aleatoria)"),
+              x + 260, y + 16, 18, UI::TEXT_MUT);
       }
     }
 
-    // --- Multiplicadores ---
-    auto multRowFn = [&](int row, const char *label, int *value) {
-      int x = GetScreenWidth() / 2 - 340;
-      int y = rowY(row);
-      Rectangle r = {(float)x, (float)y, 680, 52};
-      Vector2 mp = GetMousePosition();
-      bool hover = CheckCollisionPointRec(mp, r);
-      Vector2 md = GetMouseDelta();
-      if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-        navIndex = row;
-      bool selected = (navIndex == row);
-      Color bg = (hover || selected) ? (Color){55, 62, 90, 255}
-                                     : (Color){35, 40, 58, 255};
-      DrawRectangleRec(r, bg);
-      DrawRectangleLinesEx(r, 2,
-                           selected ? SKYBLUE : (Color){80, 90, 125, 255});
-      UI::T(label, x + 22, y + 14, 24, RAYWHITE);
+    // Aleatorizar
+    {
+      UIAction a = uiOptionEx(randomRow, totalRows, 40,
+                              L("endless.randomize", "Aleatorizar seed"),
+                              "", &navIndex, &confirm, 0);
+      if (a != UI_NONE) {
+        uint32_t s = (uint32_t)time(nullptr)
+        ^ (uint32_t)(rand() * 2654435761u);
+        if (s == 0) s = 1;
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%u", s);
+        createSeedBuf = buf;
+      }
+    }
 
+    // Multiplicadores (discretos → siguen siendo uiOptionEx)
+    {
       char buf[16];
-      snprintf(buf, sizeof(buf), "%gx", (double)C::ENDLESS_MULT[*value]);
-      char full[32];
-      snprintf(full, sizeof(full), "< %s >", buf);
-      int vw = UI::M(full, 24);
-      UI::T(full, x + 680 - vw - 22, y + 14, 24, GOLD);
-
-      if (selected) {
-        int delta = 0;
-        if (lr < 0)
-          delta = -1;
-        if (lr > 0)
-          delta = +1;
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-          delta = (mp.x < x + 340) ? -1 : +1;
-        *value =
-            (*value + delta + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
-      }
-    };
-    multRowFn(enemyRow, L("endless.enemyMult", "Multiplicador enemigos"),
-              &createBuffer.enemyMult);
-    multRowFn(itemRow, L("endless.itemMult", "Multiplicador items"),
-              &createBuffer.itemMult);
+      snprintf(buf, sizeof(buf), "%gx",
+               (double)C::ENDLESS_MULT[createBuffer.enemyMult]);
+      UIAction a = uiOptionEx(enemyRow, totalRows, 40,
+                              L("endless.enemyMult", "Multiplicador enemigos"),
+                              buf, &navIndex, &confirm,
+                              navIndex == enemyRow ? lr : 0);
+      if (a == UI_LEFT)
+        createBuffer.enemyMult = (createBuffer.enemyMult - 1
+        + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
+      if (a == UI_RIGHT)
+        createBuffer.enemyMult = (createBuffer.enemyMult + 1)
+        % C::ENDLESS_MULT_COUNT;
+    }
+    {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%gx",
+               (double)C::ENDLESS_MULT[createBuffer.itemMult]);
+      UIAction a = uiOptionEx(itemRow, totalRows, 40,
+                              L("endless.itemMult", "Multiplicador items"),
+                              buf, &navIndex, &confirm,
+                              navIndex == itemRow ? lr : 0);
+      if (a == UI_LEFT)
+        createBuffer.itemMult = (createBuffer.itemMult - 1
+        + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
+      if (a == UI_RIGHT)
+        createBuffer.itemMult = (createBuffer.itemMult + 1)
+        % C::ENDLESS_MULT_COUNT;
+    }
   }
 
-  // ============================================================
-  // Botones Crear / Volver
-  // ============================================================
-  auto actionBtn = [&](int row, const char *label) -> bool {
-    int x = GetScreenWidth() / 2 - 340;
-    int y = rowY(row);
-    Rectangle r = {(float)x, (float)y, 680, 52};
+  // --- Botones inferiores ---
+  auto actionBtn = [&](int row, const char *label, bool primary) -> bool {
+    int bw = 220, bh = 46, gap = 20;
+    int totalW = 2 * bw + gap;
+    int bx = W / 2 - totalW / 2 + (primary ? gap + bw : 0);
+    // (ojo: createRow/cancelRow, pon uno a cada lado)
+    bx = W / 2 - totalW / 2 + (primary ? bw + gap : 0);
+    int by = H - 100;
+
+    Rectangle r = {(float)bx, (float)by, (float)bw, (float)bh};
     Vector2 mp = GetMousePosition();
     bool hover = CheckCollisionPointRec(mp, r);
-    Vector2 md = GetMouseDelta();
-    if (hover && (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f))
-      navIndex = row;
-    bool selected = (navIndex == row);
-    Color bg = (hover || selected) ? (Color){70, 100, 80, 255}
-                                   : (Color){40, 45, 65, 255};
-    DrawRectangleRec(r, bg);
-    DrawRectangleLinesEx(r, 2, selected ? SKYBLUE : (Color){90, 100, 140, 255});
-    int tw = UI::M(label, 24);
-    UI::T(label, x + (680 - tw) / 2, y + 14, 24, RAYWHITE);
-    return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+
+    DrawRectangleRec(r, primary ? (hover ? UI::BG_HOVER : UI::BG_PANEL)
+    : (hover ? UI::BG_HOVER : UI::BG_PANEL));
+    DrawRectangle(bx, by + bh - 2, bw, 2,
+                  primary ? UI::ACCENT : UI::BORDER);
+
+    int fs = 18;
+    int tw = UI::M(label, fs);
+    UI::T(label, bx + (bw - tw) / 2, by + (bh - fs) / 2, fs,
+          hover || primary ? UI::TEXT_PRI : UI::TEXT_SEC);
+    return click;
   };
 
-  bool createClicked =
-      actionBtn(createRow, L("create.confirm", "Crear partida"));
-  bool cancelClicked = actionBtn(cancelRow, L("common.back", "Volver"));
+  bool cancelClicked = actionBtn(cancelRow, L("common.back", "Volver"), false);
+  bool createClicked = actionBtn(createRow, L("create.confirm", "Crear partida"), true);
 
   if (createClicked || (navIndex == createRow && consumeConfirm())) {
-    if (createBuffer.name.empty())
-      createBuffer.name = "New world";
+    if (createBuffer.name.empty()) createBuffer.name = "New world";
 
     if (createBuffer.mode == MODE_ENDLESS) {
-      // Parsear la seed del buffer de texto. Si está vacía o es 0,
-      // generar una aleatoria.
-      uint32_t parsed = (uint32_t)strtoul(seedEditBuf, nullptr, 10);
+      uint32_t parsed = (uint32_t)strtoul(createSeedBuf.c_str(), nullptr, 10);
       if (parsed == 0) {
-        parsed = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
-        if (parsed == 0)
-          parsed = 1;
+        parsed = (uint32_t)time(nullptr)
+        ^ (uint32_t)(rand() * 2654435761u);
+        if (parsed == 0) parsed = 1;
       }
       createBuffer.runSeed = parsed;
     }
-
     startNewGame(createBuffer);
   } else if (cancelClicked || IsKeyPressed(KEY_ESCAPE) || consumeCancel()) {
     state = ST_SAVE_LIST;

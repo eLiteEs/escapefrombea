@@ -206,7 +206,7 @@ bool useSelected(Player &p, const Maze &maze,
                    -cosf(p.yaw) * cosf(p.pitch)};
 
     Projectile pr;
-    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f, p.pos.z + fwd.z * 0.4f};
+    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y, p.pos.z + fwd.z * 0.4f};
 
     const float TENT_SPEED = 10.0f;
     pr.vel = {fwd.x * TENT_SPEED, fwd.y * TENT_SPEED + 1.5f,
@@ -233,7 +233,7 @@ bool useSelected(Player &p, const Maze &maze,
                    -cosf(p.yaw) * cosf(p.pitch)};
 
     Projectile pr;
-    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f, p.pos.z + fwd.z * 0.4f};
+    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y, p.pos.z + fwd.z * 0.4f};
 
     switch (it.kind) {
     case ITEM_ROCK:
@@ -307,7 +307,8 @@ void updateProjectiles(std::vector<Projectile> &projs, Maze &maze,
       pr.pos.z += pr.vel.z * subDt;
 
       bool hitWall = maze.circleHitsWall(pr.pos.x, pr.pos.z, 0.1f);
-      bool hitFloor = pr.pos.y < 0.05f;
+      float groundZ = maze.groundZAtWorld(pr.pos.x, pr.pos.z);
+      bool hitFloor = pr.pos.y < groundZ + 0.05f;
       bool hitCeil = pr.pos.y > C::WALL_H * 5.0f;
 
       if (hitWall || hitFloor || hitCeil) {

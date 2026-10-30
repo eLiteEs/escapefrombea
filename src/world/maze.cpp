@@ -36,32 +36,89 @@ static void addQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
   indices.push_back(base + 3);
 }
 
-static void addRampSideTri(std::vector<Vector3> &verts,
-                           std::vector<Vector2> &uvs,
-                           std::vector<Vector3> &normals,
-                           std::vector<unsigned short> &indices, Vector3 v0,
-                           Vector3 v1, Vector3 v2, Vector3 normal,
-                           float uOrigin, bool uAlongX, float fz,
-                           float heightSpan) {
+// Nº de peldaños de una escalera con desnivel 'span'. Cada peldaño sube como
+// máximo C::STAIR_STEP_H (súbelo en common.hpp para peldaños más altos y
+// menos numerosos). Lo usan la física (groundZAtWorld) y la malla, así que
+// siempre coinciden. El movimiento permite subir esa altura aunque sea mayor
+// que STEP_MAX (ver player.cpp / enemy.cpp).
+static int stairStepCount(float span) {
+  int n = (int)ceilf(span / C::STAIR_STEP_H - 0.001f);
+  return n < 1 ? 1 : n;
+}
+
+// Quad vertical con rango U explícito (para contrahuellas y laterales).
+static void addWallQuadU(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
+                         std::vector<Vector3> &normals,
+                         std::vector<unsigned short> &indices, Vector3 bl,
+                         Vector3 br, Vector3 tr, Vector3 tl, float u0, float u1,
+                         float vRepeat, Vector3 normal) {
   unsigned short base = (unsigned short)verts.size();
-  verts.push_back(v0);
-  verts.push_back(v1);
-  verts.push_back(v2);
+  verts.push_back(bl);
+  verts.push_back(br);
+  verts.push_back(tr);
+  verts.push_back(tl);
+  uvs.push_back({u0, vRepeat});
+  uvs.push_back({u1, vRepeat});
+  uvs.push_back({u1, 0.0f});
+  uvs.push_back({u0, 0.0f});
+  for (int i = 0; i < 4; ++i)
+    normals.push_back(normal);
+  indices.push_back(base + 0);
+  indices.push_back(base + 3);
+  indices.push_back(base + 2);
+  indices.push_back(base + 0);
+  indices.push_back(base + 2);
+  indices.push_back(base + 1);
+}
 
-  auto uvOf = [&](Vector3 v) -> Vector2 {
-    float u = uAlongX ? (v.x - uOrigin) / C::CELL : (v.z - uOrigin) / C::CELL;
-    float vv = (v.y - fz) / heightSpan;
-    return {u, 1.0f - vv};
-  };
-
-  uvs.push_back(uvOf(v0));
-  uvs.push_back(uvOf(v1));
-  uvs.push_back(uvOf(v2));
-  for (int i = 0; i < 3; ++i)
+// Muro de desnivel entre dos suelos (a,b arriba; c,d abajo), con la textura
+// de PARED. Mismo winding que addQuad; v crece hacia abajo y la escala de la
+// textura es la de una pared normal (WALL_H por repetición).
+static void addRiserWall(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
+                         std::vector<Vector3> &normals,
+                         std::vector<unsigned short> &indices, Vector3 a,
+                         Vector3 b, Vector3 c, Vector3 d, Vector3 normal) {
+  float vr = fabsf(a.y - c.y) / C::WALL_H;
+  unsigned short base = (unsigned short)verts.size();
+  verts.push_back(a);
+  verts.push_back(b);
+  verts.push_back(c);
+  verts.push_back(d);
+  uvs.push_back({0.0f, 0.0f});
+  uvs.push_back({1.0f, 0.0f});
+  uvs.push_back({1.0f, vr});
+  uvs.push_back({0.0f, vr});
+  for (int i = 0; i < 4; ++i)
     normals.push_back(normal);
   indices.push_back(base + 0);
   indices.push_back(base + 1);
   indices.push_back(base + 2);
+  indices.push_back(base + 0);
+  indices.push_back(base + 2);
+  indices.push_back(base + 3);
+}
+
+// Huella horizontal (mismo winding que el suelo plano). Los UV son
+// coordenadas de mundo relativas a la celda, así la textura del suelo
+// continúa sin saltos a lo largo de la escalera.
+static void addTread(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
+                     std::vector<Vector3> &normals,
+                     std::vector<unsigned short> &indices, float cellX0,
+                     float cellZ0, float xa, float xb, float za, float zb,
+                     float y) {
+  unsigned short base = (unsigned short)verts.size();
+  Vector3 p[4] = {{xa, y, zb}, {xb, y, zb}, {xb, y, za}, {xa, y, za}};
+  for (int i = 0; i < 4; ++i) {
+    verts.push_back(p[i]);
+    uvs.push_back({(p[i].x - cellX0) / C::CELL, (p[i].z - cellZ0) / C::CELL});
+    normals.push_back({0, 1, 0});
+  }
+  indices.push_back(base + 0);
+  indices.push_back(base + 1);
+  indices.push_back(base + 2);
+  indices.push_back(base + 0);
+  indices.push_back(base + 2);
+  indices.push_back(base + 3);
 }
 
 static void addWallQuad(std::vector<Vector3> &verts, std::vector<Vector2> &uvs,
@@ -209,12 +266,14 @@ bool Maze::wallAtWorld(float x, float z) const {
 }
 
 bool Maze::circleHitsWall(float x, float z, float r) const {
-  return wallAtWorld(x - r, z - r) || wallAtWorld(x + r, z - r) ||
+  return wallAtWorld(x, z) || // ← centro
+         wallAtWorld(x - r, z - r) || wallAtWorld(x + r, z - r) ||
          wallAtWorld(x - r, z + r) || wallAtWorld(x + r, z + r);
 }
 
 bool Maze::circleHitsRiser(float x, float z, float r, float fromZ) const {
   float threshold = fromZ + C::STEP_MAX;
+
   auto check = [&](float px, float pz) -> bool {
     int cx = (int)floorf(px / C::CELL);
     int cy = (int)floorf(pz / C::CELL);
@@ -222,8 +281,18 @@ bool Maze::circleHitsRiser(float x, float z, float r, float fromZ) const {
       return false;
     if (wallAt(cx, cy))
       return false;
-    return groundZAtWorld(px, pz) > threshold;
+    float thr = threshold;
+    // Las esquinas que caen sobre una rampa están en una superficie
+    // inclinada: se permite la altura que la pendiente gana en 'r'.
+    // (Sin esto, con HEIGHT_STEP=3.6 y CELL=4 la base de la rampa cuenta
+    // como un muro de >0.2 y solo se puede subir saltando.)
+    if (stairAt(cx, cy) != 0)
+      thr += r * (C::HEIGHT_STEP / C::CELL) * 2.0f +
+             (C::STAIR_STEP_H > C::STEP_MAX ? C::STAIR_STEP_H - C::STEP_MAX
+                                            : 0.0f);
+    return groundZAtWorld(px, pz) > thr;
   };
+
   return check(x - r, z - r) || check(x + r, z - r) || check(x - r, z + r) ||
          check(x + r, z + r);
 }
@@ -379,7 +448,16 @@ float Maze::groundZAtWorld(float x, float z) const {
     t = 0.0f;
   if (t > 1.0f)
     t = 1.0f;
-  return baseZ + (neighborZ - baseZ) * t;
+  // Escalera: suelo escalonado. El peldaño k (0..N-1) está a
+  // base + span*(k+1)/N, de modo que el último queda a ras del vecino alto.
+  float span = neighborZ - baseZ;
+  int n = stairStepCount(span);
+  int k = (int)floorf(t * (float)n);
+  if (k >= n)
+    k = n - 1;
+  if (k < 0)
+    k = 0;
+  return baseZ + span * (float)(k + 1) / (float)n;
 }
 
 // ---------- Utilidades ----------
@@ -894,99 +972,110 @@ void Maze::buildChunks(Assets &assets) {
             }
 
             if (hasRamp) {
-              // -------------------------------------------------
-              //  Caras laterales triangulares de la rampa
-              //  Solo si el vecino en ese lado NO es pared.
-              // -------------------------------------------------
-              float hSpan = rampHighZ - fz;
-              if (hSpan < 0.001f)
-                hSpan = 0.001f;
+              // =================================================
+              //  ESCALERA: huellas con la textura del suelo;
+              //  contrahuellas y laterales con la de la pared.
+              // =================================================
+              const float span = rampHighZ - fz;
+              const int n = stairStepCount(span);
+              const float sh = span / (float)n;
+              const float run = C::CELL / (float)n;
 
-              switch (sdir) {
-              case 1: // ^ high at z0
-                // West (x0, normal -X)
-                if (!wallAt(x - 1, y))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x0, fz, z0}, {x0, fz, z1},
-                                 {x0, rampHighZ, z0}, {-1, 0, 0}, z0, false, fz,
-                                 hSpan);
-                // East (x1, normal +X)
-                if (!wallAt(x + 1, y))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x1, fz, z0},
-                                 {x1, rampHighZ, z0}, {x1, fz, z1}, {1, 0, 0},
-                                 z0, false, fz, hSpan);
-                break;
+              // Coordenada a lo largo del eje de subida, a = distancia
+              // desde el borde BAJO de la celda.
+              auto coord = [&](float a) -> float {
+                switch (sdir) {
+                case 1:
+                  return z1 - a; // ^ sube hacia z0
+                case 2:
+                  return x0 + a; // > sube hacia x1
+                case 3:
+                  return z0 + a; // v sube hacia z1
+                default:
+                  return x1 - a; // < sube hacia x0
+                }
+              };
+              const bool alongX = (sdir == 2 || sdir == 4);
 
-              case 2: // > high at x1
-                // North (z0, normal -Z)
-                if (!wallAt(x, y - 1))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x0, fz, z0},
-                                 {x1, rampHighZ, z0}, {x1, fz, z0}, {0, 0, -1},
-                                 x0, true, fz, hSpan);
-                // South (z1, normal +Z)
-                if (!wallAt(x, y + 1))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x0, fz, z1}, {x1, fz, z1},
-                                 {x1, rampHighZ, z1}, {0, 0, 1}, x0, true, fz,
-                                 hSpan);
-                break;
+              // Un lateral solo hace falta si el vecino no es pared ni otra
+              // escalera idéntica (en ese caso quedaría oculto).
+              auto needSide = [&](int sx, int sy) {
+                if (wallAt(sx, sy))
+                  return false;
+                if (stairAt(sx, sy) == sdir &&
+                    heightAt(sx, sy) == heightAt(x, y))
+                  return false;
+                return true;
+              };
+              const bool sideA =
+                  alongX ? needSide(x, y - 1) : needSide(x - 1, y);
+              const bool sideB =
+                  alongX ? needSide(x, y + 1) : needSide(x + 1, y);
 
-              case 3: // v high at z1
-                // West (x0, normal -X)
-                if (!wallAt(x - 1, y))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x0, fz, z0}, {x0, fz, z1},
-                                 {x0, rampHighZ, z1}, {-1, 0, 0}, z0, false, fz,
-                                 hSpan);
-                // East (x1, normal +X)
-                if (!wallAt(x + 1, y))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x1, fz, z0},
-                                 {x1, rampHighZ, z1}, {x1, fz, z1}, {1, 0, 0},
-                                 z0, false, fz, hSpan);
-                break;
+              for (int i = 0; i < n; ++i) {
+                float c0 = coord(i * run);
+                float c1 = coord((i + 1) * run);
+                float lo = std::min(c0, c1), hi = std::max(c0, c1);
+                float yb = fz + sh * (float)i;       // base de la contrahuella
+                float yt = fz + sh * (float)(i + 1); // altura de la huella
 
-              case 4: // < high at x0
-                // North (z0, normal -Z)
-                if (!wallAt(x, y - 1))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x1, fz, z0}, {x0, fz, z0},
-                                 {x0, rampHighZ, z0}, {0, 0, -1}, x0, true, fz,
-                                 hSpan);
-                // South (z1, normal +Z)
-                if (!wallAt(x, y + 1))
-                  addRampSideTri(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                                 bufFloor.indices, {x1, fz, z1},
-                                 {x0, rampHighZ, z1}, {x0, fz, z1}, {0, 0, 1},
-                                 x0, true, fz, hSpan);
-                break;
-              }
+                // Huella (suelo)
+                if (alongX)
+                  addTread(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                           bufFloor.indices, x0, z0, lo, hi, z0, z1, yt);
+                else
+                  addTread(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
+                           bufFloor.indices, x0, z0, x0, x1, lo, hi, yt);
 
-              // Quad inclinado con winding CCW (normal apunta arriba)
-              switch (sdir) {
-              case 1: // ^ alto al norte (z0)
-                addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                        bufFloor.indices, {x0, fz, z1}, {x1, fz, z1},
-                        {x1, rampHighZ, z0}, {x0, rampHighZ, z0}, {0, 1, 0});
-                break;
-              case 2: // > alto al este (x1)
-                addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                        bufFloor.indices, {x0, fz, z1}, {x1, rampHighZ, z1},
-                        {x1, rampHighZ, z0}, {x0, fz, z0}, {0, 1, 0});
-                break;
-              case 3: // v alto al sur (z1)
-                addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                        bufFloor.indices, {x0, rampHighZ, z1},
-                        {x1, rampHighZ, z1}, {x1, fz, z0}, {x0, fz, z0},
-                        {0, 1, 0});
-                break;
-              case 4: // < alto al oeste (x0)
-                addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                        bufFloor.indices, {x0, rampHighZ, z1}, {x1, fz, z1},
-                        {x1, fz, z0}, {x0, rampHighZ, z0}, {0, 1, 0});
-                break;
+                // Contrahuella en el borde bajo del peldaño (pared)
+                float rv = (yt - yb) / C::WALL_H;
+                auto &T = bufTile;
+                switch (sdir) {
+                case 1: // mira al sur (+Z) en z = c0
+                  addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                               {x1, yb, c0}, {x0, yb, c0}, {x0, yt, c0},
+                               {x1, yt, c0}, 0, 1, rv, {0, 0, 1});
+                  break;
+                case 2: // mira al oeste (-X) en x = c0
+                  addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                               {c0, yb, z1}, {c0, yb, z0}, {c0, yt, z0},
+                               {c0, yt, z1}, 0, 1, rv, {-1, 0, 0});
+                  break;
+                case 3: // mira al norte (-Z) en z = c0
+                  addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                               {x0, yb, c0}, {x1, yb, c0}, {x1, yt, c0},
+                               {x0, yt, c0}, 0, 1, rv, {0, 0, -1});
+                  break;
+                default: // 4: mira al este (+X) en x = c0
+                  addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                               {c0, yb, z0}, {c0, yb, z1}, {c0, yt, z1},
+                               {c0, yt, z0}, 0, 1, rv, {1, 0, 0});
+                  break;
+                }
+
+                // Laterales: del suelo base de la escalera a la huella
+                float sv = (yt - fz) / C::WALL_H;
+                float ulo = ((alongX ? lo - x0 : lo - z0)) / C::CELL;
+                float uhi = ((alongX ? hi - x0 : hi - z0)) / C::CELL;
+                if (alongX) {
+                  if (sideA) // norte (z0, -Z)
+                    addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                                 {lo, fz, z0}, {hi, fz, z0}, {hi, yt, z0},
+                                 {lo, yt, z0}, ulo, uhi, sv, {0, 0, -1});
+                  if (sideB) // sur (z1, +Z)
+                    addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                                 {hi, fz, z1}, {lo, fz, z1}, {lo, yt, z1},
+                                 {hi, yt, z1}, uhi, ulo, sv, {0, 0, 1});
+                } else {
+                  if (sideA) // oeste (x0, -X)
+                    addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                                 {x0, fz, hi}, {x0, fz, lo}, {x0, yt, lo},
+                                 {x0, yt, hi}, uhi, ulo, sv, {-1, 0, 0});
+                  if (sideB) // este (x1, +X)
+                    addWallQuadU(T.verts, T.uvs, T.normals, T.indices,
+                                 {x1, fz, lo}, {x1, fz, hi}, {x1, yt, hi},
+                                 {x1, yt, lo}, ulo, uhi, sv, {1, 0, 0});
+                }
               }
             } else {
               // Suelo plano
@@ -1010,8 +1099,8 @@ void Maze::buildChunks(Assets &assets) {
                 float nz = levelZ(nx2, ny2);
                 if (nz >= fz - 0.001f)
                   return;
-                addQuad(bufFloor.verts, bufFloor.uvs, bufFloor.normals,
-                        bufFloor.indices, a, b, c, d, n);
+                addRiserWall(bufTile.verts, bufTile.uvs, bufTile.normals,
+                             bufTile.indices, a, b, c, d, n);
               };
               addRiser(x, y - 1, {x0, fz, z0}, {x1, fz, z0},
                        {x1, levelZ(x, y - 1), z0}, {x0, levelZ(x, y - 1), z0},

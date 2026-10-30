@@ -215,16 +215,17 @@ void Game::drawSpeedrunMenu() {
       srMenuRunCursor = idx;
 
     bool selected = (idx == srMenuRunCursor);
+    // En el bucle de runs:
     if (selected) {
-      DrawRectangleRec(row, (Color){60, 70, 105, 200});
-      DrawRectangleLinesEx(row, 1, (Color){100, 140, 200, 255});
+      DrawRectangleRec(row, UI::BG_FOCUS);
+      DrawRectangle(leftX + 2, ry + 2, 3, rowH - 6, UI::ACCENT);
     } else if (hover) {
-      DrawRectangleRec(row, (Color){40, 45, 70, 180});
+      DrawRectangleRec(row, UI::BG_HOVER);
     }
 
     bool isPB = (runOrigIdx == bestIdx);
-    Color cDate = selected ? RAYWHITE : (isPB ? GOLD : LIGHTGRAY);
-    Color cTime = isPB ? GOLD : RAYWHITE;
+    Color cDate = isPB ? UI::ACCENT_DIM : UI::TEXT_MUT;
+    Color cTime = isPB ? UI::ACCENT : UI::TEXT_PRI;
 
     // Fecha
     char dateStr[24];
@@ -362,9 +363,9 @@ void Game::drawSpeedrunMenu() {
       Vector2 mp = GetMousePosition();
       bool hover = CheckCollisionPointRec(mp, r);
       bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-      Color bg = hover ? (idx == 0 ? (Color){140, 60, 60, 255}
-                                   : (Color){60, 90, 140, 255})
-                       : (Color){40, 45, 65, 255};
+      Color bg;
+      if (idx == 0) bg = hover ? (Color){130, 50, 50, 255} : (Color){90, 35, 35, 255};
+      else          bg = hover ? UI::BG_HOVER : UI::BG_PANEL;
       DrawRectangleRec(r, bg);
       DrawRectangleLinesEx(r, 2, RAYWHITE);
       int fs = 22;

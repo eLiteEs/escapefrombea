@@ -215,6 +215,18 @@ void Game::startLevel(int lvl) {
     currentNpcs.clear();
   }
 
+  auto faceExit = [&](Player& p) {
+    float dx = exitPos.x - p.pos.x;
+    float dz = exitPos.z - p.pos.z;
+    if (fabsf(dx) > 0.01f || fabsf(dz) > 0.01f) {
+      p.yaw = atan2f(dx, -dz);
+      p.pitch = 0.0f;
+    }
+  };
+  faceExit(players[0]);
+  if (twoPlayers)
+    faceExit(players[1]);
+
   enemies.clear();
   worldItems.clear();
   projectiles.clear();

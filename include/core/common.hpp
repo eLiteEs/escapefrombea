@@ -14,7 +14,7 @@ constexpr int CHUNK_SIZE = 8; // celdas por lado del chunk
 // Jugador
 constexpr float P_SPEED = 6.5f;
 constexpr float P_SPRINT = 1.55f;
-constexpr float P_RADIUS = 0.45f;
+constexpr float P_RADIUS = 0.55f;
 constexpr float STEP_FAST = 0.30f;
 constexpr float STEP_SLOW = 0.45f;
 constexpr float MOUSE_SENS_BASE = 0.0025f;
@@ -125,27 +125,27 @@ constexpr float GHOST_SAMPLE_DT = 1.0f / GHOST_SAMPLE_HZ;
 // Alturas de mapa
 constexpr int MAX_HEIGHT = 4;
 constexpr float HEIGHT_STEP = WALL_H;
-constexpr float STEP_MAX = 0.9f; // máxima altura subible caminando
+constexpr float STEP_MAX = 0.4f; // máxima altura subible caminando
 
 // Escaleras: altura de cada "sub-step" visual
-constexpr float STAIR_STEP_H = 0.20f;
+constexpr float STAIR_STEP_H = 0.40f;
 // Rango extra para interactuar con carteles / NPCs
 constexpr float SIGN_INTERACT_RANGE = 2.5f;
 
 // Vida y escudo
-constexpr float PLAYER_MAX_HP     = 50.0f;
+constexpr float PLAYER_MAX_HP = 50.0f;
 constexpr float PLAYER_MAX_SHIELD = 50.0f;
-constexpr float ENEMY_MAX_HP      = 35.0f;
-constexpr float ENEMY_MAX_SHIELD  = 20.0f;
+constexpr float ENEMY_MAX_HP = 35.0f;
+constexpr float ENEMY_MAX_SHIELD = 20.0f;
 
 // Cuánto curan los pickups
-constexpr float BIFRUTAS_RESTORE  = 30.0f;
+constexpr float BIFRUTAS_RESTORE = 30.0f;
 constexpr float ENSAIMADA_RESTORE = 40.0f;
 
 // Daño por proyectil (según el item lanzado)
-constexpr float DMG_ROCK    = 15.0f;
-constexpr float DMG_BOX     = 20.0f;
-constexpr float DMG_LIME    = 25.0f;
+constexpr float DMG_ROCK = 15.0f;
+constexpr float DMG_BOX = 20.0f;
+constexpr float DMG_LIME = 25.0f;
 constexpr float DMG_BICIMAD = 35.0f;
 
 } // namespace C
@@ -256,11 +256,11 @@ struct Player {
   bool jumpHeld = false;
   float groundZ = 0.0f; // altura del suelo bajo el jugador (rampas en Fase 5)
 
-  float hp              = C::PLAYER_MAX_HP;
-  float maxHp           = C::PLAYER_MAX_HP;
-  float shield          = C::PLAYER_MAX_SHIELD;
-  float maxShield       = C::PLAYER_MAX_SHIELD;
-  float damageFlashT    = 0.0f;
+  float hp = C::PLAYER_MAX_HP;
+  float maxHp = C::PLAYER_MAX_HP;
+  float shield = C::PLAYER_MAX_SHIELD;
+  float maxShield = C::PLAYER_MAX_SHIELD;
+  float damageFlashT = 0.0f;
   float throwCooldownMax = 0.0f;
 };
 
@@ -282,12 +282,12 @@ struct Enemy {
   float rageMult = 1.0f;
   float hitFlash = 0.0f;
 
-  float hp        = C::ENEMY_MAX_HP;
-  float maxHp     = C::ENEMY_MAX_HP;
-  float shield    = C::ENEMY_MAX_SHIELD;
+  float hp = C::ENEMY_MAX_HP;
+  float maxHp = C::ENEMY_MAX_HP;
+  float shield = C::ENEMY_MAX_SHIELD;
   float maxShield = C::ENEMY_MAX_SHIELD;
-  bool  alive     = true;
-  float dyingT    = 0.0f;
+  bool alive = true;
+  float dyingT = 0.0f;
 };
 
 struct EndlessRunConfig {
