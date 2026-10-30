@@ -56,49 +56,56 @@ void Game::drawStaminaBar(const Player &pl, int vw, int vh) {
 }
 
 void Game::drawHealthAndShieldBars(const Player &pl, int vw, int vh) {
-  int barW = std::max(120, vw / 3);
-  int barH = 14;
-  int bx = 10;
-  int by = vh - 20 - barH * 2;
+  // --- Layout escalado con la UI ---
+  const int iconSize   = UI::S(20);
+  const int iconX      = UI::S(10);
+  const int healthBarY = vh - UI::S(50);
+  const int shieldBarY = vh - UI::S(25);
+  const int barH       = UI::S(20);
+  const int barX       = UI::S(10);
+  const int barW       = std::max(UI::S(90), vw / 4);
 
-  float maxHealth = C::PLAYER_MAX_HP;
-  float healthClamped = std::min(pl.hp, maxHealth);
+  // --- Valores clamp (ver nota abajo: shield usa pl.shield, no pl.hp) ---
+  float healthClamped = std::min(pl.hp,     C::PLAYER_MAX_HP);
+  float shieldClamped = std::min(pl.shield, C::PLAYER_MAX_SHIELD);
 
-  float maxShield = C::PLAYER_MAX_SHIELD;
-  float shieldClamped = std::min(pl.hp, maxShield);
+  float healthFrac = (C::PLAYER_MAX_HP > 0.0f)
+  ? healthClamped / C::PLAYER_MAX_HP : 0.0f;
+  float shieldFrac = (C::PLAYER_MAX_SHIELD > 0.0f)
+  ? shieldClamped / C::PLAYER_MAX_SHIELD : 0.0f;
 
-  Color healthColor;
-  if (pl.hp< 0.3f)
-    healthColor = ORANGE;
-  else
-    healthColor = GREEN;
+  Color healthColor = (healthFrac < 0.3f) ? ORANGE : GREEN;
+  Color shieldColor = {80, 180, 255, 255};
 
-  Color shieldColor = (Color){80, 180, 255, 255}; // azul
+  // --- Barra de vida ---
+  DrawRectangle(barX - 2, healthBarY - 2, barW + 4, barH + 4,
+                (Color){0, 0, 0, 160});
+  DrawRectangle(barX, healthBarY, barW, barH, (Color){40, 40, 55, 255});
+  DrawRectangle(barX, healthBarY, (int)(barW * healthFrac), barH, healthColor);
+  DrawRectangleLines(barX, healthBarY, barW, barH, RAYWHITE);
 
-  const char *healthLabel = L("hud.health", "Vida");
-  const char *shieldLabel = L("hud.shield", "Escudo");
+  // --- Barra de escudo ---
+  DrawRectangle(barX - 2, shieldBarY - 2, barW + 4, barH + 4,
+                (Color){0, 0, 0, 160});
+  DrawRectangle(barX, shieldBarY, barW, barH, (Color){40, 40, 55, 255});
+  DrawRectangle(barX, shieldBarY, (int)(barW * shieldFrac), barH, shieldColor);
+  DrawRectangleLines(barX, shieldBarY, barW, barH, RAYWHITE);
 
-  int hlw = UI::M(healthLabel, 14);
-  UI::T(healthLabel, 10, by, 14, LIGHTGRAY);
-
-  int slw = UI::M(shieldLabel, 14);
-  UI::T(shieldLabel, 10, by + barH + 10, 14, LIGHTGRAY);
-
-  // health bar background and border
-  DrawRectangle(hlw + 10 + bx - 2, by - 2, barW + 4, barH + 4, (Color){0, 0, 0, 160});
-  DrawRectangle(hlw + 10 + bx, by, barW, barH, (Color){40, 40, 55, 255});
-
-  // shield background and border
-  DrawRectangle(slw + 10 + bx - 2, by - 2 + 10 + barH, barW + 4, barH + 4, (Color){0, 0, 0, 160});
-  DrawRectangle(slw + 10 + bx, by + 10 + barH, barW, barH, (Color){40, 40, 55, 255});
-
-  // health and shield progress bars
-  DrawRectangle(bx + hlw + 10, by, (int) barW / C::PLAYER_MAX_HP * healthClamped, barH, healthColor);
-  DrawRectangle(bx + slw + 10, by + 10 + barH, (int) barW / C::PLAYER_MAX_SHIELD* shieldClamped, barH, shieldColor);
-
-  // progress bars outlines
-  DrawRectangleLines(hlw + 10 + bx, by, barW, barH, RAYWHITE);
-  DrawRectangleLines(slw + 10 + bx, by + 10 + barH, barW, barH, RAYWHITE);
+  // --- Iconos ---
+  if (UI::hasHealthTex && UI::healthTex.id != 0) {
+    DrawTexturePro(
+      UI::healthTex,
+      {0, 0, (float)UI::healthTex.width, (float)UI::healthTex.height},
+                   {(float)iconX, (float)healthBarY, (float)iconSize, (float)iconSize},
+                   {0, 0}, 0.0f, WHITE);
+  }
+  if (UI::hasArmorTex && UI::armorTex.id != 0) {
+    DrawTexturePro(
+      UI::armorTex,
+      {0, 0, (float)UI::armorTex.width, (float)UI::armorTex.height},
+                   {(float)iconX, (float)shieldBarY, (float)iconSize, (float)iconSize},
+                   {0, 0}, 0.0f, WHITE);
+  }
 }
 
 float Game::nearestEnemyDist(Vector3 p) const {

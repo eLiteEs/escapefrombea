@@ -43,9 +43,13 @@ namespace UI {
     extern Texture2D skullTex;
     extern Texture2D arrowLeftTex;
     extern Texture2D arrowRightTex;
+    extern Texture2D healthTex;
+    extern Texture2D armorTex;
     extern bool      hasSkullTex;
     extern bool      hasArrowLeftTex;
     extern bool      hasArrowRightTex;
+    extern bool      hasHealthTex;
+    extern bool      hasArmorTex;
 } // namespace UI
 
 enum UIAction { UI_NONE, UI_LEFT, UI_RIGHT, UI_CONFIRM };

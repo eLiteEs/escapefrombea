@@ -27,9 +27,13 @@ struct Assets {
   Texture2D uiSkull      = {};
   Texture2D uiArrowLeft  = {};
   Texture2D uiArrowRight = {};
+  Texture2D uiHealth  = {};
+  Texture2D uiArmor = {};
   bool hasUiSkull      = false;
   bool hasUiArrowLeft  = false;
   bool hasUiArrowRight = false;
+  bool hasUiHealth     = false;
+  bool hasUiArmor      = false;
 
   // Level wall decorations textures
   Texture2D wallTile = {};

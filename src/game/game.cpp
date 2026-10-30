@@ -10,6 +10,7 @@
 #include "paths.hpp"
 #include "player.hpp"
 #include "rlgl.h"
+#include "ui.hpp"
 #include "util_format.hpp"
 
 #include <algorithm>
@@ -132,6 +133,10 @@ void Game::init() {
       UI::hasArrowLeftTex  = assets.hasUiArrowLeft;
       UI::arrowRightTex    = assets.uiArrowRight;
       UI::hasArrowRightTex = assets.hasUiArrowRight;
+      UI::healthTex    = assets.uiHealth;
+      UI::hasHealthTex = assets.hasUiHealth;
+      UI::armorTex    = assets.uiArmor;
+      UI::hasArmorTex= assets.hasUiArmor;
       break;
     }
   };

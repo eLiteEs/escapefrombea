@@ -72,9 +72,11 @@ void Assets::loadUiTextures() {
     has = (tex.id != 0);
     if (has) SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
   };
-    loadIfPresent("ui_skull.png",       uiSkull,      hasUiSkull);
-    loadIfPresent("ui_arrow_left.png",  uiArrowLeft,  hasUiArrowLeft);
-    loadIfPresent("ui_arrow_right.png", uiArrowRight, hasUiArrowRight);
+  loadIfPresent("ui_skull.png",       uiSkull,      hasUiSkull);
+  loadIfPresent("ui_arrow_left.png",  uiArrowLeft,  hasUiArrowLeft);
+  loadIfPresent("ui_arrow_right.png", uiArrowRight, hasUiArrowRight);
+  loadIfPresent("ui_health.png",      uiHealth,     hasUiHealth);
+  loadIfPresent("ui_armor.png",       uiArmor,      hasUiArmor);
 }
 
 void Assets::loadEnemyTextures() {
@@ -288,6 +290,8 @@ void Assets::unload() {
   if (hasUiSkull      && uiSkull.id      != 0) UnloadTexture(uiSkull);
   if (hasUiArrowLeft  && uiArrowLeft.id  != 0) UnloadTexture(uiArrowLeft);
   if (hasUiArrowRight && uiArrowRight.id != 0) UnloadTexture(uiArrowRight);
+  if (hasUiHealth     && uiHealth.id     != 0) UnloadTexture(uiHealth);
+  if (hasUiArmor      && uiArmor.id      != 0) UnloadTexture(uiArmor);
 }
 
 void Assets::applyVolumes(float master, float music, float sfx) {

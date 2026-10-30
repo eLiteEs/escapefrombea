@@ -4,15 +4,20 @@
 #include <string>
 
 namespace UI {
+
 float scale = 1.0f;
 int colorblind = CB_NONE;
 Font font = {};
 Texture2D skullTex = {};
 Texture2D arrowLeftTex = {};
 Texture2D arrowRightTex = {};
+Texture2D healthTex = {};
+Texture2D armorTex= {};
 bool hasSkullTex = false;
 bool hasArrowLeftTex = false;
 bool hasArrowRightTex = false;
+bool hasHealthTex = false;
+bool hasArmorTex = false;
 
 void T(const char *t, int x, int y, int size, Color c) {
   DrawTextEx(font, t, {(float)x, (float)y}, (float)S(size), 1.0f, c);
