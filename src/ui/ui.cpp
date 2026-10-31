@@ -12,12 +12,19 @@ Texture2D skullTex = {};
 Texture2D arrowLeftTex = {};
 Texture2D arrowRightTex = {};
 Texture2D healthTex = {};
-Texture2D armorTex= {};
+Texture2D armorTex = {};
 bool hasSkullTex = false;
 bool hasArrowLeftTex = false;
 bool hasArrowRightTex = false;
 bool hasHealthTex = false;
 bool hasArmorTex = false;
+
+bool scrollActive = false;
+int scrollOffsetY = 0;
+int scrollViewportTop = 0;
+int scrollViewportBottom = 0;
+static int s_scrollContentH = 0;
+static int s_scrollViewportH = 0;
 
 void T(const char *t, int x, int y, int size, Color c) {
   DrawTextEx(font, t, {(float)x, (float)y}, (float)S(size), 1.0f, c);
@@ -79,14 +86,26 @@ void drawSkull(float cx, float cy, float radiusLogical, Color color) {
 // -------------------------------------------------------------------------
 //  Botón de menú
 // -------------------------------------------------------------------------
-bool uiButton(int idx, int count, int yOffset, const char *label, int *navIndex,
-              bool *confirmPressed) {
+bool uiButton(int idx, int count, int yOffset, const char *label,
+              int *navIndex, bool *confirmPressed) {
   int w = UI::S(460);
   int h = UI::S(60);
   int gap = UI::S(22);
   int totalH = count * (h + gap) - gap;
   int x = GetScreenWidth() / 2 - w / 2;
-  int y = GetScreenHeight() / 2 - totalH / 2 + UI::S(yOffset) + idx * (h + gap);
+
+  int y;
+  if (UI::scrollActive) {
+    y = UI::scrollViewportTop + UI::S(yOffset) + idx * (h + gap)
+    + UI::scrollOffsetY;
+  } else {
+    y = GetScreenHeight() / 2 - totalH / 2 + UI::S(yOffset) + idx * (h + gap);
+  }
+
+  // Si está fuera del viewport cuando hay scroll, no dibujar ni interactuar
+  if (UI::scrollActive &&
+    (y + h <= UI::scrollViewportTop || y >= UI::scrollViewportBottom))
+    return false;
 
   Rectangle r = {(float)x, (float)y, (float)w, (float)h};
   Vector2 mp = GetMousePosition();
@@ -196,7 +215,18 @@ UIAction uiOptionEx(int idx, int count, int yOffset, const char *name,
   int gap = UI::S(18);
   int totalH = count * (h + gap) - gap;
   int x = GetScreenWidth() / 2 - w / 2;
-  int y = GetScreenHeight() / 2 - totalH / 2 + UI::S(yOffset) + idx * (h + gap);
+
+  int y;
+  if (UI::scrollActive) {
+    y = UI::scrollViewportTop + UI::S(yOffset) + idx * (h + gap)
+    + UI::scrollOffsetY;
+  } else {
+    y = GetScreenHeight() / 2 - totalH / 2 + UI::S(yOffset) + idx * (h + gap);
+  }
+
+  if (UI::scrollActive &&
+    (y + h <= UI::scrollViewportTop || y >= UI::scrollViewportBottom))
+    return UI_NONE;
 
   Rectangle r = {(float)x, (float)y, (float)w, (float)h};
   Vector2 mp = GetMousePosition();
@@ -561,4 +591,79 @@ void drawConfigHeader(const char *title) {
   const char *hint = "ESC";
   int hs = 13;
   UI::T(hint, W - UI::M(hint, hs) - UI::S(24), UI::S(24), hs, UI::TEXT_MUT);
+}
+
+void UI::beginScroll(int items, int itemH, int itemGap, int viewportTop,
+                     int viewportBottom, int navIndex) {
+  scrollActive = false;
+  scrollOffsetY = 0;
+  scrollViewportTop = viewportTop;
+  scrollViewportBottom = viewportBottom;
+
+  int contentH = items * (itemH + itemGap) - itemGap;
+  int viewportH = viewportBottom - viewportTop;
+
+  if (contentH <= viewportH) {
+    // Cabe entero: layout centrado como siempre
+    return;
+  }
+
+  UI::scrollActive = true;
+  s_scrollContentH = contentH;
+  s_scrollViewportH = viewportH;
+
+  // Rueda del ratón (una fila por notch)
+  float wheel = GetMouseWheelMove();
+  if (wheel != 0.0f) {
+    int delta = (wheel > 0.0f) - (wheel < 0.0f);
+    scrollOffsetY -= delta * (itemH + itemGap);
+  }
+
+  // Auto-scroll para que navIndex quede visible
+  if (navIndex >= 0 && navIndex < items) {
+    int itemTop = navIndex * (itemH + itemGap);
+    int itemBottom = itemTop + itemH;
+    if (itemTop + scrollOffsetY < 0) {
+      scrollOffsetY = -itemTop;
+    } else if (itemBottom + scrollOffsetY > viewportH) {
+      scrollOffsetY = viewportH - itemBottom;
+    }
+  }
+
+  // Clamp final
+  int maxScroll = std::max(0, contentH - viewportH);
+  if (scrollOffsetY > 0)
+    scrollOffsetY = 0;
+  if (scrollOffsetY < -maxScroll)
+    scrollOffsetY = -maxScroll;
+
+  BeginScissorMode(0, viewportTop, GetScreenWidth(), viewportH);
+}
+
+void UI::endScroll() {
+  if (scrollActive)
+    EndScissorMode();
+  scrollActive = false;
+  scrollOffsetY = 0;
+}
+
+void UI::drawScrollbar(int x, int viewportTop, int viewportBottom, int contentH,
+                       int viewportH, int scrollY) {
+  if (contentH <= viewportH)
+    return;
+
+  const int trackW = UI::S(4);
+  const int thumbW = UI::S(4);
+  const int trackX = x;
+  const int trackH = viewportBottom - viewportTop;
+
+  DrawRectangle(trackX, viewportTop, trackW, trackH, UI::BORDER);
+
+  float ratio = (float)viewportH / (float)contentH;
+  int thumbH = std::max(UI::S(20), (int)(trackH * ratio));
+  int maxScroll = contentH - viewportH;
+  float t = maxScroll > 0 ? (float)(-scrollY) / (float)maxScroll : 0.0f;
+  int thumbY = viewportTop + (int)((trackH - thumbH) * t);
+
+  DrawRectangle(trackX, thumbY, thumbW, thumbH, UI::ACCENT_DIM);
 }

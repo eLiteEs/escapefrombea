@@ -50,6 +50,19 @@ namespace UI {
     extern bool      hasArrowRightTex;
     extern bool      hasHealthTex;
     extern bool      hasArmorTex;
+
+    extern bool scrollActive;
+    extern int  scrollOffsetY;
+    extern int  scrollViewportTop;
+    extern int  scrollViewportBottom;
+
+    void beginScroll(int items, int itemH, int itemGap,
+                     int viewportTop, int viewportBottom, int navIndex);
+    void endScroll();
+
+    // Indicador visual de scrollbar (opcional, lo llamas dentro del scissor)
+    void drawScrollbar(int x, int viewportTop, int viewportBottom,
+                       int contentH, int viewportH, int scrollY);
 } // namespace UI
 
 enum UIAction { UI_NONE, UI_LEFT, UI_RIGHT, UI_CONFIRM };

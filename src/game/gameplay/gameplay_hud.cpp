@@ -265,6 +265,8 @@ void Game::drawHandItem2D(const Player &pl, int vw, int vh) {
     break;
   }
 
+  size = size * 2;
+
   float x = vw * 0.80f;
   float y = vh - size * 0.55f + bob;
 

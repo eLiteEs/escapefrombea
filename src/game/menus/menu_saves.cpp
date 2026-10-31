@@ -33,32 +33,72 @@ void Game::drawSaveList() {
     if (saveListCursor >= (int)list.size())
       saveListCursor = (int)list.size() - 1;
 
-    if (saveListCursor < saveListScroll)
-      saveListScroll = saveListCursor;
-    if (saveListCursor >= saveListScroll + visRows)
-      saveListScroll = saveListCursor - visRows + 1;
-    if (saveListScroll < 0)
-      saveListScroll = 0;
-
-    float wheel = GetMouseWheelMove();
-    if (wheel != 0.0f && !saveDeleteConfirm) {
-      saveListScroll -= (int)wheel;
-      if (saveListScroll < 0)
-        saveListScroll = 0;
-      int maxScroll = std::max(0, (int)list.size() - visRows);
-      if (saveListScroll > maxScroll)
-        saveListScroll = maxScroll;
+    // ---- 1) Rueda del ratón ----
+    bool wheelUsed = false;
+    if (!saveDeleteConfirm) {
+      float wheel = GetMouseWheelMove();
+      if (wheel != 0.0f) {
+        int delta = (wheel > 0.0f) - (wheel < 0.0f);
+        saveListScroll -= delta;
+        wheelUsed = true;
+      }
     }
 
-    if (IsKeyPressed(KEY_DOWN))
-      saveListCursor++;
-    if (IsKeyPressed(KEY_UP))
-      saveListCursor--;
-    if (saveListCursor < 0)
-      saveListCursor = 0;
+    // ---- 2) Navegación con teclado ----
+    if (!saveDeleteConfirm) {
+      if (IsKeyPressed(KEY_DOWN)) saveListCursor++;
+      if (IsKeyPressed(KEY_UP))   saveListCursor--;
+    }
+    if (saveListCursor < 0) saveListCursor = 0;
     if (saveListCursor >= (int)list.size())
       saveListCursor = (int)list.size() - 1;
 
+    // ---- 3) Clamp del scroll ----
+    int maxScroll = std::max(0, (int)list.size() - visRows);
+    if (saveListScroll < 0) saveListScroll = 0;
+    if (saveListScroll > maxScroll) saveListScroll = maxScroll;
+
+    // ---- 3b) Si se usó la rueda, mantener el cursor dentro del viewport ----
+    // (así el siguiente Down/Up parte desde una fila visible, sin saltos raros)
+    if (wheelUsed) {
+      int lastVisible = std::min(saveListScroll + visRows - 1,
+                                 (int)list.size() - 1);
+      if (saveListCursor < saveListScroll)
+        saveListCursor = saveListScroll;
+      else if (saveListCursor > lastVisible)
+        saveListCursor = lastVisible;
+    }
+
+    // ---- 4) Detección de click (independiente del draw) ----
+    int clickedRow = -1;
+    if (!saveDeleteConfirm && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      Vector2 mp = GetMousePosition();
+      for (int r = 0; r < visRows; ++r) {
+        int idx = saveListScroll + r;
+        if (idx >= (int)list.size())
+          break;
+        int ry = topY + r * rowH;
+        Rectangle row = {(float)listX, (float)ry, (float)listW,
+                         (float)(rowH - 6)};
+        if (CheckCollisionPointRec(mp, row)) {
+          clickedRow = idx;
+          saveListCursor = idx;
+          break;
+        }
+      }
+    }
+
+    // ---- 5) Auto-scroll SOLO si NO se usó la rueda ----
+    if (!wheelUsed) {
+      if (saveListCursor < saveListScroll)
+        saveListScroll = saveListCursor;
+      else if (saveListCursor >= saveListScroll + visRows)
+        saveListScroll = saveListCursor - visRows + 1;
+      if (saveListScroll < 0) saveListScroll = 0;
+      if (saveListScroll > maxScroll) saveListScroll = maxScroll;
+    }
+
+    // ---- 6) Dibujar filas (SIN detectar clicks aquí) ----
     for (int r = 0; r < visRows; ++r) {
       int idx = saveListScroll + r;
       if (idx >= (int)list.size())
@@ -113,23 +153,25 @@ void Game::drawSaveList() {
       int dtW = UI::M(dateStr, 14);
       UI::T(dateStr, listX + listW - dtW - 20, y + 32, 14, UI::TEXT_MUT);
 
-      if (clicked) {
-        double now = GetTime();
-        bool isDoubleClick = (idx == saveListLastClickIdx &&
-                              (now - saveListLastClickTime) < 0.4);
 
-        if (isDoubleClick) {
-          // Doble-click: entrar en la partida
-          loadGame(e.id);
-          return;
-        }
-
-        // Single-click: seleccionar
-        saveListCursor = idx;
-        saveListLastClickIdx = idx;
-        saveListLastClickTime = now;
-      }
     }
+
+    if (clickedRow >= 0) {
+      double now = GetTime();
+      bool isDouble = (clickedRow == saveListLastClickIdx &&
+      (now - saveListLastClickTime) < 0.4);
+      if (isDouble) {
+        loadGame(list[clickedRow].id);
+        return;
+      }
+      saveListLastClickIdx = clickedRow;
+      saveListLastClickTime = now;
+    }
+
+    // ---- 8) Scrollbar visual ----
+    UI::drawScrollbar(listX + listW + 8, topY, botY,
+                      (int)list.size() * rowH, botY - topY,
+                      -saveListScroll * rowH);
   }
 
   // ----- Botones inferiores -----
@@ -155,11 +197,12 @@ void Game::drawSaveList() {
   };
 
   bool hasSelection = !list.empty();
-  bool createClicked = bottomBtn(0, 5, L("saves.new", "+ Nueva partida"));
-  bool playClicked = hasSelection && bottomBtn(1, 5, L("saves.play", "Jugar"));
-  bool dupClicked = hasSelection && bottomBtn(2, 5, L("saves.dup", "Duplicar"));
-  bool recClicked = hasSelection && bottomBtn(3, 5, L("saves.rec", "Recrear"));
-  bool delClicked = hasSelection && bottomBtn(4, 5, L("saves.del", "Eliminar"));
+  bool createClicked = bottomBtn(0, 6, L("saves.new", "+ Nueva partida"));
+  bool playClicked = hasSelection && bottomBtn(1, 6, L("saves.play", "Jugar"));
+  bool dupClicked = hasSelection && bottomBtn(2, 6, L("saves.dup", "Duplicar"));
+  bool recClicked = hasSelection && bottomBtn(3, 6, L("saves.rec", "Recrear"));
+  bool delClicked = hasSelection && bottomBtn(4, 6, L("saves.del", "Eliminar"));
+  bool backClicked = bottomBtn(5, 6, L("common.back", "Volver"));
 
   // Modal de confirmación
   if (saveDeleteConfirm) {
@@ -242,6 +285,10 @@ void Game::drawSaveList() {
     saveDeletePendingId = list[saveListCursor].id;
     saveDeleteConfirm = true;
   }
+  if (backClicked) {
+    state = ST_MENU;
+    navMenu = 0;
+  }
 
   if (!saveDeleteConfirm && (IsKeyPressed(KEY_ESCAPE) || consumeCancel())) {
     state = ST_MENU;
@@ -272,16 +319,18 @@ void Game::drawSaveCreate() {
   handleGamepadMenuNav(totalRows);
 
   int lr = gamepadLeftRight();
-  if (IsKeyPressed(KEY_LEFT))  lr = -1;
-  if (IsKeyPressed(KEY_RIGHT)) lr = +1;
+  if (IsKeyPressed(KEY_LEFT))
+    lr = -1;
+  if (IsKeyPressed(KEY_RIGHT))
+    lr = +1;
 
   bool confirm = consumeConfirm();
 
   // --- Fila 0: Nombre (input de texto) ---
   {
     bool active = (navIndex == 0);
-    uiTextInput(0, totalRows, 40, L("create.name", "Nombre"),
-                createBuffer.name, createNameState, 40, &navIndex, active);
+    uiTextInput(0, totalRows, 40, L("create.name", "Nombre"), createBuffer.name,
+                createNameState, 40, &navIndex, active);
 
     // Enter sobre el nombre → siguiente fila
     if (active && confirm) {
@@ -293,12 +342,10 @@ void Game::drawSaveCreate() {
   // --- Fila 1: Modo ---
   {
     const char *modeStr = (createBuffer.mode == MODE_STORY)
-    ? L("mode.story", "Historia")
-    : L("mode.endless", "Infinito");
-    UIAction a = uiOptionEx(1, totalRows, 40,
-                            L("create.mode", "Modo"),
-                            modeStr, &navIndex, &confirm,
-                            navIndex == 1 ? lr : 0);
+                              ? L("mode.story", "Historia")
+                              : L("mode.endless", "Infinito");
+    UIAction a = uiOptionEx(1, totalRows, 40, L("create.mode", "Modo"), modeStr,
+                            &navIndex, &confirm, navIndex == 1 ? lr : 0);
     if (a == UI_LEFT || a == UI_RIGHT || a == UI_CONFIRM)
       createBuffer.mode = (createBuffer.mode + 1) % 2;
   }
@@ -307,42 +354,45 @@ void Game::drawSaveCreate() {
   {
     const char *diffStr;
     switch (createBuffer.difficulty) {
-      case DIFF_EXPERT:    diffStr = "EXPERTO";   break;
-      case DIFF_NIGHTMARE: diffStr = "PESADILLA"; break;
-      default:             diffStr = "NORMAL";    break;
+    case DIFF_EXPERT:
+      diffStr = "EXPERTO";
+      break;
+    case DIFF_NIGHTMARE:
+      diffStr = "PESADILLA";
+      break;
+    default:
+      diffStr = "NORMAL";
+      break;
     }
-    UIAction a = uiOptionEx(2, totalRows, 40,
-                            L("create.difficulty", "Dificultad"),
-                            diffStr, &navIndex, &confirm,
-                            navIndex == 2 ? lr : 0);
+    UIAction a =
+        uiOptionEx(2, totalRows, 40, L("create.difficulty", "Dificultad"),
+                   diffStr, &navIndex, &confirm, navIndex == 2 ? lr : 0);
     if (a == UI_LEFT)
       createBuffer.difficulty =
-      (createBuffer.difficulty + DIFF_COUNT - 1) % DIFF_COUNT;
+          (createBuffer.difficulty + DIFF_COUNT - 1) % DIFF_COUNT;
     if (a == UI_RIGHT)
-      createBuffer.difficulty =
-      (createBuffer.difficulty + 1) % DIFF_COUNT;
+      createBuffer.difficulty = (createBuffer.difficulty + 1) % DIFF_COUNT;
   }
 
   // --- Fila 3: Jugadores ---
   {
     char buf[8];
     snprintf(buf, sizeof(buf), "%s", createBuffer.twoPlayers ? "2" : "1");
-    UIAction a = uiOptionEx(3, totalRows, 40,
-                            L("create.players", "Jugadores"),
-                            buf, &navIndex, &confirm,
-                            navIndex == 3 ? lr : 0);
-    if (a != UI_NONE) createBuffer.twoPlayers = !createBuffer.twoPlayers;
+    UIAction a = uiOptionEx(3, totalRows, 40, L("create.players", "Jugadores"),
+                            buf, &navIndex, &confirm, navIndex == 3 ? lr : 0);
+    if (a != UI_NONE)
+      createBuffer.twoPlayers = !createBuffer.twoPlayers;
   }
 
   // --- Fila 4: Speedrun ---
   {
     const char *sr =
-    createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
-    UIAction a = uiOptionEx(4, totalRows, 40,
-                            L("create.speedrun", "Modo speedrun"),
-                            sr, &navIndex, &confirm,
-                            navIndex == 4 ? lr : 0);
-    if (a != UI_NONE) createBuffer.speedrun = !createBuffer.speedrun;
+        createBuffer.speedrun ? L("common.yes", "Sí") : L("common.no", "No");
+    UIAction a =
+        uiOptionEx(4, totalRows, 40, L("create.speedrun", "Modo speedrun"), sr,
+                   &navIndex, &confirm, navIndex == 4 ? lr : 0);
+    if (a != UI_NONE)
+      createBuffer.speedrun = !createBuffer.speedrun;
   }
 
   // --- Sección infinito ---
@@ -357,22 +407,22 @@ void Game::drawSaveCreate() {
       if (createSeedBuf.empty() && active) {
         // hack: dibujamos un ghost text encima del campo
         int x = GetScreenWidth() / 2 - 340;
-        int y = GetScreenHeight() / 2 - (totalRows * 70) / 2 + 40
-        + seedRow * 70;  // nota: el layout de uiTextInput es 70
-        UI::T(L("endless.seed.random", "(vacío = aleatoria)"),
-              x + 260, y + 16, 18, UI::TEXT_MUT);
+        int y = GetScreenHeight() / 2 - (totalRows * 70) / 2 + 40 +
+                seedRow * 70; // nota: el layout de uiTextInput es 70
+        UI::T(L("endless.seed.random", "(vacío = aleatoria)"), x + 260, y + 16,
+              18, UI::TEXT_MUT);
       }
     }
 
     // Aleatorizar
     {
       UIAction a = uiOptionEx(randomRow, totalRows, 40,
-                              L("endless.randomize", "Aleatorizar seed"),
-                              "", &navIndex, &confirm, 0);
+                              L("endless.randomize", "Aleatorizar seed"), "",
+                              &navIndex, &confirm, 0);
       if (a != UI_NONE) {
-        uint32_t s = (uint32_t)time(nullptr)
-        ^ (uint32_t)(rand() * 2654435761u);
-        if (s == 0) s = 1;
+        uint32_t s = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+        if (s == 0)
+          s = 1;
         char buf[16];
         snprintf(buf, sizeof(buf), "%u", s);
         createSeedBuf = buf;
@@ -384,31 +434,32 @@ void Game::drawSaveCreate() {
       char buf[16];
       snprintf(buf, sizeof(buf), "%gx",
                (double)C::ENDLESS_MULT[createBuffer.enemyMult]);
-      UIAction a = uiOptionEx(enemyRow, totalRows, 40,
-                              L("endless.enemyMult", "Multiplicador enemigos"),
-                              buf, &navIndex, &confirm,
-                              navIndex == enemyRow ? lr : 0);
+      UIAction a =
+          uiOptionEx(enemyRow, totalRows, 40,
+                     L("endless.enemyMult", "Multiplicador enemigos"), buf,
+                     &navIndex, &confirm, navIndex == enemyRow ? lr : 0);
       if (a == UI_LEFT)
-        createBuffer.enemyMult = (createBuffer.enemyMult - 1
-        + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
+        createBuffer.enemyMult =
+            (createBuffer.enemyMult - 1 + C::ENDLESS_MULT_COUNT) %
+            C::ENDLESS_MULT_COUNT;
       if (a == UI_RIGHT)
-        createBuffer.enemyMult = (createBuffer.enemyMult + 1)
-        % C::ENDLESS_MULT_COUNT;
+        createBuffer.enemyMult =
+            (createBuffer.enemyMult + 1) % C::ENDLESS_MULT_COUNT;
     }
     {
       char buf[16];
       snprintf(buf, sizeof(buf), "%gx",
                (double)C::ENDLESS_MULT[createBuffer.itemMult]);
-      UIAction a = uiOptionEx(itemRow, totalRows, 40,
-                              L("endless.itemMult", "Multiplicador items"),
-                              buf, &navIndex, &confirm,
-                              navIndex == itemRow ? lr : 0);
+      UIAction a = uiOptionEx(
+          itemRow, totalRows, 40, L("endless.itemMult", "Multiplicador items"),
+          buf, &navIndex, &confirm, navIndex == itemRow ? lr : 0);
       if (a == UI_LEFT)
-        createBuffer.itemMult = (createBuffer.itemMult - 1
-        + C::ENDLESS_MULT_COUNT) % C::ENDLESS_MULT_COUNT;
+        createBuffer.itemMult =
+            (createBuffer.itemMult - 1 + C::ENDLESS_MULT_COUNT) %
+            C::ENDLESS_MULT_COUNT;
       if (a == UI_RIGHT)
-        createBuffer.itemMult = (createBuffer.itemMult + 1)
-        % C::ENDLESS_MULT_COUNT;
+        createBuffer.itemMult =
+            (createBuffer.itemMult + 1) % C::ENDLESS_MULT_COUNT;
     }
   }
 
@@ -427,9 +478,8 @@ void Game::drawSaveCreate() {
     bool click = hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 
     DrawRectangleRec(r, primary ? (hover ? UI::BG_HOVER : UI::BG_PANEL)
-    : (hover ? UI::BG_HOVER : UI::BG_PANEL));
-    DrawRectangle(bx, by + bh - 2, bw, 2,
-                  primary ? UI::ACCENT : UI::BORDER);
+                                : (hover ? UI::BG_HOVER : UI::BG_PANEL));
+    DrawRectangle(bx, by + bh - 2, bw, 2, primary ? UI::ACCENT : UI::BORDER);
 
     int fs = 18;
     int tw = UI::M(label, fs);
@@ -439,17 +489,19 @@ void Game::drawSaveCreate() {
   };
 
   bool cancelClicked = actionBtn(cancelRow, L("common.back", "Volver"), false);
-  bool createClicked = actionBtn(createRow, L("create.confirm", "Crear partida"), true);
+  bool createClicked =
+      actionBtn(createRow, L("create.confirm", "Crear partida"), true);
 
   if (createClicked || (navIndex == createRow && consumeConfirm())) {
-    if (createBuffer.name.empty()) createBuffer.name = "New world";
+    if (createBuffer.name.empty())
+      createBuffer.name = "New world";
 
     if (createBuffer.mode == MODE_ENDLESS) {
       uint32_t parsed = (uint32_t)strtoul(createSeedBuf.c_str(), nullptr, 10);
       if (parsed == 0) {
-        parsed = (uint32_t)time(nullptr)
-        ^ (uint32_t)(rand() * 2654435761u);
-        if (parsed == 0) parsed = 1;
+        parsed = (uint32_t)time(nullptr) ^ (uint32_t)(rand() * 2654435761u);
+        if (parsed == 0)
+          parsed = 1;
       }
       createBuffer.runSeed = parsed;
     }
