@@ -5,6 +5,23 @@
 #include "ui.hpp"
 
 #include <algorithm>
+#include <cmath>
+
+namespace {
+
+inline float easeOutQuad(float t) {
+  if (t <= 0.0f) return 0.0f;
+  if (t >= 1.0f) return 1.0f;
+  return 1.0f - (1.0f - t) * (1.0f - t);
+}
+
+inline float easeInQuad(float t) {
+  if (t <= 0.0f) return 0.0f;
+  if (t >= 1.0f) return 1.0f;
+  return t * t;
+}
+
+} // namespace
 
 static bool sampleGhostAt(const GhostRun &ghost, int lvlIdx, float t,
                           Vector3 &outPos, float &outYaw) {
@@ -383,11 +400,14 @@ void Game::drawGameplayView(const Player &pl, int vw, int vh, int playerNum) {
     drawSpeedrunOverlay(vw, vh);
 }
 
+static void drawViewModel(const Player &p, Assets &assets);
+
 void Game::drawSplitScreen() {
   // Jugador 0
   BeginTextureMode(rtLeft);
   ClearBackground((Color){12, 12, 18, 255});
   renderPlayerView(players[0]);
+  drawViewModel(players[0], assets);
   drawGameplayView(players[0], rtLeft.texture.width, rtLeft.texture.height, 0);
   EndTextureMode();
 
@@ -395,6 +415,7 @@ void Game::drawSplitScreen() {
   BeginTextureMode(rtRight);
   ClearBackground((Color){12, 12, 18, 255});
   renderPlayerView(players[1]);
+  drawViewModel(players[1], assets);
   drawGameplayView(players[1], rtRight.texture.width, rtRight.texture.height,
                    1);
   EndTextureMode();
@@ -406,4 +427,115 @@ void Game::drawCinematic() {
   drawBackground2D();
   cinematic.draw(GetScreenWidth(), GetScreenHeight());
   EndDrawing();
+}
+
+void drawViewModel(const Player &p, Assets &assets) {
+  if (p.selectedSlot < 0 || p.selectedSlot >= C::INV_SLOTS)
+    return;
+  ItemKind kind = p.inventory[p.selectedSlot].kind;
+  if (kind != ITEM_WHIP && kind != ITEM_SCISSORS)
+    return;
+
+  // Si el arma se cambió a mitad de la animación, no pintar el viewmodel
+  // del arma que ya no está equipada.
+  if (p.meleeAnimKind != 0 && p.meleeAnimKind != (int)kind) {
+    // (nada: el render de abajo sigue con el arma actual en reposo)
+  }
+
+  const int W = GetScreenWidth();
+  const int H = GetScreenHeight();
+
+  // ---- Tijeras: swing estilo Minecraft ----
+  if (kind == ITEM_SCISSORS) {
+    if (!assets.hasScissors)
+      return;
+
+    // Posición de reposo (esquina inferior derecha, ligeramente fuera de pantalla)
+    const float restX = W * 0.78f;
+    const float restY = H * 0.92f;
+    const float peakX = W * 0.48f;
+    const float peakY = H * 0.55f;
+    const float restRot = -20.0f;
+    const float peakRot = 35.0f;
+
+    float px = restX, py = restY, rot = restRot;
+    float scale = 1.0f;
+
+    if (p.meleeAnimKind == ITEM_SCISSORS && p.meleeAnimT > 0.0f) {
+      // Progreso 0..1; 0 = acaba de empezar el golpe, 1 = ha terminado
+      float prog = 1.0f - (p.meleeAnimT / p.meleeAnimDur);
+      if (prog < 0.0f) prog = 0.0f;
+      if (prog > 1.0f) prog = 1.0f;
+
+      // Envolvente de arco: 0 → 1 → 0 (seno), con más peso al ir que al volver.
+      float arc;
+      if (prog < C::SCISSORS_SWING_OFF) {
+        arc = easeOutQuad(prog / C::SCISSORS_SWING_OFF);       // ida
+      } else {
+        arc = 1.0f - easeInQuad(
+          (prog - C::SCISSORS_SWING_OFF) /
+          (1.0f - C::SCISSORS_SWING_OFF));              // vuelta
+      }
+      px   = restX + (peakX - restX) * arc;
+      py   = restY + (peakY - restY) * arc;
+      rot  = restRot + (peakRot - restRot) * arc;
+      scale = 1.0f + 0.15f * arc;
+    }
+
+    float dw = assets.scissorsTex.width  * scale * UI::scale;
+    float dh = assets.scissorsTex.height * scale * UI::scale;
+    Rectangle src = {0, 0, (float)assets.scissorsTex.width,
+      (float)assets.scissorsTex.height};
+      Rectangle dst = {px - dw * 0.5f, py - dh * 0.5f, dw, dh};
+      Vector2 origin = {dw * 0.5f, dh * 0.5f};
+
+      DrawTexturePro(assets.scissorsTex, src, dst, origin, rot, WHITE);
+      return;
+  }
+
+  // ---- Látigo: cambio de textura extendido / recogido ----
+  if (kind == ITEM_WHIP) {
+    bool extended = false;
+    float extProg = 0.0f; // 0..1 dentro de la ventana extendida
+    if (p.meleeAnimKind == ITEM_WHIP && p.meleeAnimT > 0.0f) {
+      float prog = 1.0f - (p.meleeAnimT / p.meleeAnimDur);
+      if (prog < 0.0f) prog = 0.0f;
+      if (prog > 1.0f) prog = 1.0f;
+      // Ventana extendida al principio de la animación, luego retracción.
+      if (prog < C::WHIP_EXTENDED_TIME / C::WHIP_SWING_DUR) {
+        extended = true;
+        extProg = prog / (C::WHIP_EXTENDED_TIME / C::WHIP_SWING_DUR);
+      }
+    }
+
+    // Posición: esquina inferior derecha. El látigo extendido pega más
+    // hacia el centro (sensación de "sale hacia delante").
+    const float baseX = W * 0.72f;
+    const float baseY = H * 0.78f;
+
+    // Elige textura
+    Texture2D tex;
+    bool hasTex;
+    if (extended) {
+      tex    = assets.whipExtendedTex;
+      hasTex = assets.hasWhipExtended;
+    } else {
+      tex    = assets.whipIdleTex;
+      hasTex = assets.hasWhipIdle;
+    }
+    if (!hasTex) return;
+
+    // Tamaño: crece un poco al extenderse para reforzar el "latigazo".
+    float scale = 1.0f + 0.10f * (extended ? easeOutQuad(extProg) : 0.0f);
+    float dw = tex.width  * scale * UI::scale;
+    float dh = tex.height * scale * UI::scale;
+
+    // Pequeño desplazamiento lateral al extender.
+    float dx = baseX - dw * 0.5f - (extended ? W * 0.03f : 0.0f);
+    float dy = baseY - dh * 0.5f;
+    Rectangle src = {0, 0, (float)tex.width, (float)tex.height};
+    Rectangle dst = {dx, dy, dw, dh};
+    DrawTexturePro(tex, src, dst, {0, 0}, 0.0f, WHITE);
+    return;
+  }
 }

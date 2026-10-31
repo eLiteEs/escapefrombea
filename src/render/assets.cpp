@@ -1,4 +1,5 @@
 #include "assets.hpp"
+#include "common.hpp"
 #include "paths.hpp"
 #include <cstdio>
 
@@ -66,17 +67,18 @@ static Music loadMusicSmart(const char *name) {
 }
 
 void Assets::loadUiTextures() {
-  auto loadIfPresent = [](const char* name, Texture2D& tex, bool& has) {
+  auto loadIfPresent = [](const char *name, Texture2D &tex, bool &has) {
     std::string p = Paths::sprite(name);
     tex = LoadTexture(p.c_str());
     has = (tex.id != 0);
-    if (has) SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+    if (has)
+      SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
   };
-  loadIfPresent("ui_skull.png",       uiSkull,      hasUiSkull);
-  loadIfPresent("ui_arrow_left.png",  uiArrowLeft,  hasUiArrowLeft);
+  loadIfPresent("ui_skull.png", uiSkull, hasUiSkull);
+  loadIfPresent("ui_arrow_left.png", uiArrowLeft, hasUiArrowLeft);
   loadIfPresent("ui_arrow_right.png", uiArrowRight, hasUiArrowRight);
-  loadIfPresent("ui_health.png",      uiHealth,     hasUiHealth);
-  loadIfPresent("ui_armor.png",       uiArmor,      hasUiArmor);
+  loadIfPresent("ui_health.png", uiHealth, hasUiHealth);
+  loadIfPresent("ui_armor.png", uiArmor, hasUiArmor);
 }
 
 void Assets::loadEnemyTextures() {
@@ -150,15 +152,19 @@ void Assets::loadItemTextures() {
   struct {
     ItemKind kind;
     const char *file;
-  } defs[] = {{ITEM_ROCK, "item_rock.png"},
-              {ITEM_BOX, "item_box.png"},
-              {ITEM_LIME, "item_lime.png"},
-              {ITEM_BICIMAD, "item_bicimad.png"},
-              {ITEM_MONSTER, "item_monster.png"},
-              {ITEM_WALL, "item_wall.png"},
-              {ITEM_KEY, "item_key.png"},
-              {ITEM_BIFRUTAS, "item_bifrutas.png"},
-              {ITEM_ENSAIMADA, "item_ensaimada.png"}};
+  } defs[] = {
+      {ITEM_ROCK, "item_rock.png"},
+      {ITEM_BOX, "item_box.png"},
+      {ITEM_LIME, "item_lime.png"},
+      {ITEM_BICIMAD, "item_bicimad.png"},
+      {ITEM_MONSTER, "item_monster.png"},
+      {ITEM_WALL, "item_wall.png"},
+      {ITEM_KEY, "item_key.png"},
+      {ITEM_BIFRUTAS, "item_bifrutas.png"},
+      {ITEM_ENSAIMADA, "item_ensaimada.png"},
+      {ITEM_WHIP, "item_whip.png"},
+      {ITEM_SCISSORS, "item_scissors.png"},
+  };
   for (auto &d : defs) {
     std::string path = Paths::sprite(d.file);
     itemTex[d.kind] = LoadTexture(path.c_str());
@@ -195,6 +201,13 @@ void Assets::loadItemTextures() {
       hasFountainTex = (fountainTex.id != 0);
     }
   }
+
+  whipIdleTex     = LoadTexture(Paths::sprite("item_whip.png").c_str());
+  hasWhipIdle     = (whipIdleTex.id != 0);
+  whipExtendedTex = LoadTexture(Paths::sprite("item_whip_extended.png").c_str());
+  hasWhipExtended = (whipExtendedTex.id != 0);
+  scissorsTex     = LoadTexture(Paths::sprite("item_scissors.png").c_str());
+  hasScissors     = (scissorsTex.id != 0);
 }
 
 void Assets::loadMusic() {
@@ -287,11 +300,16 @@ void Assets::unload() {
     UnloadFont(font);
   }
 
-  if (hasUiSkull      && uiSkull.id      != 0) UnloadTexture(uiSkull);
-  if (hasUiArrowLeft  && uiArrowLeft.id  != 0) UnloadTexture(uiArrowLeft);
-  if (hasUiArrowRight && uiArrowRight.id != 0) UnloadTexture(uiArrowRight);
-  if (hasUiHealth     && uiHealth.id     != 0) UnloadTexture(uiHealth);
-  if (hasUiArmor      && uiArmor.id      != 0) UnloadTexture(uiArmor);
+  if (hasUiSkull && uiSkull.id != 0)
+    UnloadTexture(uiSkull);
+  if (hasUiArrowLeft && uiArrowLeft.id != 0)
+    UnloadTexture(uiArrowLeft);
+  if (hasUiArrowRight && uiArrowRight.id != 0)
+    UnloadTexture(uiArrowRight);
+  if (hasUiHealth && uiHealth.id != 0)
+    UnloadTexture(uiHealth);
+  if (hasUiArmor && uiArmor.id != 0)
+    UnloadTexture(uiArmor);
 }
 
 void Assets::applyVolumes(float master, float music, float sfx) {

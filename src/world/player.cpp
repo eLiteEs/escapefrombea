@@ -251,6 +251,11 @@ bool updatePlayer(Player &pl, const KeyBindings &kb, float dt,
   if (pl.hidden)
     return false;
 
+  float equipSpeedMult = 1.0f;
+  if (pl.selectedSlot >= 0 && pl.selectedSlot < C::INV_SLOTS &&
+      pl.inventory[pl.selectedSlot].kind == ITEM_SCISSORS)
+    equipSpeedMult = C::SCISSORS_SPEED_MULT;
+
   // Un tirón de frames no debe atravesar paredes ni dar saltos enormes
   if (dt > 1.0f / 30.0f)
     dt = 1.0f / 30.0f;
@@ -354,7 +359,8 @@ bool updatePlayer(Player &pl, const KeyBindings &kb, float dt,
   const Vector3 safePos = pl.pos; // última posición válida (anti-atasco)
 
   if (cfg.quakeMovement) {
-    float wishSpeed = C::Q_WALKSPEED * (pl.sprinting ? C::Q_SPRINT_MULT : 1.0f);
+    float wishSpeed = C::Q_WALKSPEED *
+                      (pl.sprinting ? C::Q_SPRINT_MULT : 1.0f) * equipSpeedMult;
 
     if (pl.onGround) {
       float speed =
@@ -464,7 +470,8 @@ bool updatePlayer(Player &pl, const KeyBindings &kb, float dt,
     }
 
     float startX = pl.pos.x, startZ = pl.pos.z;
-    float speed = C::P_SPEED * (pl.sprinting ? C::P_SPRINT : 1.0f);
+    float speed =
+        C::P_SPEED * (pl.sprinting ? C::P_SPRINT : 1.0f) * equipSpeedMult;
     float dx = mx / wishLen * speed * dt;
     float dz = mz / wishLen * speed * dt;
 

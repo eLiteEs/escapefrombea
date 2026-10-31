@@ -148,6 +148,28 @@ constexpr float DMG_BOX = 20.0f;
 constexpr float DMG_LIME = 25.0f;
 constexpr float DMG_BICIMAD = 35.0f;
 
+// Melee — látigo
+constexpr float WHIP_RANGE = 6.0f;
+constexpr float WHIP_HALF_ARC = 0.60f; // rad; ~34° de semiángulo (68° total)
+constexpr float WHIP_DAMAGE = 40.0f;
+constexpr float WHIP_COOLDOWN = 1.6f;
+constexpr float WHIP_STAMINA_COST = 0.25f;
+constexpr int WHIP_USES = 10;
+
+// Melee — tijeras
+constexpr float SCISSORS_RANGE = 3.6f;
+constexpr float SCISSORS_HALF_ARC = 0.70f;
+constexpr float SCISSORS_DAMAGE = 12.0f;
+constexpr float SCISSORS_COOLDOWN = 0.4f;
+constexpr float SCISSORS_SPEED_MULT = 1.15f;
+constexpr int SCISSORS_USES = 10;
+
+// Melee — animación
+constexpr float WHIP_SWING_DUR = 0.45f;
+constexpr float WHIP_EXTENDED_TIME = 0.30f; // ventana con textura extendida
+constexpr float SCISSORS_SWING_DUR = 0.22f;
+constexpr float SCISSORS_SWING_OFF = 0.55f; // 55% del CD → empieza a volver
+
 } // namespace C
 
 enum AppState {
@@ -199,6 +221,8 @@ enum ItemKind {
   ITEM_KEY,
   ITEM_BIFRUTAS,
   ITEM_ENSAIMADA,
+  ITEM_WHIP,
+  ITEM_SCISSORS,
   ITEM_KIND_COUNT
 };
 
@@ -262,6 +286,11 @@ struct Player {
   float maxShield = C::PLAYER_MAX_SHIELD;
   float damageFlashT = 0.0f;
   float throwCooldownMax = 0.0f;
+
+  // Viewmodel melee (progreso 0..1 durante la animación, 0 = en reposo)
+  float meleeAnimT = 0.0f;   // tiempo restante; 0 = sin animación
+  float meleeAnimDur = 0.0f; // duración total (para normalizar)
+  int meleeAnimKind = 0;     // ItemKind que disparó la anim
 };
 
 struct Enemy {

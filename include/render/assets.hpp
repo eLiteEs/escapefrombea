@@ -23,6 +23,9 @@ struct Assets {
   Texture2D itemTex[ITEM_KIND_COUNT] = {};
   bool hasItemTex[ITEM_KIND_COUNT] = {};
 
+  Texture2D whipIdleTex, whipExtendedTex, scissorsTex;
+  bool hasWhipIdle = false, hasWhipExtended = false, hasScissors = false;
+
   // UI custom assets
   Texture2D uiSkull      = {};
   Texture2D uiArrowLeft  = {};

@@ -85,7 +85,7 @@ void Game::handleInteraction(int p) {
   // ----- Taquilla / fuente -----
   int interactCx = -1, interactCy = -1;
   {
-    bool isLocker = false;  // (el out-param se ignora; usamos `what`)
+    bool isLocker = false; // (el out-param se ignora; usamos `what`)
     int what = findInteractable(pl, interactCx, interactCy, isLocker);
     if (what == 1) {
       Vector3 target = maze.cellCenter(interactCx, interactCy);
@@ -216,7 +216,7 @@ void Game::handleItemInput(int p) {
   bool usePressed = (p == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) ||
                     IsKeyPressed(KEY_E);
   if (usePressed) {
-    if (Inventory::useSelected(pl, maze, projectiles, assets)) {}
+    Inventory::useSelected(pl, maze, projectiles, enemies, assets, p);
   }
 }
 

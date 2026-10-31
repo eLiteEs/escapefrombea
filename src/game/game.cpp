@@ -377,6 +377,14 @@ void Game::update(float dt) {
         }
         maze.markExplored(players[p].pos.x, players[p].pos.z, C::FOG_RADIUS);
       }
+
+      if (players[p].meleeAnimT > 0.0f) {
+        players[p].meleeAnimT -= gdt;
+        if (players[p].meleeAnimT <= 0.0f) {
+          players[p].meleeAnimT = 0.0f;
+          players[p].meleeAnimKind = 0;
+        }
+      }
     }
 
     for (int p = 0; p < numPlayers; ++p) {

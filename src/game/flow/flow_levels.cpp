@@ -25,15 +25,19 @@ static ItemCategory rollItemCategory(std::mt19937 &rng) {
 static ItemKind rollItemKind(ItemCategory cat, std::mt19937 &rng) {
   switch (cat) {
   case CAT_WEAPONS: {
-    // Rock 40, Box 25, Lime 20, Bicimad 15
+    // Rock 20, Box 20, Scissors 20, Lime 15, Bicimad 15, Whip 15
     int r = (int)(rng() % 100);
-    if (r < 40)
+    if (r < 20)
       return ITEM_ROCK;
-    if (r < 65)
+    if (r < 40)
       return ITEM_BOX;
-    if (r < 85)
+    if (r < 60)
+      return ITEM_SCISSORS;
+    if(r < 75)
       return ITEM_LIME;
-    return ITEM_BICIMAD;
+    if(r < 90)
+      return ITEM_BICIMAD;
+    return ITEM_WHIP;
   }
   case CAT_TOOLS:
     return ITEM_WALL; // única herramienta actual

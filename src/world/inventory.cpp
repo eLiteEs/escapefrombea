@@ -40,9 +40,11 @@ void applyDamageToPlayer(Player &p, float dmg) {
   p.damageFlashT = 0.25f;
 }
 
-void applyDamageToEnemy(Enemy& e, float dmg) {
-  if (dmg <= 0.0f) return;
-  if (!e.alive || e.dyingT > 0.0f) return;   // ya muriendo, no acumular
+void applyDamageToEnemy(Enemy &e, float dmg) {
+  if (dmg <= 0.0f)
+    return;
+  if (!e.alive || e.dyingT > 0.0f)
+    return; // ya muriendo, no acumular
 
   float absorbed = std::min(e.shield, dmg);
   e.shield -= absorbed;
@@ -52,9 +54,66 @@ void applyDamageToEnemy(Enemy& e, float dmg) {
     e.hp -= dmg;
     if (e.hp <= 0.0f) {
       e.hp = 0.0f;
-      e.dyingT = 2.0f;    // ← NUEVO: entra en estado "muriendo" 2s
+      e.dyingT = 2.0f; // ← NUEVO: entra en estado "muriendo" 2s
     }
   }
+}
+
+bool doMelee(Player &p, std::vector<Enemy> &enemies, ItemKind kind,
+             const Assets &assets) {
+  const bool isWhip = (kind == ITEM_WHIP);
+  const float range = isWhip ? C::WHIP_RANGE : C::SCISSORS_RANGE;
+  const float halfArc = isWhip ? C::WHIP_HALF_ARC : C::SCISSORS_HALF_ARC;
+  const float dmg = isWhip ? C::WHIP_DAMAGE : C::SCISSORS_DAMAGE;
+  const float cd = isWhip ? C::WHIP_COOLDOWN : C::SCISSORS_COOLDOWN;
+
+  // Coste de stamina (solo látigo). Si no hay, no se ejecuta el ataque.
+  if (isWhip) {
+    if (p.stamina < C::WHIP_STAMINA_COST)
+      return false;
+    p.stamina -= C::WHIP_STAMINA_COST;
+    p.staminaDelay = C::STAM_REGEN_DELAY;
+  }
+
+  const float fwdX = sinf(p.yaw);
+  const float fwdZ = -cosf(p.yaw);
+  const float cosHalf = cosf(halfArc);
+
+  for (auto &e : enemies) {
+    if (!e.alive || e.dyingT > 0.0f)
+      continue;
+    // Mismo piso: no golpear a través de suelos/techos (3.6 m de separación).
+    if (fabsf(e.pos.y - p.pos.y) > 1.8f)
+      continue;
+    const float dx = e.pos.x - p.pos.x;
+    const float dz = e.pos.z - p.pos.z;
+    const float d = sqrtf(dx * dx + dz * dz);
+    if (d > range || d < 0.01f)
+      continue;
+    // Proyección sobre el forward: descarta enemigos fuera del cono.
+    if ((dx * fwdX + dz * fwdZ) / d < cosHalf)
+      continue;
+    applyDamageToEnemy(e, dmg);
+    e.hitFlash = 0.30f;
+  }
+
+  // CD y feedback (aunque falles, se gasta).
+  p.throwCooldown = cd;
+  p.throwCooldownMax = cd;
+  p.attackFlash = 0.15f;
+
+  if (isWhip) {
+    p.meleeAnimDur = C::WHIP_SWING_DUR;
+    p.meleeAnimKind = ITEM_WHIP;
+  } else {
+    p.meleeAnimDur = C::SCISSORS_SWING_DUR;
+    p.meleeAnimKind = ITEM_SCISSORS;
+  }
+  p.meleeAnimT = p.meleeAnimDur;
+
+  if (assets.sfxThrow.frameCount > 0)
+    PlaySound(assets.sfxThrow);
+  return true;
 }
 
 } // namespace
@@ -64,6 +123,26 @@ namespace Inventory {
 bool tryAdd(Player &p, ItemKind kind, int amount) {
   if (kind == ITEM_NONE || amount <= 0)
     return false;
+
+  // Para armas melee con usos limitados, al recoger otra igual se reinician los usos a 10
+  if (kind == ITEM_WHIP || kind == ITEM_SCISSORS) {
+    // Si ya tiene uno, reinicia sus usos
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      if (p.inventory[i].kind == kind) {
+        p.inventory[i].count = (kind == ITEM_WHIP) ? C::WHIP_USES : C::SCISSORS_USES;
+        return true;
+      }
+    }
+    // Si no lo tiene, lo añade con usos completos
+    for (int i = 0; i < C::INV_SLOTS; ++i) {
+      if (p.inventory[i].kind == ITEM_NONE) {
+        p.inventory[i].kind = kind;
+        p.inventory[i].count = (kind == ITEM_WHIP) ? C::WHIP_USES : C::SCISSORS_USES;
+        return true;
+      }
+    }
+    return false;
+  }
 
   // Primero apila en un slot con el mismo tipo
   for (int i = 0; i < C::INV_SLOTS; ++i) {
@@ -149,8 +228,8 @@ bool collectPickup(Player &p, std::vector<WorldPickup> &world, int idx) {
 }
 
 bool useSelected(Player &p, const Maze &maze,
-                 std::vector<Projectile> &projectiles, Assets assets,
-                 int ownerId) {
+                 std::vector<Projectile> &projectiles,
+                 std::vector<Enemy> &enemies, Assets assets, int ownerId) {
   if (p.throwCooldown > 0.0f)
     return false;
   if (p.selectedSlot < 0 || p.selectedSlot >= C::INV_SLOTS)
@@ -160,13 +239,25 @@ bool useSelected(Player &p, const Maze &maze,
   if (it.kind == ITEM_NONE || it.count <= 0)
     return false;
 
+  if (it.kind == ITEM_WHIP || it.kind == ITEM_SCISSORS) {
+    bool ok = doMelee(p, enemies, it.kind, assets);
+    if (ok) {
+      it.count--;
+      if (it.count <= 0) {
+        it.kind = ITEM_NONE;
+        it.count = 0;
+      }
+    }
+    return ok;
+  }
+
   if (it.kind == ITEM_MONSTER) {
     p.stamina = 1.0f;
     p.exhausted = false;
     p.staminaDelay = 0.0f;
 
     float cd = cooldownFor(it.kind);
-    p.throwCooldown    = cd;
+    p.throwCooldown = cd;
     p.throwCooldownMax = cd;
 
     removeOne(p, p.selectedSlot);
@@ -179,7 +270,7 @@ bool useSelected(Player &p, const Maze &maze,
     p.hp += C::BIFRUTAS_RESTORE;
 
     float cd = cooldownFor(it.kind);
-    p.throwCooldown    = cd;
+    p.throwCooldown = cd;
     p.throwCooldownMax = cd;
 
     removeOne(p, p.selectedSlot);
@@ -192,7 +283,7 @@ bool useSelected(Player &p, const Maze &maze,
     p.shield += C::ENSAIMADA_RESTORE;
 
     float cd = cooldownFor(it.kind);
-    p.throwCooldown    = cd;
+    p.throwCooldown = cd;
     p.throwCooldownMax = cd;
 
     removeOne(p, p.selectedSlot);
@@ -206,7 +297,8 @@ bool useSelected(Player &p, const Maze &maze,
                    -cosf(p.yaw) * cosf(p.pitch)};
 
     Projectile pr;
-    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y, p.pos.z + fwd.z * 0.4f};
+    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y,
+              p.pos.z + fwd.z * 0.4f};
 
     const float TENT_SPEED = 10.0f;
     pr.vel = {fwd.x * TENT_SPEED, fwd.y * TENT_SPEED + 1.5f,
@@ -218,7 +310,7 @@ bool useSelected(Player &p, const Maze &maze,
     projectiles.push_back(pr);
 
     float cd = cooldownFor(it.kind);
-    p.throwCooldown    = cd;
+    p.throwCooldown = cd;
     p.throwCooldownMax = cd;
     p.attackFlash = 0.10f;
 
@@ -233,7 +325,8 @@ bool useSelected(Player &p, const Maze &maze,
                    -cosf(p.yaw) * cosf(p.pitch)};
 
     Projectile pr;
-    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y, p.pos.z + fwd.z * 0.4f};
+    pr.pos = {p.pos.x + fwd.x * 0.4f, C::EYE_H - 0.10f + p.pos.y,
+              p.pos.z + fwd.z * 0.4f};
 
     switch (it.kind) {
     case ITEM_ROCK:
@@ -269,7 +362,7 @@ bool useSelected(Player &p, const Maze &maze,
     projectiles.push_back(pr);
 
     float cd = cooldownFor(it.kind);
-    p.throwCooldown    = cd;
+    p.throwCooldown = cd;
     p.throwCooldownMax = cd;
 
     removeOne(p, p.selectedSlot);
@@ -332,7 +425,8 @@ void updateProjectiles(std::vector<Projectile> &projs, Maze &maze,
       for (auto &e : enemies) {
         if (!e.alive)
           continue;
-        if (!e.alive || e.dyingT > 0.0f) continue;
+        if (!e.alive || e.dyingT > 0.0f)
+          continue;
 
         float dx = e.pos.x - pr.pos.x;
         float dz = e.pos.z - pr.pos.z;
@@ -414,11 +508,16 @@ void updateProjectiles(std::vector<Projectile> &projs, Maze &maze,
 
 void updateEnemyStatus(std::vector<Enemy> &enemies, float dt) {
   for (auto &e : enemies) {
-    if (e.stunT > 0.0f)    e.stunT -= dt;
-    if (e.hitFlash > 0.0f) e.hitFlash -= dt;
+    if (e.stunT > 0.0f)
+      e.stunT -= dt;
+    if (e.hitFlash > 0.0f)
+      e.hitFlash -= dt;
     if (e.rageT > 0.0f) {
       e.rageT -= dt;
-      if (e.rageT <= 0.0f) { e.rageT = 0.0f; e.rageMult = 1.0f; }
+      if (e.rageT <= 0.0f) {
+        e.rageT = 0.0f;
+        e.rageMult = 1.0f;
+      }
     }
 
     if (e.dyingT > 0.0f) {
@@ -445,6 +544,10 @@ Color itemColor(ItemKind kind) {
     return (Color){60, 180, 220, 255};
   case ITEM_ENSAIMADA:
     return (Color){220, 170, 100, 255};
+  case ITEM_WHIP:
+    return (Color){150, 75, 45, 255};
+  case ITEM_SCISSORS:
+    return (Color){200, 200, 220, 255};
   default:
     return (Color){200, 200, 200, 255};
   }
@@ -470,6 +573,10 @@ const char *itemName(ItemKind kind) {
     return "bifruta";
   case ITEM_ENSAIMADA:
     return "ensaimada";
+  case ITEM_WHIP:
+    return L("item.whip", "cuerda");
+  case ITEM_SCISSORS:
+    return L("item.scissors", "tijeras");
   default:
     return L("item", "item");
   }
@@ -477,15 +584,28 @@ const char *itemName(ItemKind kind) {
 
 float cooldownFor(ItemKind kind) {
   switch (kind) {
-    case ITEM_ROCK:      return C::ROCK_THROW_CD;
-    case ITEM_BOX:       return C::BOX_THROW_CD;
-    case ITEM_LIME:      return C::LIME_THROW_CD;
-    case ITEM_BICIMAD:   return C::BICIMAD_THROW_CD;
-    case ITEM_MONSTER:   return 4.0f;
-    case ITEM_WALL:      return 1.0f;
-    case ITEM_BIFRUTAS:   return 1.0f;
-    case ITEM_ENSAIMADA: return 1.0f;
-    default:             return 0.0f;
+  case ITEM_ROCK:
+    return C::ROCK_THROW_CD;
+  case ITEM_BOX:
+    return C::BOX_THROW_CD;
+  case ITEM_LIME:
+    return C::LIME_THROW_CD;
+  case ITEM_BICIMAD:
+    return C::BICIMAD_THROW_CD;
+  case ITEM_MONSTER:
+    return 4.0f;
+  case ITEM_WALL:
+    return 1.0f;
+  case ITEM_BIFRUTAS:
+    return 1.0f;
+  case ITEM_ENSAIMADA:
+    return 1.0f;
+  case ITEM_WHIP:
+    return C::WHIP_COOLDOWN;
+  case ITEM_SCISSORS:
+    return C::SCISSORS_COOLDOWN;
+  default:
+    return 0.0f;
   }
 }
 

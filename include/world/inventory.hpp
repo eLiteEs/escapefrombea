@@ -37,7 +37,8 @@ const char *itemName(ItemKind kind);
 float cooldownFor(ItemKind kind);
 
 bool useSelected(Player& p, const Maze& maze,
-                 std::vector<Projectile>& projectiles, Assets assets,
+                 std::vector<Projectile>& projectiles, std::vector<Enemy>& enemies,
+                 Assets assets,
                  int ownerId = 0);
 
 void updateProjectiles(std::vector<Projectile>& projs, Maze& maze,
