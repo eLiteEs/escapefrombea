@@ -85,14 +85,21 @@ void Game::handleInteraction(int p) {
   // ----- Taquilla / fuente -----
   int interactCx = -1, interactCy = -1;
   {
-    bool isLocker;
+    bool isLocker = false;  // (el out-param se ignora; usamos `what`)
     int what = findInteractable(pl, interactCx, interactCy, isLocker);
-    if (what == 1 || what == 2) {
+    if (what == 1) {
+      Vector3 target = maze.cellCenter(interactCx, interactCy);
+      float d = distXZ(pl.pos, target);
+      if (d < C::INTERACT_RANGE + C::CELL * 0.5f && d < bestDist) {
+        bestDist = d;
+        bestType = INT_LOCKER;
+      }
+    } else if (what == 2) {
       Vector3 target = maze.cellCenter(interactCx, interactCy);
       float d = distXZ(pl.pos, target);
       if (d < C::INTERACT_RANGE && d < bestDist) {
         bestDist = d;
-        bestType = (what == 1) ? INT_LOCKER : INT_FOUNTAIN;
+        bestType = INT_FOUNTAIN;
       }
     }
   }

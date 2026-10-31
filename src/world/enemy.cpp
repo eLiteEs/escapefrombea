@@ -155,6 +155,12 @@ void updateEnemies(std::vector<Enemy> &enemies, const Maze &maze,
                    Player *players, int numPlayers, float dt, float seeDist,
                    float memoryT) {
   (void)seeDist;
+
+  enemies.erase(
+    std::remove_if(enemies.begin(), enemies.end(),
+                   [](const Enemy &e) { return !e.alive; }),
+                enemies.end());
+
   for (size_t i = 0; i < enemies.size(); ++i) {
     Enemy &e = enemies[i];
     if (!e.alive || e.dyingT > 0.0f)
@@ -366,6 +372,7 @@ void Game::drawEnemyHealthBars(const Player &pl, int vw, int vh) {
 
   for (auto &e : enemies) {
     if (!e.alive || e.dyingT > 0.0f)
+      //enemies.erase(&e);
       continue;
 
     float dist = Vector3Distance(pl.pos, e.pos);
