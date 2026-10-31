@@ -2,6 +2,11 @@
 #include "debug.hpp"
 #include <cmath>
 
+// Pon a 0 para quitar los logs de bloqueo en escaleras.
+#ifndef STAIR_DEBUG
+#define STAIR_DEBUG 1
+#endif
+
 // ---------------------------------------------------------------------------
 // Helpers de colisión (compartidos por modo Quake y modo clásico)
 // ---------------------------------------------------------------------------
@@ -103,25 +108,69 @@ static bool canWalk(const Maze &maze, float fromX, float fromZ, float nx,
     allowed = maxStepUp() + 0.01f;
 
   // Salto demasiado alto (lateral alto de la rampa, pared de escalón...)
-  if (dstGroundZ > refZ + allowed)
+  if (dstGroundZ > refZ + allowed) {
+#if STAIR_DEBUG
+    if (srcIsRamp || dstIsRamp) {
+      static int dbgH = 0;
+      if ((dbgH++ % 20) == 0)
+        TraceLog(LOG_WARNING,
+                 "[STAIR] bloqueo altura: from(%.2f,%.2f) to(%.2f,%.2f) "
+                 "ref=%.2f dst=%.2f allowed=%.2f",
+                 fromX, fromZ, nx, nz, refZ, dstGroundZ, allowed);
+    }
+#endif
     return false;
+  }
 
   // Rampas: no hay "riser" frontal, pero el cuerpo NO puede solapar el lateral
   // de la rampa (el triángulo lateral es una pared). Comparamos el suelo bajo
   // cada esquina con el suelo bajo el centro: a lo largo de la pendiente la
   // diferencia es pequeña y continua; en un lateral hay un salto brusco.
   if (srcIsRamp || dstIsRamp) {
+    // Bajar nunca se bloquea aquí: esta comprobación solo sirve para impedir
+    // meterse en el lateral al SUBIR o moverse en horizontal. Antes era
+    // simétrica y, con peldaños altos o pegado a un lateral, dejaba al
+    // jugador sin poder bajar ("pared invisible").
+    float curGroundZ = maze.groundZAtWorld(fromX, fromZ);
+    if (dstGroundZ < curGroundZ - 1e-3f)
+      return true;
+
     int rcx = dstIsRamp ? ncx : ccx;
     int rcy = dstIsRamp ? ncy : ccy;
     float slope = rampSlope(maze, rcx, rcy);
     const float r = C::P_RADIUS;
     float tol = maxStepUp() + r * 1.4143f * slope * 1.15f + 0.05f;
-    const float ox[4] = {-r, r, -r, r};
-    const float oz[4] = {-r, -r, r, r};
-    for (int k = 0; k < 4; ++k) {
-      float gz = maze.groundZAtWorld(nx + ox[k], nz + oz[k]);
-      if (fabsf(gz - dstGroundZ) > tol)
-        return false;
+
+    // Mayor altura a la que una esquina SOBRESALE del suelo del centro.
+    // Solo cuentan las esquinas MÁS ALTAS (paredes laterales de bloques
+    // contiguos, etc.). Las esquinas sobre suelo más bajo son el borde de la
+    // escalera: se puede pisar el borde y salir por el lateral hacia abajo,
+    // igual que en el borde de una plataforma.
+    auto cliff = [&](float px, float pz) {
+      float g = maze.groundZAtWorld(px, pz);
+      float worst = 0.0f;
+      const float ox[4] = {-r, r, -r, r};
+      const float oz[4] = {-r, -r, r, r};
+      for (int k = 0; k < 4; ++k) {
+        float d = maze.groundZAtWorld(px + ox[k], pz + oz[k]) - g;
+        if (d > worst)
+          worst = d;
+      }
+      return worst;
+    };
+    float newCliff = cliff(nx, nz);
+    // Solo se bloquea si supera la tolerancia Y además empeora respecto a
+    // la posición actual (así nunca se queda atrapado).
+    if (newCliff > tol && newCliff > cliff(fromX, fromZ) + 1e-3f) {
+#if STAIR_DEBUG
+      static int dbgN = 0;
+      if ((dbgN++ % 20) == 0)
+        TraceLog(LOG_WARNING,
+                 "[STAIR] bloqueo lateral: from(%.2f,%.2f) to(%.2f,%.2f) "
+                 "ref=%.2f dst=%.2f cliff=%.2f tol=%.2f",
+                 fromX, fromZ, nx, nz, refZ, dstGroundZ, newCliff, tol);
+#endif
+      return false;
     }
     return true;
   }
